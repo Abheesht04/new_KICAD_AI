@@ -1,0 +1,4 @@
+Reference,Part,Value_SI,Symbol,Footprint,Power_W,Voltage_V,Height_mm,Manufacturer,MPN,Datasheet
+R1,resistor,10000.0,Device:R,Resistor_SMD:R_0603_1608Metric,,,,,,
+R2,resistor,20000.0,Device:R,Resistor_SMD:R_0603_1608Metric,,,,,,
+J1,header3,0.0,Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,,,,,

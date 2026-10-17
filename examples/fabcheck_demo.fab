@@ -1,0 +1,17 @@
+# Deterministic fab capability profile
+schema_version=1
+name=conservative_2layer
+max_layer_count=2
+min_board_width_mm=10
+max_board_width_mm=100
+min_board_height_mm=10
+max_board_height_mm=100
+min_trace_width_mm=0.15
+min_trace_clearance_mm=0.15
+min_via_diameter_mm=0.6
+min_via_drill_mm=0.3
+min_via_annular_ring_mm=0.15
+min_pad_annular_ring_mm=0.15
+min_hole_clearance_mm=0.2
+min_copper_to_edge_mm=0.25
+max_component_height_mm=5

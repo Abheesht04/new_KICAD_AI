@@ -1,0 +1,66 @@
+[  1%] Building C object CMakeFiles/hwcore.dir/src/v2/project.c.o
+[  2%] Linking C static library libhwcore.a
+[ 38%] Built target hwcore
+[ 39%] Linking C executable u128_test
+[ 40%] Linking C executable vec_test
+[ 41%] Linking C executable component_model_test
+[ 42%] Linking C executable v2_geometry_test
+[ 43%] Built target u128_test
+[ 44%] Built target vec_test
+[ 44%] Built target component_model_test
+[ 45%] Built target v2_geometry_test
+[ 45%] Linking C executable geom_test
+[ 46%] Linking C executable copper_test
+[ 47%] Linking C executable defect_test
+[ 48%] Linking C executable design_test
+[ 49%] Built target geom_test
+[ 50%] Built target copper_test
+[ 50%] Built target defect_test
+[ 51%] Built target design_test
+[ 52%] Linking C executable dfm_test
+[ 53%] Linking C executable intern_test
+[ 54%] Linking C executable ir_test
+[ 54%] Linking C executable ir_nm_test
+[ 56%] Built target intern_test
+[ 56%] Built target dfm_test
+[ 57%] Built target ir_test
+[ 58%] Built target ir_nm_test
+[ 59%] Linking C executable matrix_test
+[ 60%] Linking C executable mna_test
+[ 61%] Linking C executable model_test
+[ 62%] Linking C executable node_map_test
+[ 63%] Built target matrix_test
+[ 64%] Built target mna_test
+[ 65%] Built target model_test
+[ 65%] Built target node_map_test
+[ 66%] Linking C executable part_registry_test
+[ 67%] Linking C executable provider_test
+[ 68%] Linking C executable pcb_dfm_test
+[ 69%] Linking C executable kicad_pcb_test
+[ 71%] Built target part_registry_test
+[ 71%] Built target pcb_dfm_test
+[ 72%] Built target provider_test
+[ 73%] Built target kicad_pcb_test
+[ 74%] Linking C executable e_series_test
+[ 75%] Linking C executable fab_profile_io_test
+[ 76%] Linking C executable nlp_rules_test
+[ 77%] Linking C executable design_validate_test
+[ 78%] Built target nlp_rules_test
+[ 79%] Built target e_series_test
+[ 80%] Built target fab_profile_io_test
+[ 81%] Built target design_validate_test
+[ 82%] Linking C executable mna_from_design_test
+[ 83%] Linking C executable schematic_export_test
+[ 84%] Linking C executable fabcheck_demo
+[ 85%] Linking C executable hwc
+[ 86%] Built target fabcheck_demo
+[ 88%] Built target mna_from_design_test
+[ 88%] Built target schematic_export_test
+[ 89%] Building C object CMakeFiles/copper-core.dir/apps/copper_core.c.o
+[ 90%] Built target hwc
+[ 91%] Linking C executable copper-core
+[ 91%] Built target copper-core
+[ 92%] Building CXX object desktop/CMakeFiles/copper-studio.dir/main.cpp.o
+[ 93%] Building CXX object desktop/CMakeFiles/copper-studio.dir/studio.cpp.o
+[ 94%] Linking CXX executable copper-studio
+[100%] Built target copper-studio

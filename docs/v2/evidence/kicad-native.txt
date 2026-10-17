@@ -1,0 +1,46 @@
+{
+  "kicad_version": "9.0.9",
+  "gates": [
+    {
+      "gate": "erc",
+      "returncode": 0,
+      "stdout": "Found 0 violations\nSaved ERC Report to /workspace/scratch/2fbe20b345a3/hardware_compiler_copper_v2/examples/generated/divider/erc.json\n",
+      "stderr": ""
+    },
+    {
+      "gate": "drc",
+      "returncode": 0,
+      "stdout": "Found 0 violations\nFound 0 unconnected items\nFound 0 schematic parity issues\nSaved DRC Report to /workspace/scratch/2fbe20b345a3/hardware_compiler_copper_v2/examples/generated/divider/drc.json\n",
+      "stderr": ""
+    },
+    {
+      "gate": "netlist",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "gate": "netlist_parity",
+      "returncode": 0,
+      "message": "Matches electrical IR"
+    }
+  ],
+  "pass": true,
+  "hashes": {
+    "resolved.copper": "55eda947ad8855c40ddaa818b7de8a58f2ac13f08e14d6d41be075993ccd22d7",
+    "design.kicad_sch": "a98fc8984cd038e4f31d4a84d8b9580e2b4fb6b73f9f30dae52133f5099dc0a4",
+    "design.kicad_pcb": "c8f555d3a3cd3a787f01eb426476271373dc170e7eeb1d9a68cd0230086419d2",
+    "design.kicad_pro": "29d06ce2d065ca45abfc34e89baa3d397865d8da6dbc881041e98181b2d16ec8",
+    "design.kicad_dru": "39348f90f0a383353972f4345667fcb1ecaa73ea455666d5d4c83a2562fc7472",
+    "sym-lib-table": "96ec64eb43dc9b8d54cfe114954bef59d56f91526941af78ff2bc7ebb6a5e7c9",
+    "fp-lib-table": "eb9509cc4aae2fe7dd75a8977ac8a6eedcec6d7b8828c98b7f40b288fc4e6eff",
+    "bom.csv": "49ceb26d182b67a90fa8256458525af7f8e68b5b8994f085b180769a63e34dfb",
+    "report.json": "46a88c4d5c1f2e6bcb655304601550ccd03b158a09287bf33655a688b27d91ab",
+    "libraries/KICAD_LIBRARY_LICENSE.md": "45d2bce75e5a4208f5afb01b8fb2c406e700371c4fe2b5f5cd5c443d46db4d8f",
+    "libraries/NOTICE.txt": "10bf7ba50c05f61f9dcaf7fcfeeb553b7b580f299bc8b03cd72e7bd453c9ab94",
+    "libraries/footprints/Connector_PinHeader_2.54mm.pretty/PinHeader_1x03_P2.54mm_Vertical.kicad_mod": "05fa5e02cf58c822430aaccc2d4e048b704caa95316b6c44d50f635608ee9093",
+    "libraries/footprints/Resistor_SMD.pretty/R_0603_1608Metric.kicad_mod": "32e6f926b4be772aeabae6060210133fbf78854a3fe12ca7011b4916ed49f134",
+    "libraries/symbols/Connector_Generic.kicad_sym": "c44a0a561694b37a58027539b4e215067f64b5789cd7855bc001890dc484d51b",
+    "libraries/symbols/Device.kicad_sym": "bf466eecad72ed640dd9a279bce4741c1fcf3d0eecfb07e933c945f7a64744ae"
+  }
+}

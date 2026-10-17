@@ -1,0 +1,271 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-09-30T15:20:33+0530",
+    "kicad_version": "9.0.6",
+    "schematic_parity": [],
+    "source": "sample_resistor_lol.kicad_pcb",
+    "unconnected_items": [
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [Net-(R1-Pad2)] of R2 on F.Cu",
+                    "pos": {
+                        "x": 165.85,
+                        "y": 121.47
+                    },
+                    "uuid": "f36aa7a6-7eca-448d-a6d5-e480ad8680db"
+                },
+                {
+                    "description": "Pad 2 [Net-(R1-Pad2)] of R1 on F.Cu",
+                    "pos": {
+                        "x": 167.5,
+                        "y": 118.96
+                    },
+                    "uuid": "bc998f39-6ce8-44eb-ad09-a334d19f7542"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [Net-(R2-Pad2)] of R2 on F.Cu",
+                    "pos": {
+                        "x": 167.5,
+                        "y": 121.47
+                    },
+                    "uuid": "51f8eee2-477d-49e3-9998-d6ab38b56714"
+                },
+                {
+                    "description": "Pad 2 [Net-(R2-Pad2)] of R3 on F.Cu",
+                    "pos": {
+                        "x": 167.5,
+                        "y": 123.98
+                    },
+                    "uuid": "43ec24f9-b469-4062-b7a5-007d14df1eab"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [Net-(R3-Pad1)] of R3 on F.Cu",
+                    "pos": {
+                        "x": 165.85,
+                        "y": 123.98
+                    },
+                    "uuid": "693083fb-7ff0-4579-b71b-ca5ec2ee15be"
+                },
+                {
+                    "description": "Pad 2 [Net-(R3-Pad1)] of R4 on F.Cu",
+                    "pos": {
+                        "x": 167.5,
+                        "y": 126.49
+                    },
+                    "uuid": "dfd07dd4-15fa-4b5e-ba48-9e1a49646bff"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [Net-(R4-Pad1)] of R4 on F.Cu",
+                    "pos": {
+                        "x": 165.85,
+                        "y": 126.49
+                    },
+                    "uuid": "ead26ec7-0860-48f1-ad38-a1a74482f3ad"
+                },
+                {
+                    "description": "Pad 2 [Net-(R4-Pad1)] of R5 on F.Cu",
+                    "pos": {
+                        "x": 167.5,
+                        "y": 129.0
+                    },
+                    "uuid": "1961a9dc-eed8-40dc-b1d4-a94b10ea87cb"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        }
+    ],
+    "violations": [
+        {
+            "description": "Board has malformed outline (no edges found on Edge.Cuts layer)",
+            "items": [
+                {
+                    "description": "PCB",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "f3996f98-5ce0-4811-afd8-696645fffdc4"
+                }
+            ],
+            "severity": "error",
+            "type": "invalid_outline"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Reference field of R5",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 127.57
+                    },
+                    "uuid": "e099a566-350b-4420-9967-0fc6972e2453"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Reference field of R4",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 125.06
+                    },
+                    "uuid": "4c262938-e17e-4d1f-be05-c7d7aa2f5cba"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Reference field of R3",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 122.55
+                    },
+                    "uuid": "e10de632-c0b4-42bd-96ca-dd31a31044cd"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Reference field of R2",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 120.04
+                    },
+                    "uuid": "6b13ebfc-f22b-40d3-b977-d4b0f75732ae"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of R4 on F.Silkscreen",
+                    "pos": {
+                        "x": 166.437742,
+                        "y": 127.0125
+                    },
+                    "uuid": "c2df9567-8332-4f12-9348-8f81858c33c9"
+                },
+                {
+                    "description": "Reference field of R5",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 127.57
+                    },
+                    "uuid": "e099a566-350b-4420-9967-0fc6972e2453"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Reference field of R4",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 125.06
+                    },
+                    "uuid": "4c262938-e17e-4d1f-be05-c7d7aa2f5cba"
+                },
+                {
+                    "description": "Segment of R3 on F.Silkscreen",
+                    "pos": {
+                        "x": 166.437742,
+                        "y": 124.5025
+                    },
+                    "uuid": "c7f3ef1c-0307-402e-9a5e-a30af628187d"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of R2 on F.Silkscreen",
+                    "pos": {
+                        "x": 166.437742,
+                        "y": 121.9925
+                    },
+                    "uuid": "194d3d00-0812-4ad4-b131-0831fd636f81"
+                },
+                {
+                    "description": "Reference field of R3",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 122.55
+                    },
+                    "uuid": "e10de632-c0b4-42bd-96ca-dd31a31044cd"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Reference field of R2",
+                    "pos": {
+                        "x": 166.675,
+                        "y": 120.04
+                    },
+                    "uuid": "6b13ebfc-f22b-40d3-b977-d4b0f75732ae"
+                },
+                {
+                    "description": "Segment of R1 on F.Silkscreen",
+                    "pos": {
+                        "x": 166.437742,
+                        "y": 119.4825
+                    },
+                    "uuid": "ee05ffd3-ccea-4527-9047-1ce91e5a97db"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        }
+    ]
+}

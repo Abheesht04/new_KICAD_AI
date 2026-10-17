@@ -1,0 +1,82 @@
+COPPER STUDIO V2 - IMPLEMENTATION NOTES
+=====================================
+
+WHAT I UNDERSTOOD FROM YOUR BASE
+
+The valuable core is deterministic engineering, not an LLM guessing circuits.
+u128 builds exact full-width products portably. geom/copper make clearance
+predicates on integer nanometres, and MNA owns numerical circuit behavior.
+The previous CLI only connected a single resistor/divider to these systems;
+its DFM command did not run the physical board path.
+
+WHAT CHANGED
+
+- A general typed S-expression project format, parsed with your existing IR.
+- Custom part catalogues with actual symbol/footprint IDs and explicit ratings.
+- Installed KiCad library resolution, symbol inheritance, pin/pad validation,
+  and exact selected library snapshots in each generated project.
+- General supported DC MNA plus backward-Euler transient simulation.
+- Voltage/current/power calculations, residual/KCL checks, rating derating,
+  voltage targets and exhaustive corners for up to eight uncertain resistors.
+- An actual two-layer candidate router and connected physical DFM checks.
+- Exact rounded/rectangular/oval pad adaptation to your copper kernel.
+- Custom process rules for drill aspect, mask web, assembly separation,
+  current-density/drop budgets, dimensions, spacing, drills, holes and edges.
+- Native KiCad schematic, board, project, custom rules, BOM, SVG and reports.
+- Native ERC/DRC, schematic parity and independent netlist comparison.
+- A bounded trained self-attention classifier whose inference is entirely C.
+- A real GLFW + Vulkan + Dear ImGui dark desktop application.
+- CMake, Windows launch helpers, negative/integration/numerical tests and docs.
+
+CORRECTNESS FIXES IN EXISTING CODE
+
+Unsupported models in the old Design-to-MNA bridge now block translation.
+They previously produced a warning and were omitted from the solved circuit.
+Stray MNA debug prints were removed so machine-readable reports stay valid.
+Fab-profile numeric input rejects non-finite and negative limits.
+The physical copper adapter now retains rounded pad corners for connectivity.
+
+u128.c/.h and copper.c/.h remain byte-identical to the uploaded archive.
+The new randomized u128 test compares 50,000 products with a native 128-bit
+oracle on compilers that offer one; the production implementation still uses
+portable 64-bit arithmetic.
+
+WHAT THE TRANSFORMER IS
+
+A small trained category classifier: word embeddings, self-attention,
+residual feed-forward block, mean pooling and a classification head.
+It maps short descriptions to part roles, and rejects unknown/mixed inputs.
+It is not a pretrained general LLM or a whole-circuit generator. The weights,
+training data generator and model limitations are included. It cannot approve
+engineering results or mutate connectivity.
+
+WHAT THE DESKTOP DOES
+
+Open/edit/save a project; inspect parts/pins/ratings; visualize generated
+copper; pan/zoom and toggle copper layers; run analysis, routing/export and
+KiCad gates through the shared pipeline; show command/calculation output.
+The editor currently edits source. There is no graphical wire-editing system,
+3D board renderer, collaborative cloud service, or interactive drag autorouter.
+
+WHAT REMAINS OUT OF SCOPE
+
+General IC/SPICE models and unrestricted circuit synthesis; multi-unit symbol
+mapping; arbitrary pad rotations/custom polygons/slots; zones and power planes;
+arbitrary board outlines; AC/small-signal solver; waveform sources; thermal
+field simulation; SI/EMC; stencil/AOI/panelization; industrial-scale placement
+and routing optimization. C/L tolerances are not swept in transient analysis.
+Missing part ratings/heights remain unknown and produce findings.
+
+A DFM pass means only the implemented checks passed. The generic profiles and
+current-density budgets are explicitly engineering inputs/heuristics, not
+fabricator certification or an IPC thermal claim. Native KiCad is an independent
+interop gate; it is not the authority for the original project's design intent.
+
+READ NEXT
+
+START_HERE.txt                  Build/run instructions, especially Windows
+README.md                       Commands, features, limitations
+ docs/v2/ARCHITECTURE.md         Schema, ownership, physics and extension guide
+ docs/v2/VALIDATION.md           Tests and actual validation evidence
+ models/MODEL_CARD.md            Training/inference details
+ examples/generated/divider/    Complete generated and verified KiCad project

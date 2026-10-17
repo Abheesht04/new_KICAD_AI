@@ -1,0 +1,68 @@
+INTERNAL_CHECKS_PASS_NATIVE_KICAD_REQUIRED: /tmp/copper-cam-test
+7 pads, 22 tracks, 0 vias; 0 errors, 0 warnings.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Cu.gtl'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Cu.gbl'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Adhesive.gta'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Adhesive.gba'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Paste.gtp'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Paste.gbp'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Silkscreen.gto'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Silkscreen.gbo'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Mask.gts'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Mask.gbs'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-User_Drawings.gbr'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-Edge_Cuts.gm1'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-Margin.gbr'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Courtyard.gbr'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Courtyard.gbr'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-F_Fab.gbr'.
+Plotted to '/tmp/copper-cam-test/fabrication/design-B_Fab.gbr'.
+Created file '/tmp/copper-cam-test/fabrication/design.drl'
+Done.
+{
+  "kicad_version": "9.0.9",
+  "gates": [
+    {
+      "gate": "erc",
+      "returncode": 0,
+      "stdout": "Found 0 violations\nSaved ERC Report to /tmp/copper-cam-test/erc.json\n",
+      "stderr": ""
+    },
+    {
+      "gate": "drc",
+      "returncode": 0,
+      "stdout": "Found 0 violations\nFound 0 unconnected items\nFound 0 schematic parity issues\nSaved DRC Report to /tmp/copper-cam-test/drc.json\n",
+      "stderr": ""
+    },
+    {
+      "gate": "netlist",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "gate": "netlist_parity",
+      "returncode": 0,
+      "message": "Matches electrical IR"
+    }
+  ],
+  "pass": true,
+  "hashes": {
+    "resolved.copper": "502ed6f80dd95baca29586bbab44471fde34c1fb3b59a8392ed45c73c6f7e82b",
+    "design.kicad_sch": "a98fc8984cd038e4f31d4a84d8b9580e2b4fb6b73f9f30dae52133f5099dc0a4",
+    "design.kicad_pcb": "c8f555d3a3cd3a787f01eb426476271373dc170e7eeb1d9a68cd0230086419d2",
+    "design.kicad_pro": "29d06ce2d065ca45abfc34e89baa3d397865d8da6dbc881041e98181b2d16ec8",
+    "design.kicad_dru": "39348f90f0a383353972f4345667fcb1ecaa73ea455666d5d4c83a2562fc7472",
+    "sym-lib-table": "96ec64eb43dc9b8d54cfe114954bef59d56f91526941af78ff2bc7ebb6a5e7c9",
+    "fp-lib-table": "eb9509cc4aae2fe7dd75a8977ac8a6eedcec6d7b8828c98b7f40b288fc4e6eff",
+    "bom.csv": "70fb19fd4fd8ae62864c2ea49469769e4485d468f586d971c8f92fa5ec69867d",
+    "report.json": "a0f6922aa1236fb776fe2536f33180575ec19a1a94a2e3f49bce4fa6effd67e7",
+    "libraries/KICAD_LIBRARY_LICENSE.md": "45d2bce75e5a4208f5afb01b8fb2c406e700371c4fe2b5f5cd5c443d46db4d8f",
+    "libraries/NOTICE.txt": "10bf7ba50c05f61f9dcaf7fcfeeb553b7b580f299bc8b03cd72e7bd453c9ab94",
+    "libraries/footprints/Connector_PinHeader_2.54mm.pretty/PinHeader_1x03_P2.54mm_Vertical.kicad_mod": "05fa5e02cf58c822430aaccc2d4e048b704caa95316b6c44d50f635608ee9093",
+    "libraries/footprints/Resistor_SMD.pretty/R_0603_1608Metric.kicad_mod": "32e6f926b4be772aeabae6060210133fbf78854a3fe12ca7011b4916ed49f134",
+    "libraries/symbols/Connector_Generic.kicad_sym": "c44a0a561694b37a58027539b4e215067f64b5789cd7855bc001890dc484d51b",
+    "libraries/symbols/Device.kicad_sym": "bf466eecad72ed640dd9a279bce4741c1fcf3d0eecfb07e933c945f7a64744ae"
+  }
+}
+CAM files exported to /tmp/copper-cam-test/fabrication. Engineering review of models, process and assembly remains required.

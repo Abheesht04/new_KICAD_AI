@@ -1,0 +1,70 @@
+COPPER STUDIO V2 - START HERE
+===========================
+
+1. Extract this archive into a NEW folder. Do not reuse the old bundled build
+   cache. Generated build folders and old machine-specific caches are excluded.
+
+2. Install a C17/C++17 toolchain, CMake 3.20+, Python 3.10+ and KiCad 9.
+   For the optional desktop build, install GLFW 3.3+ and the Vulkan SDK/loader.
+   Dear ImGui is already included. Python runtime adapters use only the stdlib.
+   Torch is needed ONLY to retrain the small classifier, not to build or run.
+
+3. In PowerShell from the extracted folder:
+
+   cmake -S . -B build
+   cmake --build build --config Release --parallel
+   ctest --test-dir build -C Release --output-on-failure
+   .\copper.cmd check examples/v2/divider.copper
+   .\copper.cmd build examples/v2/divider.copper --out out/divider
+   .\copper.cmd verify --out out/divider
+
+   Alternatively use: py -3 tools/copper.py COMMAND ...
+   If necessary set COPPER_CORE to build\Release\copper-core.exe.
+   A compiler with C17 support is required. This archive was tested with GCC,
+   not with Windows/MSVC; see docs/v2/VALIDATION.md for exact coverage.
+
+4. Launch the desktop:
+
+   cmake -S . -B build-desktop -DCOPPER_BUILD_DESKTOP=ON
+   cmake --build build-desktop --config Release --parallel
+   .\build-desktop\desktop\Release\copper-studio.exe
+
+   Pass -Dglfw3_DIR=".../lib/cmake/glfw3" if CMake cannot find GLFW.
+   With vcpkg, supply its CMAKE_TOOLCHAIN_FILE at initial configuration.
+   HWC_PYTHON can select the Python executable used by the desktop.
+   Use Project source to edit the circuit; Save, Analyze and Build PCB use the
+   same files and compiler as the CLI. Select components to inspect their pins.
+   Scroll to zoom and middle-drag to pan. Native checks run in the background.
+
+5. KiCad library discovery:
+
+   The usual Windows KiCad installation paths are checked automatically.
+   KICAD_SYMBOL_DIR / KICAD9_SYMBOL_DIR can override the symbol directory.
+   KICAD_FOOTPRINT_DIR / KICAD9_FOOTPRINT_DIR can override the footprint root.
+   Use verify --kicad-cli "C:\Program Files\KiCad\9.0\bin\kicad-cli.exe"
+   if KiCad CLI is not discoverable.
+
+6. Open the supplied verified example immediately:
+
+   examples/generated/divider/design.kicad_pro
+   examples/generated/divider/design.kicad_sch
+   examples/generated/divider/design.kicad_pcb
+   examples/generated/divider/CALCULATIONS.txt
+
+   Native KiCad 9 uses .kicad_sch and .kicad_pcb, not legacy .sch/.pcb names.
+   The example contains the exact symbol/footprint snapshots used to make it.
+
+7. Make your own catalogue/process:
+
+   Copy profiles/default.parts and edit verified ratings/library IDs.
+   Copy profiles/conservative.rules and enter your fabricator's documented rules.
+   python tools/copper.py new divider --out mine.copper --catalogue custom.parts --rules custom.rules
+   The project embeds the chosen parts/rules for reproducibility.
+   Use part-add --help for custom parts. Use tools/hwc_kicad.py catalog and
+   custom-symbol for installed library discovery or custom .kicad_sym creation.
+
+8. Read README.md, docs/v2/ARCHITECTURE.md, docs/v2/VALIDATION.md and
+   V2_IMPLEMENTATION_NOTES.txt before extending the compiler.
+   Unsupported models/geometry are rejected or explicitly marked as failed
+   drafts. No LLM is used to decide correctness. Generic package names never
+   imply a manufacturer part, stock availability, or verified electrical rating.

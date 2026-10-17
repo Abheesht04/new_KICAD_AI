@@ -1,0 +1,7 @@
+{
+  "seed": 17,
+  "samples": 2580,
+  "training_accuracy": 1.0,
+  "architecture": "24-dimensional single-head self attention, residual FFN 48, mean pooling, 10 labels",
+  "warning": "Training accuracy is not independent language generalization. Reject unknown tokens/categories and mixed roles; proposals require deterministic validation."
+}

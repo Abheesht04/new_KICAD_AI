@@ -1,0 +1,1 @@
+GLFW/Vulkan native application; 20 rendered frames, exit 0

@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {"name":"core","displayName":"Portable C core and tests","generator":"Ninja","binaryDir":"${sourceDir}/build","cacheVariables":{"CMAKE_BUILD_TYPE":"Release","HWCOMPILER_BUILD_TESTS":"ON"}},
+    {"name":"desktop","inherits":"core","binaryDir":"${sourceDir}/build-desktop","cacheVariables":{"COPPER_BUILD_DESKTOP":"ON"}},
+    {"name":"sanitize","inherits":"core","binaryDir":"${sourceDir}/build-sanitize","cacheVariables":{"CMAKE_BUILD_TYPE":"Debug","COPPER_SANITIZE":"ON"}}
+  ],
+  "buildPresets":[{"name":"core","configurePreset":"core"},{"name":"desktop","configurePreset":"desktop"}],
+  "testPresets":[{"name":"core","configurePreset":"core","output":{"outputOnFailure":true}}]
+}

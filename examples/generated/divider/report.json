@@ -1,0 +1,259 @@
+{
+  "schema": 2,
+  "name": "divider",
+  "dc_solved": true,
+  "physical_checked": true,
+  "issues": [
+    {
+      "severity": "warning",
+      "rule": "rating_unknown",
+      "object": "R1",
+      "measured": 0,
+      "limit": 0,
+      "message": "Voltage rating not supplied by catalogue; not verified."
+    },
+    {
+      "severity": "warning",
+      "rule": "rating_unknown",
+      "object": "R1",
+      "measured": 0.000277777777778,
+      "limit": 0,
+      "message": "Resistor power rating is unknown."
+    },
+    {
+      "severity": "warning",
+      "rule": "rating_unknown",
+      "object": "R2",
+      "measured": 0,
+      "limit": 0,
+      "message": "Voltage rating not supplied by catalogue; not verified."
+    },
+    {
+      "severity": "warning",
+      "rule": "rating_unknown",
+      "object": "R2",
+      "measured": 0.000555555555556,
+      "limit": 0,
+      "message": "Resistor power rating is unknown."
+    },
+    {
+      "severity": "warning",
+      "rule": "height_unknown",
+      "object": "R1",
+      "measured": 0,
+      "limit": 0,
+      "message": "Assembly height is not supplied by the part catalogue."
+    },
+    {
+      "severity": "warning",
+      "rule": "height_unknown",
+      "object": "R2",
+      "measured": 0,
+      "limit": 0,
+      "message": "Assembly height is not supplied by the part catalogue."
+    },
+    {
+      "severity": "warning",
+      "rule": "height_unknown",
+      "object": "J1",
+      "measured": 0,
+      "limit": 0,
+      "message": "Assembly height is not supplied by the part catalogue."
+    }
+  ],
+  "nodes": [
+    {
+      "name": "GND",
+      "voltage_v": 0
+    },
+    {
+      "name": "VIN",
+      "voltage_v": 5
+    },
+    {
+      "name": "OUT",
+      "voltage_v": 3.33333333333
+    }
+  ],
+  "tolerance_corner_count": 0,
+  "corner_nodes": [],
+  "calculations": [
+    {
+      "ref": "R1",
+      "formula": "I=(Va-Vb)/R; P=I*I*R",
+      "voltage_v": 1.66666666667,
+      "resistance_ohm": 10000,
+      "current_a": 0.000166666666667,
+      "power_w": 0.000277777777778
+    },
+    {
+      "ref": "R2",
+      "formula": "I=(Va-Vb)/R; P=I*I*R",
+      "voltage_v": 3.33333333333,
+      "resistance_ohm": 20000,
+      "current_a": 0.000166666666667,
+      "power_w": 0.000555555555556
+    }
+  ],
+  "trace_calculations": [
+    {
+      "trace": 0,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000184714285714,
+      "drop_budget_v": 3.07857142857e-08,
+      "loss_budget_w": 5.13095238095e-12
+    },
+    {
+      "trace": 1,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00184714285714,
+      "drop_budget_v": 3.07857142857e-07,
+      "loss_budget_w": 5.13095238095e-11
+    },
+    {
+      "trace": 2,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00246285714286,
+      "drop_budget_v": 4.10476190476e-07,
+      "loss_budget_w": 6.84126984127e-11
+    },
+    {
+      "trace": 3,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.0363271428571,
+      "drop_budget_v": 6.05452380952e-06,
+      "loss_budget_w": 1.00908730159e-09
+    },
+    {
+      "trace": 4,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00677285714286,
+      "drop_budget_v": 1.12880952381e-06,
+      "loss_budget_w": 1.88134920635e-10
+    },
+    {
+      "trace": 5,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00307857142857,
+      "drop_budget_v": 5.13095238095e-07,
+      "loss_budget_w": 8.55158730159e-11
+    },
+    {
+      "trace": 6,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00307857142857,
+      "drop_budget_v": 5.13095238095e-07,
+      "loss_budget_w": 8.55158730159e-11
+    },
+    {
+      "trace": 7,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000197028571429,
+      "drop_budget_v": 3.28380952381e-08,
+      "loss_budget_w": 5.47301587302e-12
+    },
+    {
+      "trace": 8,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000184714285714,
+      "drop_budget_v": 3.07857142857e-08,
+      "loss_budget_w": 5.13095238095e-12
+    },
+    {
+      "trace": 9,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.0160085714286,
+      "drop_budget_v": 2.6680952381e-06,
+      "loss_budget_w": 4.44682539683e-10
+    },
+    {
+      "trace": 10,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000184714285714,
+      "drop_budget_v": 3.07857142857e-08,
+      "loss_budget_w": 5.13095238095e-12
+    },
+    {
+      "trace": 11,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000184714285714,
+      "drop_budget_v": 3.07857142857e-08,
+      "loss_budget_w": 5.13095238095e-12
+    },
+    {
+      "trace": 12,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00184714285714,
+      "drop_budget_v": 3.07857142857e-07,
+      "loss_budget_w": 5.13095238095e-11
+    },
+    {
+      "trace": 13,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00246285714286,
+      "drop_budget_v": 4.10476190476e-07,
+      "loss_budget_w": 6.84126984127e-11
+    },
+    {
+      "trace": 14,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.0166242857143,
+      "drop_budget_v": 2.77071428571e-06,
+      "loss_budget_w": 4.61785714286e-10
+    },
+    {
+      "trace": 15,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000615714285714,
+      "drop_budget_v": 1.02619047619e-07,
+      "loss_budget_w": 1.71031746032e-11
+    },
+    {
+      "trace": 16,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00615714285714,
+      "drop_budget_v": 1.02619047619e-06,
+      "loss_budget_w": 1.71031746032e-10
+    },
+    {
+      "trace": 17,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00923571428571,
+      "drop_budget_v": 1.53928571429e-06,
+      "loss_budget_w": 2.56547619048e-10
+    },
+    {
+      "trace": 18,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.00307857142857,
+      "drop_budget_v": 5.13095238095e-07,
+      "loss_budget_w": 8.55158730159e-11
+    },
+    {
+      "trace": 19,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 9.85142857143e-05,
+      "drop_budget_v": 1.6419047619e-08,
+      "loss_budget_w": 2.73650793651e-12
+    },
+    {
+      "trace": 20,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.000184714285714,
+      "drop_budget_v": 3.07857142857e-08,
+      "loss_budget_w": 5.13095238095e-12
+    },
+    {
+      "trace": 21,
+      "current_budget_a": 0.000166666666667,
+      "resistance_ohm_20c": 0.0178557142857,
+      "drop_budget_v": 2.97595238095e-06,
+      "loss_budget_w": 4.95992063492e-10
+    }
+  ],
+  "mna_residual": 5.42101086243e-20,
+  "kcl_residual_a": 5.42101086243e-20,
+  "errors": 0,
+  "warnings": 7,
+  "coverage": "DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. No AC, thermal field, SI, EMC, zones or fabrication certification."
+}

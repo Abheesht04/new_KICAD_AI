@@ -1,0 +1,1 @@
+Library files are exact snapshots from the selected local KiCad libraries. KiCad official library content is licensed CC-BY-SA-4.0 with the KiCad libraries exception; https://www.kicad.org/libraries/license/ . Custom libraries retain their original authorship and licensing. No ownership transfer is implied.

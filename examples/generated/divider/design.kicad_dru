@@ -1,0 +1,7 @@
+(version 1)
+(rule "Copper_clearance" (constraint clearance (min 0.2mm)))
+(rule "Copper_width" (constraint track_width (min 0.2mm)))
+(rule "Copper_edge" (constraint edge_clearance (min 0.3mm)))
+(rule "Copper_drill" (constraint hole_size (min 0.3mm)))
+(rule "Copper_annular" (constraint annular_width (min 0.15mm)))
+(rule "Copper_hole_gap" (constraint hole_clearance (min 0.25mm)))

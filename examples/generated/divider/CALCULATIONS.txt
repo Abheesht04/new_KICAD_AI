@@ -1,0 +1,16 @@
+Copper V2 calculation report
+DC solved: True
+Errors: 0; warnings: 7
+GND: 0 V
+VIN: 5 V
+OUT: 3.33333333333 V
+R1: I=(Va-Vb)/R; P=I*I*R; V=1.66666666667 V, R=10000 ohm, I=0.000166666666667 A, P=0.000277777777778 W
+R2: I=(Va-Vb)/R; P=I*I*R; V=3.33333333333 V, R=20000 ohm, I=0.000166666666667 A, P=0.000555555555556 W
+WARNING rating_unknown R1: Voltage rating not supplied by catalogue; not verified.
+WARNING rating_unknown R1: Resistor power rating is unknown.
+WARNING rating_unknown R2: Voltage rating not supplied by catalogue; not verified.
+WARNING rating_unknown R2: Resistor power rating is unknown.
+WARNING height_unknown R1: Assembly height is not supplied by the part catalogue.
+WARNING height_unknown R2: Assembly height is not supplied by the part catalogue.
+WARNING height_unknown J1: Assembly height is not supplied by the part catalogue.
+DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. No AC, thermal field, SI, EMC, zones or fabrication certification.

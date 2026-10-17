@@ -1,0 +1,17 @@
+(fp_lib_table
+  (version 7)
+  (lib
+    (name "Connector_PinHeader_2.54mm")
+    (type "KiCad")
+    (uri "${KIPRJMOD}/libraries/footprints/Connector_PinHeader_2.54mm.pretty")
+    (options "")
+    (descr "Exact selected footprints")
+  )
+  (lib
+    (name "Resistor_SMD")
+    (type "KiCad")
+    (uri "${KIPRJMOD}/libraries/footprints/Resistor_SMD.pretty")
+    (options "")
+    (descr "Exact selected footprints")
+  )
+)

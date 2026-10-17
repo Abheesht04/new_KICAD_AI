@@ -1,0 +1,10 @@
+; Generic library identities; ratings deliberately UNKNOWN (0), never inferred from package.
+(catalogue
+ (part resistor (kind R) (symbol "Device:R") (footprint "Resistor_SMD:R_0603_1608Metric"))
+ (part capacitor (kind C) (symbol "Device:C") (footprint "Capacitor_SMD:C_0603_1608Metric"))
+ (part inductor (kind L) (symbol "Device:L") (footprint "Inductor_SMD:L_0603_1608Metric"))
+ (part diode (kind D) (symbol "Device:D") (footprint "Diode_SMD:D_SOD-123") (is_a 1e-14) (ideality 1))
+ (part voltage (kind V))
+ (part current (kind I))
+ (part header3 (kind J) (symbol "Connector_Generic:Conn_01x03") (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"))
+)

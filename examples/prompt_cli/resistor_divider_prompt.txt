@@ -1,0 +1,1 @@
+resistor divider 5 V to 3.3 V using 10k ohm and 20k ohm

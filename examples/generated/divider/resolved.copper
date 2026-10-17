@@ -1,0 +1,128 @@
+(copper_project
+  (version 2)
+  (name "divider")
+  (nets GND VIN OUT)
+  (board 40 30 1.6 0.035 2)
+  (parts
+    (part
+      resistor
+      (kind R)
+      (symbol "Device:R")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+    )
+    (part
+      capacitor
+      (kind C)
+      (symbol "Device:C")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+    )
+    (part
+      inductor
+      (kind L)
+      (symbol "Device:L")
+      (footprint "Inductor_SMD:L_0603_1608Metric")
+    )
+    (part
+      diode
+      (kind D)
+      (symbol "Device:D")
+      (footprint "Diode_SMD:D_SOD-123")
+      (is_a 1e-14)
+      (ideality 1)
+    )
+    (part
+      voltage
+      (kind V)
+    )
+    (part
+      current
+      (kind I)
+    )
+    (part
+      header3
+      (kind J)
+      (symbol "Connector_Generic:Conn_01x03")
+      (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
+    )
+  )
+  (components
+    (component
+      V1
+      (part voltage)
+      (value 5)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+      (at 0 0 0)
+    )
+    (component
+      R1
+      (part resistor)
+      (value 10000)
+      (pins
+        (1 VIN)
+        (2 OUT)
+      )
+      (at 16 12 0)
+    )
+    (component
+      R2
+      (part resistor)
+      (value 20000)
+      (pins
+        (1 OUT)
+        (2 GND)
+      )
+      (at 24 12 0)
+    )
+    (component
+      J1
+      (part header3)
+      (value 0)
+      (pins
+        (1 VIN)
+        (2 OUT)
+        (3 GND)
+      )
+      (at 8 12 0)
+    )
+  )
+  (targets
+    (voltage OUT 3.283333 3.383333)
+  )
+  (geometry
+    (pad R1 1 VIN 15.175 12 0.8 0 0 0.8 0.95 1 0.2)
+    (pad R1 2 OUT 16.825 12 0.8 0 0 0.8 0.95 1 0.2)
+    (body R1 16 12 2.96 1.46 0)
+    (pad R2 1 OUT 23.175 12 0.8 0 0 0.8 0.95 1 0.2)
+    (pad R2 2 GND 24.825 12 0.8 0 0 0.8 0.95 1 0.2)
+    (body R2 24 12 2.96 1.46 0)
+    (pad J1 1 VIN 8 12 1.7 1 0 1.7 1.7 1 0)
+    (pad J1 2 OUT 8 14.54 1.7 1 0 1.7 1.7 0 0)
+    (pad J1 3 GND 8 17.08 1.7 1 0 1.7 1.7 0 0)
+    (body J1 8 14.54 3.54 8.62 0)
+    (trace GND 24.825 12 24.75 12 0.2 0)
+    (trace GND 24.75 12 24 12 0.2 0)
+    (trace GND 24 12 24 13 0.2 0)
+    (trace GND 24 13 9.25 13 0.2 0)
+    (trace GND 9.25 13 9.25 15.75 0.2 0)
+    (trace GND 9.25 15.75 8 15.75 0.2 0)
+    (trace GND 8 15.75 8 17 0.2 0)
+    (trace GND 8 17 8 17.08 0.2 0)
+    (trace OUT 16.825 12 16.75 12 0.2 0)
+    (trace OUT 16.75 12 23.25 12 0.2 0)
+    (trace OUT 23.25 12 23.175 12 0.2 0)
+    (trace OUT 16.825 12 16.75 12 0.2 0)
+    (trace OUT 16.75 12 16 12 0.2 0)
+    (trace OUT 16 12 16 11 0.2 0)
+    (trace OUT 16 11 9.25 11 0.2 0)
+    (trace OUT 9.25 11 9.25 10.75 0.2 0)
+    (trace OUT 9.25 10.75 6.75 10.75 0.2 0)
+    (trace OUT 6.75 10.75 6.75 14.5 0.2 0)
+    (trace OUT 6.75 14.5 8 14.5 0.2 0)
+    (trace OUT 8 14.5 8 14.54 0.2 0)
+    (trace VIN 15.175 12 15.25 12 0.2 0)
+    (trace VIN 15.25 12 8 12 0.2 0)
+  )
+)
