@@ -332,8 +332,22 @@ New issues found during the fixes (not fixed; outside §14):
 | ID | Pri | Issue | Proposed fix |
 |---|---|---|---|
 | I-19 | P2 | With `core.autocrlf=true` and no `.gitattributes`, Windows checkouts convert `examples/generated/divider/*` to CRLF, so its manifest hashes never match and `verify` reports `output_hashes` FAIL (before this change it raised an exception instead). Running `verify` on the example also overwrites the tracked `verification.json` | Add `.gitattributes` marking generated example artifacts `-text` (or `eol=lf`); regenerate the example with KiCad 9.x so its manifest carries `source_path` and the new status |
-| I-20 | — | Charter §3 refers to a "C11/C23 decision"; `CMakeLists.txt` and the prompt pack use C17 | Owner to confirm. The standard was not changed |
+| I-20 | — | Charter §3 refers to a "C11/C23 decision"; `CMakeLists.txt` and the prompt pack use C17 | **Resolved 2026-10-18:** owner confirmed C17 |
 
+- **I-04** fixed. The MSVCRT `tmpfile()` creates its file in the drive root (`\sXXX.`, EACCES
+  for ordinary users). `kicad_pcb_test` and `fab_profile_io_test` now use a named `w+b` scratch
+  file in the test working directory and remove it afterwards; every assertion is unchanged.
+  The full Windows suite passes.
+
+Resolved during Prompt 1 (production CLI, see `docs/engineering/CLI.md`):
+- **I-03** fixed. `hwc` launches Python through `cli_run` (argv array, Windows quoting), the same
+  module `pcba` uses. Tested with paths containing spaces, `&;`, `%PATH%`, quotes and non-ASCII.
+- **I-09** fixed. KiCad discovery prefers 9.0 installs and honours `KICAD_CLI`; native gates
+  accept 9.x only.
+- **I-13** fixed. `hwc` resolves `tools/` from `PCBA_ROOT`/the source tree instead of the current
+  directory, and `hwc --help` no longer creates `out/`.
+- **I-15** gone. The misleading-indentation warning was in the replaced `hwc project` code;
+  the build now has zero warnings.
 
 ---
 

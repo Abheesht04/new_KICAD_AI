@@ -65,6 +65,21 @@ this is a source distribution, not a relocatable installer.
 
 ## Commands
 
+`pcba` is the primary command (built with the core; `pcba.cmd` builds and runs it on Windows).
+See [docs/engineering/CLI.md](docs/engineering/CLI.md) for the full command map, exit codes
+and JSON output.
+
+```sh
+pcba --help
+pcba doctor
+pcba project check examples/v2/divider.copper
+pcba project build examples/v2/divider.copper --out out/divider
+pcba project verify --out out/divider        # KiCad 9.x ERC/DRC/parity; PASS only if everything ran
+pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv
+```
+
+The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
+
 ```sh
 python tools/copper.py new divider --out my_board.copper --vin 5 --r 10000 --r2 20000
 python tools/copper.py new rc --out filter.copper --r 1000 --c 0.000001

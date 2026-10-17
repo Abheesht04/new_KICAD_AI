@@ -166,8 +166,8 @@ def discover_symbol_dir(explicit: str | None = None) -> Path:
         candidates.append(Path(env))
     pf = os.environ.get('ProgramFiles', r'C:\Program Files')
     candidates.extend([
+        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'symbols',  # KiCad 9.x is the validation target
         Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'symbols',
-        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'symbols',
         Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'symbols',
         Path('/usr/share/kicad/symbols'),
         Path('/usr/local/share/kicad/symbols'),
@@ -191,8 +191,8 @@ def discover_footprint_dir(explicit: str | None = None) -> Path:
             candidates.append(Path(env))
     pf = os.environ.get('ProgramFiles', r'C:\Program Files')
     candidates.extend([
+        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'footprints',  # KiCad 9.x is the validation target
         Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'footprints',
-        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'footprints',
         Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'footprints',
         Path('/usr/share/kicad/footprints'),
         Path('/usr/local/share/kicad/footprints'),
@@ -206,13 +206,14 @@ def discover_footprint_dir(explicit: str | None = None) -> Path:
 
 
 def discover_cli(explicit: str | None = None) -> str | None:
+    explicit = explicit or os.environ.get('KICAD_CLI')
     if explicit:
         return explicit
     found = shutil.which('kicad-cli') or shutil.which('kicad-cli.exe')
     if found:
         return found
     pf = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))
-    for version in ('10.0', '9.0', '8.0'):
+    for version in ('9.0', '10.0', '8.0'):  # prefer the KiCad 9.x validation target
         candidate = pf / 'KiCad' / version / 'bin' / 'kicad-cli.exe'
         if candidate.is_file():
             return str(candidate)

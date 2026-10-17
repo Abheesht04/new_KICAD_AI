@@ -116,14 +116,58 @@ endif()
 add_executable(fabcheck_demo apps/fabcheck_demo.c)
 target_link_libraries(fabcheck_demo PRIVATE hwcore)
 
+# Shell-free process launching and UTF-8 paths for the command-line front ends.
+add_library(cli_support STATIC apps/pcba/cli_os.c)
+target_include_directories(cli_support PUBLIC apps/pcba)
+target_compile_definitions(cli_support PRIVATE PCBA_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+if(WIN32)
+    target_link_libraries(cli_support PUBLIC shell32)
+endif()
+
+# pcba: the single user-facing command. Engineering work stays in copper-core / tools/copper.py.
+set(PCBA_VERSION "2.0.0-dev")
+add_executable(pcba
+    apps/pcba/main.c
+    apps/pcba/cli_args.c
+    apps/pcba/cli_backend.c
+    apps/pcba/cli_commands.c
+    apps/pcba/cli_doctor.c
+    apps/pcba/cli_help.c
+    apps/pcba/cli_term.c
+)
+target_link_libraries(pcba PRIVATE cli_support)
+target_compile_definitions(pcba PRIVATE
+    PCBA_VERSION="${PCBA_VERSION}"
+    PCBA_COMPILER="${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}"
+    PCBA_C_STANDARD="${CMAKE_C_STANDARD}"
+    PCBA_BUILD_TYPE="$<CONFIG>"
+    PCBA_CTEST="${CMAKE_CTEST_COMMAND}"
+)
+add_dependencies(pcba copper-core)
+if(MSVC)
+    target_compile_options(pcba PRIVATE /W4)
+    target_compile_options(cli_support PRIVATE /W4)
+else()
+    target_compile_options(pcba PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(cli_support PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_executable(hwc apps/hwc.c)
-target_link_libraries(hwc PRIVATE hwcore)
+target_link_libraries(hwc PRIVATE hwcore cli_support)
 if(MSVC)
     target_compile_options(hwc PRIVATE /W4)
 else()
     target_compile_options(hwc PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 if(HWCOMPILER_BUILD_TESTS)
+    add_executable(cli_quote_test tests/cli_quote_test.c)
+    target_link_libraries(cli_quote_test PRIVATE cli_support)
+    if(MSVC)
+        target_compile_options(cli_quote_test PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(cli_quote_test PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME cli_quote COMMAND cli_quote_test)
     add_test(NAME hwc_help COMMAND hwc --help)
     add_test(
         NAME hwc_cli_integration
@@ -147,6 +191,9 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # Installed KiCad libraries / KiCad 9.x CLI. Exit 77 = skipped (UNVERIFIED), never reported as Passed.
   add_test(NAME v2_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_v2.py $<TARGET_FILE:copper-core> V2Native)
   set_tests_properties(v2_integration v2_native PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME pcba_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_pcba_cli.py
+           $<TARGET_FILE:pcba> $<TARGET_FILE:hwc> $<TARGET_FILE:copper-core>)
+  set_tests_properties(pcba_cli PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME bridge_regression COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_hwc_kicad.py)
 endif()
 option(COPPER_BUILD_DESKTOP "Build GLFW + Vulkan Copper Studio" OFF)
