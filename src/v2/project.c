@@ -114,6 +114,8 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
         if(strlen(kind)!=1 || !strchr("RCLDVIJU",*kind)) return errorf(e,cap,"%s: unknown kind",c->ref);
         c->kind=*kind;
         if(c->kind!='V' && c->kind!='I' && (!*c->symbol || !*c->footprint)) return errorf(e,cap,"%s: physical part needs symbol and footprint",c->ref);
+        /* Model-bearing kinds must state their value; an omitted value is never defaulted. */
+        if(strchr("RCLVI",c->kind) && !ir_list_find(n,"value")) return errorf(e,cap,"%s: kind %c requires an explicit (value ...)",c->ref,c->kind);
         if(!scalar(n,"value",0,-1e12,1e12,&c->value) || (strchr("RCL",c->kind) && c->value<=0)) return errorf(e,cap,"%s: invalid SI value",c->ref);
 #define PVAL(k,d,lo,hi,f) if(!scalar(part,k,d,lo,hi,&c->f)) return errorf(e,cap,"%s: invalid %s",c->ref,k)
         PVAL("power_w",0,0,1e9,power_w); PVAL("voltage_v",0,0,1e9,voltage_v);

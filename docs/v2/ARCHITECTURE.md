@@ -101,7 +101,8 @@ Supported model kinds:
 | J | Unused | Explicit connector boundary | Explicit connector boundary |
 | U | Unused | Unsupported; block solve | Unsupported; block solve |
 
-For R/C/L/D/V/I, pins must be ordered `(1 NET_A) (2 NET_B)` and cannot short
+R/C/L/V/I components must state `(value ...)` explicitly; an omitted value is rejected,
+never defaulted (an explicit `0` V/A source is accepted). For R/C/L/D/V/I, pins must be ordered `(1 NET_A) (2 NET_B)` and cannot short
 the component's own terminals. Other pin labels may be alphanumeric and must
 match the symbol and footprint exactly. All pins must be assigned; intentional
 no-connect pins are not yet represented. Ground is the first declared net `GND`.
@@ -184,7 +185,19 @@ physical check can still produce a clearly labelled draft for inspection. `--dra
 explicitly allows a validly parsed project with an unsupported/failing electrical
 model to reach export. Its engineering status remains failed.
 
-`verify` checks the manifest's byte hashes, requires KiCad 9.x, runs ERC and DRC
+`build` writes one of three manifest statuses: `INTERNAL_CHECKS_PASS_NATIVE_KICAD_REQUIRED`,
+`INTERNAL_CHECKS_UNVERIFIED_MISSING_DATA` (any analysis warning, i.e. an unknown rating,
+height or geometry, listed in `unverified_rules`) or `DRAFT_FAILED_CHECKS`. The manifest
+also records the source hash and its path relative to the output directory.
+
+`verify` first deletes any previous `verification.json`, then records each check as
+`PASS`, `FAIL` or `UNVERIFIED`: output hashes; source freshness (recorded path or
+`--project`; a missing source is `UNVERIFIED`, a changed one `FAIL`); build status;
+re-analysis of `resolved.copper` by `copper-core`, which must reproduce `report.json`
+exactly; and data completeness. The overall status is `FAIL` if any check failed, else
+`UNVERIFIED` if any check could not be established, else `PASS`; only `PASS` exits 0.
+Native gates require KiCad 9.x; a missing CLI or another version is recorded as
+`UNVERIFIED` together with the detected version. With KiCad 9.x it runs ERC and DRC
 with violation exit codes, checks schematic parity, and exports KiCad XML netlist.
 Root-sheet net names are normalized by removing one leading `/` before comparing
 every physical `(reference, pin)` against the electrical IR. Reports are retained.

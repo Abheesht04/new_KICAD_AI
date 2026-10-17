@@ -1,12 +1,28 @@
-"""Behavioral tests: numerical oracles, fail-closed inputs, and real workflow contracts."""
-import csv, io, json, math, os, subprocess, sys, tempfile, unittest, copy
+"""Behavioral tests: numerical oracles, fail-closed inputs, and real workflow contracts.
+Exit status: 0 all ran and passed, 1 failure, 77 something was skipped (CTest SKIP_RETURN_CODE).
+Select a class with: test_v2.py CORE V2 | V2Native
+"""
+import contextlib, csv, io, json, math, os, subprocess, sys, tempfile, unittest, copy
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 CORE=str(Path(sys.argv.pop(1)).resolve()) if len(sys.argv)>1 and not sys.argv[1].startswith('-') else str(ROOT/'build-local/copper-core')
 sys.path.insert(0,str(ROOT/'tools'))
 import copper
 from hwc_kicad import parse_sexpr, dump_sexpr, one, direct, text_at, Atom as A, Quoted as Q
-class V2(unittest.TestCase):
+# Committed exact library snapshots: enough for the divider without an installed KiCad.
+FIX_SYM=ROOT/'examples/generated/divider/libraries/symbols'
+FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
+def set_field(node,key,value):
+ field=one(node,key)
+ if field:field[1]=A(value)
+ else:node.append(copper.sx(key,A(value)))
+def rated(tree):
+ """Synthetic, explicitly supplied test ratings; not data for any real purchasable part."""
+ for p in direct(one(tree,'parts'),'part'):
+  if p[1]=='resistor':set_field(p,'power_w','0.1');set_field(p,'voltage_v','50');set_field(p,'height_mm','0.55')
+  if p[1]=='header3':set_field(p,'height_mm','2.5')
+ return tree
+class Base(unittest.TestCase):
  def setUp(self):self.tmp=tempfile.TemporaryDirectory();self.dir=Path(self.tmp.name)
  def tearDown(self):self.tmp.cleanup()
  def tree(self,name='divider'):return copper.load(ROOT/f'examples/v2/{name}.copper')
@@ -16,6 +32,18 @@ class V2(unittest.TestCase):
   return r
  def analyze(self,tree):
   r=self.run_core(tree);self.assertTrue(r.stdout,r.stderr);return r.returncode,json.loads(r.stdout)
+ def build(self,tree,name='build',sym=FIX_SYM,fp=FIX_FP):
+  src=self.dir/f'{name}.copper';copper.write_tree(src,tree)
+  args=type('Args',(),dict(project=str(src),out=str(self.dir/name),core=CORE,symbol_dir=str(sym),footprint_dir=str(fp),no_route=False))()
+  with contextlib.redirect_stdout(io.StringIO()):rc=copper.export_project(args)
+  return src,self.dir/name,rc
+ def verify(self,out,kicad_cli=None,project=None):
+  # A nonexistent CLI path makes the native gate deterministically UNVERIFIED.
+  args=type('Args',(),dict(out=str(out),kicad_cli=kicad_cli or str(self.dir/'no-kicad-cli'),core=CORE,project=project))()
+  with contextlib.redirect_stdout(io.StringIO()):rc=copper.verify(args)
+  return rc,json.loads((Path(out)/'verification.json').read_text())
+ def check(self,report,name):return next(c['status'] for c in report['checks'] if c['check']==name)
+class V2(Base):
  def test_divider_matches_closed_form(self):
   rc,r=self.analyze(self.tree());self.assertEqual(rc,0);self.assertAlmostEqual(r['nodes'][2]['voltage_v'],10/3,places=9);self.assertLess(r['kcl_residual_a'],1e-10);self.assertAlmostEqual(sum(c['power_w'] for c in r['calculations']),25/30000,places=10)
  def test_rc_backward_euler_and_analytic_bound(self):
@@ -66,37 +94,100 @@ class V2(unittest.TestCase):
   # KiCad PCB coordinates are screen-oriented: +90 maps down to right.
   x,y=copper.rotate(0,2.54,90);self.assertAlmostEqual(x,2.54);self.assertAlmostEqual(y,0)
   x,y=copper.rotate(.825,0,90);self.assertAlmostEqual(x,0);self.assertAlmostEqual(y,-.825)
- def test_native_workflow(self):
-  sym=os.environ.get('KICAD_SYMBOL_DIR');fp=os.environ.get('KICAD_FOOTPRINT_DIR')
-  if not sym or not fp:self.skipTest('Set KICAD_SYMBOL_DIR and KICAD_FOOTPRINT_DIR for installed-library integration')
-  args=type('Args',(),dict(project=str(ROOT/'examples/v2/divider.copper'),out=str(self.dir/'build'),core=CORE,symbol_dir=sym,footprint_dir=fp,no_route=False))()
-  rc=copper.export_project(args);self.assertEqual(rc,0)
-  report=json.loads((self.dir/'build/report.json').read_text());self.assertTrue(report['physical_checked']);self.assertEqual(report['errors'],0)
-  sch=copper.load(self.dir/'build/design.kicad_sch');pcb=copper.load(self.dir/'build/design.kicad_pcb');self.assertEqual(len(direct(sch,'symbol')),3);self.assertEqual(len(direct(pcb,'footprint')),3)
-  # Regeneration must be byte-identical (UUIDs, ordering and routing).
-  before=(self.dir/'build/design.kicad_pcb').read_bytes();self.assertEqual(copper.export_project(args),0);self.assertEqual(before,(self.dir/'build/design.kicad_pcb').read_bytes())
-  # User process limits are executable checks, not stored-only metadata.
-  for field,value,expected in [('max_aspect',1,'drill_aspect'),('mask_web_mm',2,'mask_web'),('courtyard_gap_mm',10,'courtyard_gap'),('max_current_density_a_mm2',.01,'current_density_budget'),('max_drop_v',1e-9,'trace_drop_budget')]:
-   changed=copper.load(self.dir/'build/resolved.copper');changed.append(copper.sx('rules',copper.sx(field,A(str(value)))));code,findings=self.analyze(changed);self.assertEqual(code,2);self.assertIn(expected,[v['rule'] for v in findings['issues']])
-  # Native parser, ERC, DRC, schematic parity and pin/net parity must really execute.
-  cli=copper.discover_cli()
-  if cli and subprocess.run([cli,'version'],capture_output=True,text=True).stdout.startswith('9.'):
-   self.assertEqual(copper.verify(type('Args',(),dict(out=str(self.dir/'build'),kicad_cli=cli))()),0)
-   rotated=self.tree()
-   for c in direct(one(rotated,'components'),'component'):
-    if c[1]=='J1':one(c,'at')[2]=A('20');one(c,'at')[3]=A('90')
-   copper.write_tree(self.dir/'rotated.copper',rotated)
-   rotated_args=type('Args',(),dict(project=str(self.dir/'rotated.copper'),out=str(self.dir/'rotated'),core=CORE,symbol_dir=sym,footprint_dir=fp,no_route=False))()
-   self.assertEqual(copper.export_project(rotated_args),0)
-   self.assertEqual(copper.verify(type('Args',(),dict(out=str(self.dir/'rotated'),kicad_cli=cli))()),0)
-
-  # Open traces and a deliberate inter-net short must fail physical checks.
-  resolved=copper.load(self.dir/'build/resolved.copper');geo=one(resolved,'geometry');geo[:]=[x for x in geo if not isinstance(x,list) or x[0]!='trace'];rc,bad=self.analyze(resolved);self.assertEqual(rc,2);self.assertIn('open_connection',[v['rule'] for v in bad['issues']])
-  pads=direct(geo,'pad');a=next(p for p in pads if p[3]=='VIN');b=next(p for p in pads if p[3]=='GND');geo.append(copper.sx('trace',A('VIN'),a[4],a[5],b[4],b[5],A('.25'),A('0')));rc,bad=self.analyze(resolved);self.assertEqual(rc,2);self.assertTrue(any(v['rule'] in ('short_circuit','copper_clearance') for v in bad['issues']))
+ # I-05: an omitted required value is INVALID_INPUT, never a silent 0.
+ def test_missing_required_value_rejected(self):
+  cases=[('divider','V1'),('divider','R1'),('rc','C1'),('rl','L1')]
+  for name,ref in cases:
+   t=self.tree(name);c=next(c for c in direct(one(t,'components'),'component') if c[1]==ref);c.remove(one(c,'value'))
+   r=self.run_core(t);self.assertEqual(r.returncode,2,ref);self.assertIn('PROJECT ERROR',r.stderr);self.assertIn('value',r.stderr);self.assertFalse(r.stdout.strip(),ref)
+  t=self.tree();one(next(p for p in direct(one(t,'parts'),'part') if p[1]=='voltage'),'kind')[1]=A('I')
+  c=next(c for c in direct(one(t,'components'),'component') if c[1]=='V1');c.remove(one(c,'value'));self.assertEqual(self.run_core(t).returncode,2)
+ def test_optional_value_kinds_and_explicit_zero(self):
+  t=self.tree();c=next(c for c in direct(one(t,'components'),'component') if c[1]=='J1');c.remove(one(c,'value'))
+  rc,r=self.analyze(t);self.assertEqual(rc,0);self.assertTrue(r['dc_solved'])
+  t=self.tree();t.remove(one(t,'targets'));one(next(c for c in direct(one(t,'components'),'component') if c[1]=='V1'),'value')[1]=A('0')
+  rc,r=self.analyze(t);self.assertEqual(rc,0);self.assertEqual(r['nodes'][1]['voltage_v'],0)
+ # I-06: unknown ratings/heights are UNVERIFIED in the build and in verify, never PASS.
+ def test_unknown_ratings_never_verify_as_pass(self):
+  _,out,rc=self.build(self.tree());self.assertEqual(rc,0)
+  manifest=json.loads((out/'manifest.json').read_text());self.assertEqual(manifest['status'],copper.STATUS_UNVERIFIED)
+  self.assertIn('rating_unknown',manifest['unverified_rules']);self.assertIn('height_unknown',manifest['unverified_rules'])
+  code,report=self.verify(out);self.assertEqual(code,2);self.assertFalse(report['pass']);self.assertNotEqual(report['status'],'PASS')
+  self.assertEqual(self.check(report,'data_completeness'),'UNVERIFIED');self.assertEqual(self.check(report,'build_status'),'UNVERIFIED')
+ def test_complete_data_leaves_only_native_unverified(self):
+  _,out,rc=self.build(rated(self.tree()));self.assertEqual(rc,0)
+  self.assertEqual(json.loads((out/'manifest.json').read_text())['status'],copper.STATUS_PASS)
+  code,report=self.verify(out);self.assertEqual(code,2);self.assertEqual(report['status'],'UNVERIFIED')
+  for name in ('output_hashes','source_freshness','build_status','internal_reanalysis','data_completeness'):self.assertEqual(self.check(report,name),'PASS',name)
+  self.assertEqual([g['status'] for g in report['gates']],['UNVERIFIED'])
+ # I-07: verify detects stale source, tampered reports, and never leaves an old PASS marker.
+ def test_verify_rejects_stale_source(self):
+  src,out,rc=self.build(rated(self.tree()));self.assertEqual(rc,0)
+  self.assertEqual(self.check(self.verify(out)[1],'source_freshness'),'PASS')
+  t=copper.load(src);one(next(c for c in direct(one(t,'components'),'component') if c[1]=='R2'),'value')[1]=A('22000');copper.write_tree(src,t)
+  code,report=self.verify(out);self.assertEqual(code,2);self.assertEqual(report['status'],'FAIL');self.assertEqual(self.check(report,'source_freshness'),'FAIL')
+ def test_verify_explicit_project_and_missing_source(self):
+  src,out,rc=self.build(rated(self.tree()));other=self.dir/'other.copper';copper.write_tree(other,self.tree('rc'))
+  self.assertEqual(self.check(self.verify(out,project=str(other))[1],'source_freshness'),'FAIL')
+  src.unlink();code,report=self.verify(out);self.assertEqual(code,2);self.assertEqual(self.check(report,'source_freshness'),'UNVERIFIED')
+ def test_verify_reruns_internal_analysis(self):
+  _,out,rc=self.build(rated(self.tree()));report=json.loads((out/'report.json').read_text())
+  report['nodes'][2]['voltage_v']=3.3;(out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+  manifest=json.loads((out/'manifest.json').read_text());manifest['files']['report.json']=copper.sha256_file(out/'report.json');(out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+  code,result=self.verify(out);self.assertEqual(code,2);self.assertEqual(self.check(result,'output_hashes'),'PASS');self.assertEqual(self.check(result,'internal_reanalysis'),'FAIL')
+ def test_verify_hash_mismatch_writes_fail_marker(self):
+  _,out,rc=self.build(rated(self.tree()));self.verify(out)
+  with (out/'design.kicad_pcb').open('a') as f:f.write('\n')
+  code,result=self.verify(out);self.assertEqual(code,2);self.assertEqual(result['status'],'FAIL');self.assertEqual(self.check(result,'output_hashes'),'FAIL')
+ def test_draft_build_never_verifies(self):
+  t=rated(self.tree());one(t,'targets')[1][2]=A('4');one(t,'targets')[1][3]=A('4.1')
+  args=type('Args',(),dict(project=str(self.dir/'draft.copper'),out=str(self.dir/'draft'),core=CORE,symbol_dir=str(FIX_SYM),footprint_dir=str(FIX_FP),no_route=False,draft=True))()
+  copper.write_tree(self.dir/'draft.copper',t)
+  with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(copper.export_project(args),2)
+  code,result=self.verify(self.dir/'draft');self.assertEqual(code,2);self.assertEqual(self.check(result,'build_status'),'FAIL');self.assertEqual(result['status'],'FAIL')
+ # I-08: a run that skipped anything must not exit as a plain pass.
+ def test_skipped_suite_is_not_reported_as_pass(self):
+  env={k:v for k,v in os.environ.items() if k not in ('KICAD_SYMBOL_DIR','KICAD_FOOTPRINT_DIR','KICAD9_SYMBOL_DIR')}
+  r=subprocess.run([sys.executable,str(Path(__file__).resolve()),CORE,'V2Native'],capture_output=True,text=True,env=env,timeout=120)
+  self.assertEqual(r.returncode,77,r.stderr);self.assertIn('skipped',r.stderr)
  def test_inherited_symbol_flattening(self):
   lib=self.dir/'Fixture.kicad_sym';lib.write_text('(kicad_symbol_lib (symbol "Base" (property "Reference" "R") (symbol "Base_1_1" (pin passive line (at 0 0 0) (length 2) (name "p") (number "1")))) (symbol "Child" (extends "Base") (property "Value" "child")))')
   d=copper.resolve_symbol(self.dir,'Fixture:Child',{});self.assertIsNone(one(d,'extends'));self.assertEqual(copper.symbol_pins(d)[0][-1][1],'1')
  def test_path_traversal_library_id_rejected(self):
   for s in ['../../evil:foo','Device:../../x','/etc:passwd','Device:x/y']:
    with self.assertRaises(ValueError):copper.safe_lib_id(s)
-if __name__=='__main__':unittest.main(verbosity=2)
+class V2Native(Base):
+ """Needs installed KiCad libraries (KICAD_SYMBOL_DIR/KICAD_FOOTPRINT_DIR); gates also need KiCad 9.x CLI."""
+ def libraries(self):
+  sym=os.environ.get('KICAD_SYMBOL_DIR');fp=os.environ.get('KICAD_FOOTPRINT_DIR')
+  if not sym or not fp:self.skipTest('UNVERIFIED: set KICAD_SYMBOL_DIR and KICAD_FOOTPRINT_DIR for installed-library integration')
+  return sym,fp
+ def test_library_build_workflow(self):
+  sym,fp=self.libraries();_,out,rc=self.build(self.tree(),sym=sym,fp=fp);self.assertEqual(rc,0)
+  report=json.loads((out/'report.json').read_text());self.assertTrue(report['physical_checked']);self.assertEqual(report['errors'],0)
+  sch=copper.load(out/'design.kicad_sch');pcb=copper.load(out/'design.kicad_pcb');self.assertEqual(len(direct(sch,'symbol')),3);self.assertEqual(len(direct(pcb,'footprint')),3)
+  # Regeneration must be byte-identical (UUIDs, ordering and routing).
+  before=(out/'design.kicad_pcb').read_bytes();self.assertEqual(self.build(self.tree(),sym=sym,fp=fp)[2],0);self.assertEqual(before,(out/'design.kicad_pcb').read_bytes())
+  # User process limits are executable checks, not stored-only metadata.
+  for field,value,expected in [('max_aspect',1,'drill_aspect'),('mask_web_mm',2,'mask_web'),('courtyard_gap_mm',10,'courtyard_gap'),('max_current_density_a_mm2',.01,'current_density_budget'),('max_drop_v',1e-9,'trace_drop_budget')]:
+   changed=copper.load(out/'resolved.copper');changed.append(copper.sx('rules',copper.sx(field,A(str(value)))));code,findings=self.analyze(changed);self.assertEqual(code,2);self.assertIn(expected,[v['rule'] for v in findings['issues']])
+  # Open traces and a deliberate inter-net short must fail physical checks.
+  resolved=copper.load(out/'resolved.copper');geo=one(resolved,'geometry');geo[:]=[x for x in geo if not isinstance(x,list) or x[0]!='trace'];rc,bad=self.analyze(resolved);self.assertEqual(rc,2);self.assertIn('open_connection',[v['rule'] for v in bad['issues']])
+  pads=direct(geo,'pad');a=next(p for p in pads if p[3]=='VIN');b=next(p for p in pads if p[3]=='GND');geo.append(copper.sx('trace',A('VIN'),a[4],a[5],b[4],b[5],A('.25'),A('0')));rc,bad=self.analyze(resolved);self.assertEqual(rc,2);self.assertTrue(any(v['rule'] in ('short_circuit','copper_clearance') for v in bad['issues']))
+ def test_kicad9_native_gates(self):
+  sym,fp=self.libraries();cli=copper.discover_cli()
+  version=subprocess.run([cli,'version'],capture_output=True,text=True).stdout.strip() if cli else ''
+  if not version.startswith('9.'):self.skipTest(f'UNVERIFIED: KiCad 9.x CLI required for native gates (found {version or "none"})')
+  # Native parser, ERC, DRC, schematic parity and pin/net parity must really execute.
+  _,out,rc=self.build(self.tree(),sym=sym,fp=fp);self.assertEqual(rc,0)
+  code,report=self.verify(out,kicad_cli=cli);self.assertEqual(code,2);self.assertEqual(report['status'],'UNVERIFIED')
+  self.assertEqual({g['gate']:g['status'] for g in report['gates']},{'erc':'PASS','drc':'PASS','netlist':'PASS','netlist_parity':'PASS'})
+  rotated=rated(self.tree())
+  for c in direct(one(rotated,'components'),'component'):
+   if c[1]=='J1':one(c,'at')[2]=A('20');one(c,'at')[3]=A('90')
+  for name,tree in [('rated',rated(self.tree())),('rotated',rotated)]:
+   _,out,rc=self.build(tree,name=name,sym=sym,fp=fp);self.assertEqual(rc,0,name)
+   code,report=self.verify(out,kicad_cli=cli);self.assertEqual(code,0,report);self.assertEqual(report['status'],'PASS');self.assertTrue(report['kicad_version'].startswith('9.'))
+if __name__=='__main__':
+ result=unittest.main(verbosity=2,exit=False).result
+ sys.exit(1 if not result.wasSuccessful() else 77 if result.skipped else 0)

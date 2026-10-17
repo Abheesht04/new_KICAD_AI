@@ -11,6 +11,12 @@ from hwc_kicad import (Atom as A, Quoted as Q, parse_sexpr, dump_sexpr, direct, 
                       head, text_at, discover_symbol_dir, discover_footprint_dir, discover_cli)
 ROOT=Path(__file__).resolve().parents[1]
 NS=uuid.UUID('aa7c164c-f2ec-5244-b7eb-6726f0ee52d8')
+# Build statuses. Any analysis warning means required data was missing (unknown rating,
+# height or geometry), so the build is UNVERIFIED rather than PASS.
+STATUS_PASS='INTERNAL_CHECKS_PASS_NATIVE_KICAD_REQUIRED'
+STATUS_UNVERIFIED='INTERNAL_CHECKS_UNVERIFIED_MISSING_DATA'
+STATUS_DRAFT='DRAFT_FAILED_CHECKS'
+def sha256_file(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def uid(s): return str(uuid.uuid5(NS,s))
 def sx(tag,*v): return [A(tag),*v]
 def number(v): return A(f'{float(v):.9g}')
@@ -313,7 +319,10 @@ def export_project(args):
     # Hash the actual source, resolved IR and outputs, never a statement of certification.
     files=['resolved.copper','design.kicad_sch','design.kicad_pcb','design.kicad_pro','design.kicad_dru','sym-lib-table','fp-lib-table','bom.csv','report.json']
     files+=sorted(str(p.relative_to(out)) for p in (out/'libraries').rglob('*') if p.is_file())
-    manifest={'schema':2,'source_sha256':hashlib.sha256(project.read_bytes()).hexdigest(),'status':'INTERNAL_CHECKS_PASS_NATIVE_KICAD_REQUIRED' if rc==0 else 'DRAFT_FAILED_CHECKS','files':{name:hashlib.sha256((out/name).read_bytes()).hexdigest() for name in files},'symbols':str(symdir),'footprints':str(fpdir)}
+    unverified=sorted({v['rule'] for v in report['issues'] if v['severity']!='error'})
+    try:source_path=os.path.relpath(project,out)
+    except ValueError:source_path=str(project)  # Windows: different drive
+    manifest={'schema':2,'source_sha256':sha256_file(project),'source_path':Path(source_path).as_posix(),'status':STATUS_DRAFT if rc else (STATUS_UNVERIFIED if unverified else STATUS_PASS),'unverified_rules':unverified,'files':{name:sha256_file(out/name) for name in files},'symbols':str(symdir),'footprints':str(fpdir)}
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     # Lightweight exact board preview for external viewing, independent of desktop renderer.
     import html
@@ -323,27 +332,62 @@ def export_project(args):
     svg.append('</svg>');(out/'board.svg').write_text(''.join(svg))
     print(f'{manifest["status"]}: {out}\n{len(pads)} pads, {len(traces)} tracks, {len(vias)} vias; {report["errors"]} errors, {report["warnings"]} warnings.');return rc
 
-def verify(args):
-    out=Path(args.out).resolve();manifest=json.loads((out/'manifest.json').read_text())
-    for name,digest in manifest['files'].items():
-        if hashlib.sha256((out/name).read_bytes()).hexdigest()!=digest:raise ValueError(f'{name} changed since build; rebuild before verification')
-    cli=discover_cli(args.kicad_cli)
-    if not cli:raise FileNotFoundError('KiCad 9 CLI not found; set --kicad-cli')
-    version=subprocess.run([cli,'version'],capture_output=True,text=True,timeout=30)
-    if version.returncode or not re.match(r'^9\.',version.stdout.strip()):raise ValueError('This verification gate targets KiCad 9.x; found '+version.stdout.strip())
-    results=[]
+def overall_status(statuses):
+    return 'FAIL' if 'FAIL' in statuses else 'UNVERIFIED' if 'UNVERIFIED' in statuses else 'PASS'
+def native_gates(out,cli):
+    """KiCad 9.x ERC/DRC/netlist plus independent pin/net parity. Returns (version, gates)."""
+    version=None;error='KiCad CLI not found; set --kicad-cli'
+    if cli:
+        try:version=subprocess.run([cli,'version'],capture_output=True,text=True,timeout=30)
+        except (OSError,subprocess.SubprocessError) as exc:error=f'Cannot run KiCad CLI {cli}: {exc}'
+    if version is None or version.returncode:
+        return None,[{'gate':'kicad_cli','status':'UNVERIFIED','message':error if version is None else 'kicad-cli version failed: '+version.stderr.strip()}]
+    found=version.stdout.strip()
+    if not re.match(r'^9\.',found):return found,[{'gate':'kicad_version','status':'UNVERIFIED','message':f'Native validation targets KiCad 9.x only; found {found}'}]
+    gates=[]
     for label,cmd in [('erc',['sch','erc','--format','json','--exit-code-violations','-o',str(out/'erc.json'),str(out/'design.kicad_sch')]),('drc',['pcb','drc','--format','json','--all-track-errors','--schematic-parity','--exit-code-violations','-o',str(out/'drc.json'),str(out/'design.kicad_pcb')]),('netlist',['sch','export','netlist','--format','kicadxml','-o',str(out/'netlist.xml'),str(out/'design.kicad_sch')])]:
-        r=subprocess.run([cli,*cmd],capture_output=True,text=True,timeout=180);results.append({'gate':label,'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr})
+        r=subprocess.run([cli,*cmd],capture_output=True,text=True,timeout=180);gates.append({'gate':label,'status':'PASS' if r.returncode==0 else 'FAIL','returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr})
     # Compare all electrical physical-pin mappings against KiCad's own extracted netlist.
-    if results[-1]['returncode']==0:
+    if gates[-1]['returncode']==0:
         import xml.etree.ElementTree as ET
         root=ET.parse(out/'netlist.xml').getroot();actual={}
         for net in root.findall('./nets/net'):
             for node in net.findall('node'):actual[(node.attrib['ref'],node.attrib['pin'])]=net.attrib['name'].removeprefix('/')
         expected={(c['ref'],pin):net for c in component_data(load(out/'resolved.copper')) if c['kind'] not in ('V','I') for pin,net in c['pins'].items()}
-        results.append({'gate':'netlist_parity','returncode':0 if expected==actual else 2,'message':'Matches electrical IR' if expected==actual else f'Pin/net mismatch: expected {expected}, got {actual}'})
-    status={'kicad_version':version.stdout.strip(),'gates':results,'pass':all(r['returncode']==0 for r in results) and manifest['status']=='INTERNAL_CHECKS_PASS_NATIVE_KICAD_REQUIRED','hashes':manifest['files']}
-    (out/'verification.json').write_text(json.dumps(status,indent=2)+'\n');print(json.dumps(status,indent=2));return 0 if status['pass'] else 2
+        gates.append({'gate':'netlist_parity','status':'PASS' if expected==actual else 'FAIL','returncode':0 if expected==actual else 2,'message':'Matches electrical IR' if expected==actual else f'Pin/net mismatch: expected {expected}, got {actual}'})
+    else:gates.append({'gate':'netlist_parity','status':'UNVERIFIED','message':'KiCad netlist export failed; parity not compared'})
+    return found,gates
+def verify(args):
+    out=Path(args.out).resolve();marker=out/'verification.json'
+    marker.unlink(missing_ok=True)  # A failed run must never leave an earlier PASS behind.
+    manifest=json.loads((out/'manifest.json').read_text());checks=[];gates=[];version=None
+    def check(name,status,message):checks.append({'check':name,'status':status,'message':message})
+    changed=sorted(name for name,digest in manifest['files'].items() if not (out/name).is_file() or sha256_file(out/name)!=digest)
+    check('output_hashes','FAIL' if changed else 'PASS',f'Changed since build: {changed}; rebuild' if changed else 'All built files match the manifest')
+    if not changed:
+        project=getattr(args,'project',None) or (manifest.get('source_path') and str(out/manifest['source_path']))
+        if not project:check('source_freshness','UNVERIFIED','Manifest has no source path; pass --project')
+        elif not Path(project).is_file():check('source_freshness','UNVERIFIED',f'Source not found: {project}')
+        elif sha256_file(project)!=manifest['source_sha256']:check('source_freshness','FAIL',f'{project} changed since build; rebuild')
+        else:check('source_freshness','PASS','Source matches the build')
+        build=manifest.get('status')
+        check('build_status',{STATUS_PASS:'PASS',STATUS_UNVERIFIED:'UNVERIFIED'}.get(build,'FAIL'),f'Build status {build}')
+        # Re-run the C engine on the built IR; the stored report must be reproduced exactly.
+        try:fresh,rc=core_run(out/'resolved.copper',getattr(args,'core',None))
+        except FileNotFoundError as exc:check('internal_reanalysis','UNVERIFIED',str(exc))
+        except ValueError as exc:check('internal_reanalysis','FAIL',str(exc))
+        else:
+            stored=json.loads((out/'report.json').read_text())
+            if fresh!=stored:check('internal_reanalysis','FAIL','Re-analysis differs from report.json')
+            elif rc or fresh['errors']:check('internal_reanalysis','FAIL',f'{fresh["errors"]} internal errors')
+            else:check('internal_reanalysis','PASS','Re-analysis reproduces report.json with no errors')
+            missing=sorted({v['rule'] for v in fresh['issues'] if v['severity']!='error'})
+            check('data_completeness','UNVERIFIED' if missing else 'PASS',f'Missing data: {missing}' if missing else 'No unknown ratings, heights or geometry')
+        version,gates=native_gates(out,discover_cli(args.kicad_cli))
+    status=overall_status([c['status'] for c in checks+gates])
+    result={'status':status,'pass':status=='PASS','kicad_version':version,'checks':checks,'gates':gates,'hashes':manifest['files']}
+    marker.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2));return 0 if status=='PASS' else 2
+
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='command',required=True)
@@ -353,7 +397,7 @@ def main(argv=None):
         if cmd=='transient':p.add_argument('--dt',type=float,default=1e-4);p.add_argument('--steps',type=int,default=1000);p.add_argument('--out',required=True)
     p=sub.add_parser('build');p.add_argument('project');p.add_argument('--out',default='out/v2');p.add_argument('--core');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--no-route',action='store_true');p.add_argument('--draft',action='store_true',help='Allow electrical failures to produce an explicitly failed draft, never a verified package')
     for cmd in ['verify','fabricate']:
-        p=sub.add_parser(cmd);p.add_argument('--out',default='out/v2');p.add_argument('--kicad-cli')
+        p=sub.add_parser(cmd);p.add_argument('--out',default='out/v2');p.add_argument('--kicad-cli');p.add_argument('--core');p.add_argument('--project',help='Source .copper to check for freshness (default: path recorded at build)')
     p=sub.add_parser('classify');p.add_argument('text');p.add_argument('--core')
     p=sub.add_parser('catalogue');p.add_argument('--file');p.add_argument('--search',default='')
     p=sub.add_parser('part-add');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJU'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float,default=0);p.add_argument('--voltage',type=float,default=0);p.add_argument('--tolerance',type=float,default=0);p.add_argument('--height',type=float,default=0);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
