@@ -45,10 +45,47 @@ def core_run(project,core=None,mode='analyze',extra=()):
         raise (InvalidInput if message.startswith('PROJECT ERROR') else CoreError)(message)
     return (json.loads(result.stdout) if mode=='analyze' else result.stdout),result.returncode
 
-def catalogue(path=None):
-    tree=load(path or ROOT/'profiles/default.parts');return copy.deepcopy(direct(tree,'part'))
+BUNDLED_CATALOGUE=ROOT/'profiles/default.parts'
+def validate_catalogue(path,core=None,label=None):
+    """Schema-check a catalogue file with copper-core (same rules as a project's parts). Returns its summary."""
+    result=subprocess.run([core_path(core),'catalogue',str(Path(existing(path,'Catalogue')).resolve())],capture_output=True,text=True,timeout=60)
+    if result.returncode:raise InvalidInput(f'{label or path}: '+(result.stderr.strip() or f'catalogue check failed ({result.returncode})'))
+    return json.loads(result.stdout)
+def catalogue(path=None,core=None):
+    """Bundled defaults overlaid by an optional user catalogue. Precedence is deterministic: a user part replaces
+    the bundled part with the same id (keeping its position); new ids follow in file order. Each part records
+    the catalogue it came from. A malformed catalogue raises before anything is used or written."""
+    merged={}
+    sources=[(BUNDLED_CATALOGUE,'bundled:default.parts')]+([(Path(path),'user:'+Path(path).name)] if path else [])
+    for source,label in sources:
+        validate_catalogue(source,core)
+        for part in direct(load(source),'part'):
+            part=[x for x in copy.deepcopy(part) if not (isinstance(x,list) and head(x)=='catalogue')]
+            merged[str(part[1])]=part+[sx('catalogue',Q(label))]
+    return list(merged.values())
+def model_specs(core=None,_cache={}):
+    """Device model specs registered in copper-core (contract v1), by id."""
+    key=core_path(core)
+    if key not in _cache:
+        result=subprocess.run([key,'models'],capture_output=True,text=True,timeout=30)
+        if result.returncode:raise CoreError(result.stderr.strip() or 'copper-core models failed')
+        _cache[key]={m['id']:m for m in json.loads(result.stdout)['models']}
+    return _cache[key]
+def check_terminal_pin_names(ref,component,spec,symbol_pins):
+    """Reject a pin map that KiCad pin names contradict, e.g. anode mapped to the pin named 'K'.
+    Unnamed pins and names no terminal claims are accepted; only a definite swap is an error."""
+    def accepts(terminal,name):return terminal['pin_names'] is None or name.upper() in terminal['pin_names'].upper().split('|')
+    terminals={t['name']:t for t in spec['terminals']};names={text_at(p,'number'):text_at(p,'name') for p in symbol_pins}
+    for terminal,pin in component['terminals'].items():
+        name=names.get(pin) or ''
+        if name in ('','~') or accepts(terminals[terminal],name):continue
+        claimed=[other for other,t in terminals.items() if other!=terminal and t['pin_names'] and accepts(t,name)]
+        if claimed:raise InvalidInput(f"{ref}: symbol pin {pin} is named '{name}' ({claimed[0]}) but the part maps it to terminal '{terminal}'; the pin map is swapped")
+def resolved_rating(component,key):
+    """Known value of a rating/height from the analysis report, or None when UNKNOWN."""
+    rating=component['ratings'][key];return rating['value'] if rating['known'] else None
 def new_project(args):
-    parts=catalogue(args.catalogue);template=args.template
+    parts=catalogue(args.catalogue,getattr(args,'core',None));template=args.template
     if template=='divider':
         comps=[('V1','voltage',args.vin,[('1','VIN'),('2','GND')],(0,0)),('R1','resistor',args.r,[('1','VIN'),('2','OUT')],(16,12)),('R2','resistor',args.r2,[('1','OUT'),('2','GND')],(24,12)),('J1','header3',0,[('1','VIN'),('2','OUT'),('3','GND')],(8,12))]
     elif template=='rc':
@@ -115,13 +152,17 @@ def effects(hidden=False):
     if hidden:e.append(sx('hide',A('yes')))
     return e
 
-def schematic(tree,components,symbol_dir,stem):
+def schematic(tree,components,symbol_dir,stem,bindings=None,specs=None):
+    """bindings: report['components'] by ref; specs: model_specs(). When given, pin maps are checked against
+    the symbol's pin names (logical terminal -> symbol pin -> footprint pad with the same number)."""
     rootid=uid(stem+'/schematic');lib=sx('lib_symbols');cache={}
     sch=sx('kicad_sch',sx('version',A('20250114')),sx('generator',Q('copper_v2')),sx('uuid',Q(rootid)),sx('paper',Q('A4')),lib)
     physical=[c for c in components if c['kind'] not in ('V','I')]
     for index,c in enumerate(physical):
         definition=resolve_symbol(symbol_dir,c['symbol'],cache);pins=symbol_pins(definition)
         if set(c['pins'])!={text_at(p,'number') for p in pins}:raise ValueError(f"{c['ref']}: project pins differ from symbol pins")
+        binding=(bindings or {}).get(c['ref'])
+        if binding and binding['model'] and specs:check_terminal_pin_names(c['ref'],binding,specs[binding['model']['id']],pins)
         if not any(s[1]==c['symbol'] for s in lib[1:]):lib.append(definition)
         x,y=50.8+(index%4)*50.8,50.8+(index//4)*50.8
         instance=sx('symbol',sx('lib_id',Q(c['symbol'])),sx('at',number(x),number(y),A('0')),sx('unit',A('1')),sx('exclude_from_sim',A('no')),sx('in_bom',A('yes')),sx('on_board',A('yes')),sx('dnp',A('no')),sx('uuid',Q(uid(stem+'/'+c['ref']))))
@@ -194,7 +235,7 @@ def footprint_geometry(c,fpdir,netids,stem):
             if head(obj) not in ('fp_rect','fp_line'):raise Unverified('Non-rectilinear courtyard requires explicit geometry support')
     if not pts:raise ValueError(f"{c['ref']}: footprint has no supported courtyard")
     lo=[min(p[i] for p in pts) for i in range(2)];hi=[max(p[i] for p in pts) for i in range(2)]
-    geo.append(sx('body',A(c['ref']),*map(number,[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,hi[0]-lo[0],hi[1]-lo[1],float(text_at(c['part'],'height_mm',default='0'))])))
+    geo.append(sx('body',A(c['ref']),*map(number,[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,hi[0]-lo[0],hi[1]-lo[1],c.get('height',0)])))
     # Regenerate all nested UUIDs deterministically; avoid duplicate library UUIDs.
     def uuids(n,path=''):
         if isinstance(n,list):
@@ -273,7 +314,9 @@ def export_project(args):
     if rc and not getattr(args,'draft',False):raise Failed('Electrical analysis failed; run check to inspect the findings before layout.')
     components=component_data(tree);nets=list(map(str,one(tree,'nets')[1:]));netids={n:i+1 for i,n in enumerate(nets)}
     symdir=discover_symbol_dir(args.symbol_dir);fpdir=discover_footprint_dir(args.footprint_dir)
-    stem='design';sch=schematic(tree,components,symdir,stem)
+    bindings={b['ref']:b for b in report['components']}
+    for c in components:c['height']=resolved_rating(bindings[c['ref']],'height_mm') or 0  # 0 = not stated in geometry
+    stem='design';sch=schematic(tree,components,symdir,stem,bindings,model_specs(args.core))
     dims=list(map(float,(one(tree,'board') or [None,40,30,1.6,.035,2])[1:]));w,h,thick,copper,layers=dims
     board=sx('kicad_pcb',sx('version',A('20241229')),sx('generator',Q('copper_v2')),sx('general',sx('thickness',number(thick))),sx('paper',Q('A4')),sx('layers',*[sx(str(i),Q(name),A(kind)) for i,name,kind in [(0,'F.Cu','signal'),(2,'B.Cu','signal'),(3,'B.Adhes','user'),(5,'F.SilkS','user'),(7,'B.SilkS','user'),(9,'F.Mask','user'),(11,'B.Mask','user'),(13,'Dwgs.User','user'),(25,'Edge.Cuts','user'),(31,'F.CrtYd','user'),(33,'B.CrtYd','user'),(35,'F.Fab','user'),(37,'B.Fab','user'),(1,'F.Adhes','user'),(19,'F.Paste','user'),(21,'B.Paste','user')]]),sx('setup',sx('pad_to_mask_clearance',number(rule(tree,'mask_expansion_mm',.05)))),sx('net',A('0'),Q('')))
     board.extend(sx('net',A(str(i)),Q('/'+n)) for n,i in netids.items())
@@ -321,7 +364,9 @@ def export_project(args):
     with (out/'bom.csv').open('w',newline='',encoding='utf-8') as f:
         writer=csv.writer(f);writer.writerow(['Reference','Part','Value_SI','Symbol','Footprint','Power_W','Voltage_V','Height_mm','Manufacturer','MPN','Datasheet'])
         for c in components:
-            if c['kind'] not in ('V','I'):writer.writerow([c['ref'],c['part'][1],c['value'],c['symbol'],c['footprint'],text_at(c['part'],'power_w'),text_at(c['part'],'voltage_v'),text_at(c['part'],'height_mm'),text_at(c['part'],'manufacturer'),text_at(c['part'],'mpn'),text_at(c['part'],'datasheet')])
+            if c['kind'] not in ('V','I'):
+                rated=[resolved_rating(bindings[c['ref']],k) for k in ('power_w','voltage_v','height_mm')]
+                writer.writerow([c['ref'],c['part'][1],c['value'],c['symbol'],c['footprint'],*['UNKNOWN' if v is None else f'{v:.9g}' for v in rated],text_at(c['part'],'manufacturer'),text_at(c['part'],'mpn'),text_at(c['part'],'datasheet')])
     lines=['Copper V2 calculation report',f'DC solved: {report["dc_solved"]}',f'Errors: {report["errors"]}; warnings: {report["warnings"]}']
     for n in report['nodes']:lines.append(f'{n["name"]}: {n["voltage_v"]} V')
     for c in report['calculations']:lines.append(f'{c["ref"]}: {c["formula"]}; V={c["voltage_v"]} V, R={c["resistance_ohm"]} ohm, I={c["current_a"]} A, P={c["power_w"]} W')
@@ -404,7 +449,8 @@ def verify(args):
 # ---------------------------------------------------------------------------
 # Report scopes, human rendering and the --result-json protocol used by pcba.
 # ---------------------------------------------------------------------------
-ELECTRICAL_RULES={'unsupported_model','mna_failure','open_node','rating_unknown','voltage_derating','power_derating','voltage_target',
+MODEL_GAPS={'unsupported_model','unsupported_analysis'}  # required model or capability absent: UNVERIFIED
+ELECTRICAL_RULES={'unsupported_model','unsupported_analysis','model_stamp','mna_failure','open_node','rating_unknown','voltage_derating','power_derating','voltage_target',
                   'corner_capacity','corner_allocation','corner_solve','corner_power','corner_voltage','corner_target'}
 def scope_status(issues,incomplete=False):
     if any(i['severity']=='error' for i in issues):return 'FAIL'
@@ -415,12 +461,12 @@ def report_scopes(report):
     physical=[i for i in report['issues'] if i['rule'] not in ELECTRICAL_RULES]
     el=scope_status(electrical)
     # A missing device model means the analysis could not be established, not that it failed.
-    if el=='FAIL' and all(i['rule']=='unsupported_model' or i['severity']!='error' for i in electrical):el='UNVERIFIED'
+    if el=='FAIL' and all(i['rule'] in MODEL_GAPS or i['severity']!='error' for i in electrical):el='UNVERIFIED'
     # Trace current budgets need a DC solution; without one the physical scope is incomplete.
     return {'electrical':el,'physical':scope_status(physical,not report['physical_checked'] or not report['dc_solved'])}
 def dc_status(report):
     if report['dc_solved']:return 'PASS'
-    return 'UNVERIFIED' if any(i['rule']=='unsupported_model' for i in report['issues']) else 'FAIL'
+    return 'UNVERIFIED' if any(i['rule'] in MODEL_GAPS for i in report['issues']) else 'FAIL'
 def outcome_status(exc):
     if isinstance(exc,(Unverified,FileNotFoundError)):return 'UNVERIFIED'
     if isinstance(exc,(Failed,subprocess.CalledProcessError)):return 'FAIL'
@@ -428,7 +474,8 @@ def outcome_status(exc):
     if isinstance(exc,(ValueError,KeyError,IndexError)):return 'INVALID_INPUT'
     return 'ERROR'
 def part_fields(p):
-    return {'id':str(p[1]),**{k:text_at(p,k) for k in ('kind','symbol','footprint','power_w','voltage_v','tolerance','height_mm','manufacturer','mpn','datasheet')}}
+    return {'id':str(p[1]),**{k:text_at(p,k) for k in ('kind','model','symbol','footprint','power_w','voltage_v','tolerance','height_mm','manufacturer','mpn','datasheet','provenance','catalogue')},
+            'pinmap':{str(e[0]):str(e[1]) for e in (one(p,'pinmap') or [None])[1:]}}
 
 def render_issues(issues,title='Findings'):
     errors=sum(i['severity']=='error' for i in issues)
@@ -443,6 +490,10 @@ def render_report(report,scopes=None):
         for c in report['calculations']:print(f"  {c['ref']:<12} V={c['voltage_v']:.6g} V  I={c['current_a']:.6g} A  P={c['power_w']:.6g} W")
         if report['tolerance_corner_count']:print(f"Resistor tolerance corners evaluated: {report['tolerance_corner_count']}")
     else:print('DC operating point: NOT solved')
+    print('Device models:')
+    for c in report['components']:
+        model=f"{c['model']['id']} v{c['model']['version']} ({c['model']['source'].replace('_',' ')})" if c['model'] else ('none (ideal boundary)' if c['kind']=='J' else 'none (analysis blocked)')
+        print(f"  {c['ref']:<12} {model}")
     render_issues(report['issues'])
     if scopes:print(f"Electrical: {scopes['electrical']}   Physical/DFM: {scopes['physical']}"+('' if report['physical_checked'] else '  (no board geometry; run project build)'))
     print(f"Coverage: {report['coverage']}")
@@ -534,6 +585,8 @@ def run_command(args):
         if not (math.isfinite(args.dt) and 0<args.dt<=1000 and 1<=args.steps<=100000):raise InvalidInput('Transient requires 0 < dt <= 1000 s and 1 <= steps <= 100000')
         report,_=core_run(project,args.core)
         if any(i['rule']=='unsupported_model' for i in report['issues']):raise Unverified('An active device lacks a supported model; transient analysis is blocked')
+        missing=[f"{c['ref']} ({c['model']['id']})" for c in report['components'] if c['model'] and not c['capabilities']['transient']]
+        if missing:raise Unverified('These device models do not support transient analysis: '+', '.join(missing))
         data,rc=core_run(project,args.core,'transient',(args.dt,args.steps))
         rows=list(csv.reader(io.StringIO(data)));header,samples=rows[0],rows[1:]
         if rc or not samples:raise Failed(f'Transient solve failed after {len(samples)} accepted step(s); no successful waveform is claimed')
@@ -564,14 +617,39 @@ def run_command(args):
         o['data']['cam']={'dir':str(cam),'files':sorted(p.name for p in cam.iterdir())}
         print('CAM files exported to '+str(cam)+'. Engineering review of models, process and assembly remains required.');return 0
     if args.command=='classify':return subprocess.run([core_path(args.core),'classify',args.text],timeout=30).returncode
-    if args.command=='part-add':
-        tree=load(args.file) if Path(args.file).exists() else sx('catalogue')
-        if head(tree)!='catalogue' or any(p[1]==args.id for p in direct(tree,'part')):raise InvalidInput('Invalid catalogue or duplicate part ID')
+    if args.command in ('part-add','part-remove'):
+        target=Path(args.file)
+        if target.resolve()==BUNDLED_CATALOGUE.resolve():raise InvalidInput('profiles/default.parts is the bundled catalogue and is read-only; use your own catalogue file')
+        tree=load(target) if target.exists() else sx('catalogue')
+        if head(tree)!='catalogue':raise InvalidInput(f'{target} is not a (catalogue ...) file')
+        if args.command=='part-remove':
+            kept=[x for x in tree if not (isinstance(x,list) and head(x)=='part' and str(x[1])==args.id)]
+            if len(kept)==len(tree):raise InvalidInput(f'{args.id} is not in {target}')
+            write_tree(target,kept);o['data']={'file':str(target.resolve()),'id':args.id,'removed':True};print('Removed '+args.id+' from '+args.file);return 0
+        if any(str(p[1])==args.id for p in direct(tree,'part')):raise InvalidInput(f'duplicate part ID {args.id}')
         if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.id):raise InvalidInput('Invalid part ID')
-        if not all(math.isfinite(v) and v>=0 for v in [args.power,args.voltage,args.tolerance,args.height]) or args.tolerance>=1:raise InvalidInput('Invalid ratings/tolerance')
+        for name,value in [('power',args.power),('voltage',args.voltage),('height',args.height)]:
+            if value is not None and not (math.isfinite(value) and value>0):raise InvalidInput(f'--{name} must be a positive rating; omit it when unknown')
+        if args.tolerance is not None and not (math.isfinite(args.tolerance) and 0<=args.tolerance<1):raise InvalidInput('--tolerance must be in [0, 1)')
         if args.kind not in ('V','I'):safe_lib_id(args.symbol);safe_lib_id(args.footprint)
-        tree.append(sx('part',A(args.id),sx('kind',A(args.kind)),sx('symbol',Q(args.symbol)),sx('footprint',Q(args.footprint)),sx('power_w',number(args.power)),sx('voltage_v',number(args.voltage)),sx('tolerance',number(args.tolerance)),sx('height_mm',number(args.height)),sx('manufacturer',Q(args.manufacturer)),sx('mpn',Q(args.mpn)),sx('datasheet',Q(args.datasheet))))
-        write_tree(args.file,tree);o['data']={'file':str(Path(args.file).resolve()),'id':args.id};print('Added '+args.id+' to '+args.file);return 0
+        part=sx('part',A(args.id),sx('kind',A(args.kind)))
+        if args.symbol:part.append(sx('symbol',Q(args.symbol)))
+        if args.footprint:part.append(sx('footprint',Q(args.footprint)))
+        if args.model:part.append(sx('model',A(args.model)))
+        if args.pinmap:
+            entries=[e.split('=',1) for e in args.pinmap.split(',')]
+            if any(len(e)!=2 or not all(e) for e in entries):raise InvalidInput('--pinmap must be terminal=pin[,terminal=pin...]')
+            part.append(sx('pinmap',*[sx(t.strip(),A(pin.strip())) for t,pin in entries]))
+        for key,value in [('power_w',args.power),('voltage_v',args.voltage),('tolerance',args.tolerance),('height_mm',args.height)]:
+            if value is not None:part.append(sx(key,number(value)))
+        for key in ('manufacturer','mpn','datasheet','provenance'):
+            if getattr(args,key):part.append(sx(key,Q(getattr(args,key))))
+        tree.append(part)
+        # Validate the whole resulting catalogue with copper-core before touching the target file.
+        target.parent.mkdir(parents=True,exist_ok=True);probe=target.with_name(target.name+'.check')
+        try:write_tree(probe,tree);validate_catalogue(probe,args.core,label=target)
+        finally:probe.unlink(missing_ok=True)
+        write_tree(target,tree);o['data']={'file':str(target.resolve()),'id':args.id};print('Added '+args.id+' to '+args.file);return 0
     if args.command=='catalogue':
         if args.file:existing(args.file,'Catalogue')
         matches=[p for p in catalogue(args.file) if args.search.lower() in dump_sexpr(p).lower()]
@@ -590,7 +668,7 @@ def main(argv=None):
     parser.add_argument('--format',choices=['json','human','quiet'],default='json',help='stdout style: json (legacy default), human, or quiet')
     parser.add_argument('--result-json',metavar='FILE',help='write {"status","message","data"} here on every handled exit path (pcba protocol)')
     sub=parser.add_subparsers(dest='command',required=True)
-    p=sub.add_parser('new');p.add_argument('template',choices=['divider','rc','rl','diode']);p.add_argument('--out',required=True);p.add_argument('--catalogue');p.add_argument('--rules');p.add_argument('--vin',type=float,default=5);p.add_argument('--r',type=float,default=10000);p.add_argument('--r2',type=float,default=20000);p.add_argument('--c',type=float,default=1e-6);p.add_argument('--l',type=float,default=.01);p.add_argument('--target',type=float);p.add_argument('--target-tolerance',type=float,default=.05);p.add_argument('--force',action='store_true')
+    p=sub.add_parser('new');p.add_argument('template',choices=['divider','rc','rl','diode']);p.add_argument('--out',required=True);p.add_argument('--catalogue');p.add_argument('--rules');p.add_argument('--vin',type=float,default=5);p.add_argument('--r',type=float,default=10000);p.add_argument('--r2',type=float,default=20000);p.add_argument('--c',type=float,default=1e-6);p.add_argument('--l',type=float,default=.01);p.add_argument('--target',type=float);p.add_argument('--target-tolerance',type=float,default=.05);p.add_argument('--force',action='store_true');p.add_argument('--core')
     for cmd in ['check','transient']:
         p=sub.add_parser(cmd);p.add_argument('project');p.add_argument('--core')
         if cmd=='check':p.add_argument('--scope',choices=['all','dc'],default='all',help='dc: status of the DC solve only')
@@ -600,7 +678,9 @@ def main(argv=None):
         p=sub.add_parser(cmd);p.add_argument('--out',default='out/v2');p.add_argument('--kicad-cli');p.add_argument('--core');p.add_argument('--project',help='Source .copper to check for freshness (default: path recorded at build)')
     p=sub.add_parser('classify');p.add_argument('text');p.add_argument('--core')
     p=sub.add_parser('catalogue');p.add_argument('--file');p.add_argument('--search',default='')
-    p=sub.add_parser('part-add');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJU'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float,default=0);p.add_argument('--voltage',type=float,default=0);p.add_argument('--tolerance',type=float,default=0);p.add_argument('--height',type=float,default=0);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
+    p=sub.add_parser('part-add',help='Unknown ratings are omitted, never written as 0');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJU'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float);p.add_argument('--voltage',type=float);p.add_argument('--tolerance',type=float);p.add_argument('--height',type=float);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
+    p.add_argument('--model',help='device model id (copper-core models); default: the kind default');p.add_argument('--pinmap',help='terminal=symbol_pin,... e.g. cathode=1,anode=2');p.add_argument('--provenance',default='',help='where the ratings come from');p.add_argument('--core')
+    p=sub.add_parser('part-remove');p.add_argument('--file',required=True);p.add_argument('--id',required=True)
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
     p=sub.add_parser('library-scan');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')

@@ -15,7 +15,7 @@ FIX_SYM=ROOT/'examples/generated/divider/libraries/symbols'
 FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
-        'simulate dc','simulate transient','parts search','parts add','library scan','dfm check'}
+        'simulate dc','simulate transient','parts search','parts add','parts remove','library scan','dfm check'}
 PLANNED={'simulate ac','parts import','place','route'}
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
 
@@ -81,6 +81,7 @@ class Usage(Base):
                 [('abc','10'),('-1','10'),('0','10'),('nan','10'),('inf','10'),('1001','10'),('1e-4','0'),('1e-4','1.5'),('1e-4','100001'),('1e-4','-3')]]
         cases+=[['parts','search'],['parts','add','--catalogue','c.parts','--id','x','--kind','Q'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','-1'],['parts','add','--id','x','--kind','R'],
+                ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','0'],['parts','remove','--id','x'],
                 ['dfm','check'],['library','scan','extra'],['doctor','extra'],['test','--quick','--full'],['test','--bogus'],
                 ['version','extra'],['help','no-such-command']]
         for argv in cases:
@@ -90,7 +91,7 @@ class Usage(Base):
         self.assertEqual(list(self.dir.iterdir()),[],'usage errors must not create files')
     def test_missing_inputs_are_invalid_input(self):
         for argv in [['project','check','nope.copper'],['simulate','dc','nope.copper'],['dfm','check','nope'],['project','verify','--out','no_build_dir'],
-                     ['project','build','nope.copper','--out','o'],['parts','search','r','--catalogue','nope.parts']]:
+                     ['project','build','nope.copper','--out','o'],['parts','search','r','--catalogue','nope.parts'],['parts','remove','--catalogue','nope.parts','--id','x']]:
             r=run(*argv,cwd=self.dir);self.assertEqual(r.returncode,2,argv);self.assertIn('not found',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json',cwd=self.dir))['status'],'INVALID_INPUT')
     def test_planned_commands_are_not_implemented(self):
@@ -160,6 +161,17 @@ class ExitCodes(Base):
         t=tree_with(rated=True);one(t,'targets')[1][2]=A('4');one(t,'targets')[1][3]=A('4.1')
         self.assertEqual(run('project','build',self.write(t,'bad.copper'),'--out',self.dir/'d','--symbols',FIX_SYM,'--footprints',FIX_FP).returncode,1)
         self.assertEqual(run('project','build',self.dir/'bad.copper','--out',self.dir/'d','--draft','--symbols',FIX_SYM,'--footprints',FIX_FP).returncode,1)
+    def test_parts_add_and_remove(self):
+        cat=self.dir/'mine.parts'
+        doc=envelope(self,run('parts','add','--catalogue',cat,'--id','d1','--kind','D','--model','shockley.diode','--pinmap','cathode=1,anode=2',
+                              '--symbol','Device:D','--footprint','Diode_SMD:D_SOD-123','--provenance','synthetic test entry','--json'))
+        self.assertEqual(doc['status'],'PASS');saved=cat.read_bytes()
+        r=run('parts','add','--catalogue',cat,'--id','d2','--kind','D','--pinmap','cathode=1','--symbol','Device:D','--footprint','Diode_SMD:D_SOD-123')
+        self.assertEqual(r.returncode,2);self.assertEqual(cat.read_bytes(),saved)  # rejected addition leaves the file untouched
+        hit=envelope(self,run('parts','search','d1','--catalogue',cat,'--json'))['result']['data']['parts'][0]
+        self.assertEqual((hit['model'],hit['pinmap'],hit['provenance'],hit['catalogue']),('shockley.diode',{'cathode':'1','anode':'2'},'synthetic test entry','user:mine.parts'))
+        self.assertEqual(run('parts','remove','--catalogue',cat,'--id','d1').returncode,0)
+        self.assertEqual(run('parts','remove','--catalogue',cat,'--id','d1').returncode,2)
     def fake_backend(self,body):
         root=self.dir/'fake';(root/'tools').mkdir(parents=True,exist_ok=True)
         (root/'tools/copper.py').write_text('import sys\nresult=sys.argv[sys.argv.index("--result-json")+1]\n'+body)

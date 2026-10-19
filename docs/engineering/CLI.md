@@ -32,6 +32,7 @@ reach the child unchanged.
 | `pcba simulate transient <file.copper> --dt S --steps N` | stable | `copper.py transient` |
 | `pcba parts search <query>` | stable | `copper.py catalogue` |
 | `pcba parts add --catalogue FILE --id ID --kind K` | stable | `copper.py part-add` |
+| `pcba parts remove --catalogue FILE --id ID` | stable | `copper.py part-remove` |
 | `pcba library scan` | stable | `copper.py library-scan` (reuses `hwc_kicad.py` indexers) |
 | `pcba dfm check <file-or-build-dir>` | stable | `copper.py dfm` |
 | `pcba simulate ac … --start --stop --points` | NOT_IMPLEMENTED (Prompt 3) | — |
@@ -56,7 +57,7 @@ without doing anything.
 | `hwc_kicad.py search/search-footprint/generate/validate/custom-symbol/name` | not exposed | V1 helpers; still runnable directly |
 | `hwc make/validate/DFM/physics-apply/catalogue/kicad-check/status` | not exposed | legacy V1 `Design` path; `hwc` is kept as a deprecated compatibility CLI |
 | `hwc project …` | `pcba project …` | still forwards to copper.py (now via `cli_run`, fixing paths with spaces) |
-| `copper-core analyze/transient/classify` | internal backend | machine-readable; unchanged |
+| `copper-core analyze/transient/classify/models/catalogue` | internal backend | machine-readable; `models` lists device model specs, `catalogue FILE` validates a catalogue |
 | `fabcheck_demo` | developer tool | unchanged |
 | `apps/prompt.c` | none | not built by any target (needs `Extras/NLP`); left for Prompt 6 reference analysis |
 

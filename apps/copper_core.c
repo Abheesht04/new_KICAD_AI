@@ -4,7 +4,13 @@
 #include <string.h>
 #include <stdlib.h>
 int main(int argc,char **argv) {
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS | classify TEXT\n");return 64;}
+    if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS | classify TEXT | models | catalogue FILE\n");return 64;}
+    if(argc==3 && !strcmp(argv[1],"catalogue")) {
+        char error[512];
+        if(cp_check_catalogue(argv[2],stdout,error,sizeof error)) return 0;
+        fprintf(stderr,"PROJECT ERROR: %s\n",error);return 2;
+    }
     if(!strcmp(argv[1],"classify")) { CtResult r=ct_classify(argv[2]);printf("{\"category\":\"%s\",\"confidence\":%.6g,\"accepted\":%s,\"authority\":\"proposal_only\"}\n",ct_label(r.label),r.confidence,r.accepted?"true":"false"); return r.accepted?0:2; }
     CpProject *p=malloc(sizeof *p);if(!p)return 3;cp_init(p);char error[512];int rc=2;
     if(!cp_load(p,argv[2],error,sizeof error)) {fprintf(stderr,"PROJECT ERROR: %s\n",error);goto done;}

@@ -101,19 +101,27 @@ Supported model kinds:
 | J | Unused | Explicit connector boundary | Explicit connector boundary |
 | U | Unused | Unsupported; block solve | Unsupported; block solve |
 
-R/C/L/V/I components must state `(value ...)` explicitly; an omitted value is rejected,
-never defaulted (an explicit `0` V/A source is accepted). For R/C/L/D/V/I, pins must be ordered `(1 NET_A) (2 NET_B)` and cannot short
-the component's own terminals. Other pin labels may be alphanumeric and must
+Each modelled kind binds a versioned device model (`copper-core models` lists them; see
+[DEVICE_MODEL_CONTRACT.md](../engineering/DEVICE_MODEL_CONTRACT.md)). R/C/L/V/I components
+must state `(value ...)` explicitly; an omitted value is rejected, never defaulted (an
+explicit `0` V/A source is accepted). Model terminals are matched to pins by name through
+the part's `(pinmap ...)`, which defaults to terminal *i* → pin *i+1* (diode: cathode 1,
+anode 2). A component must list exactly the mapped pins, in any order, and a two-terminal
+part cannot short its own terminals. Other pin labels may be alphanumeric and must
 match the symbol and footprint exactly. All pins must be assigned; intentional
 no-connect pins are not yet represented. Ground is the first declared net `GND`.
 MNA uses node 0 for ground, while physical copper uses `net_index + 1`, reserving
 physical net 0 for genuinely unassigned copper.
 
-Part attributes: `kind`, `symbol`, `footprint`, `power_w`, `voltage_v`, `tolerance`
-(fraction), `is_a`, `ideality`, `height_mm`, `manufacturer`, `mpn`, `datasheet`. Generic ratings default to unknown (0). Diode
-parameters default to a generic idealized model, not a manufacturer datasheet.
-Copy the default catalogue before customizing a template, or write your own
-project using any part ID. No provider infers procurement data from KiCad geometry.
+Part attributes: `kind`, `model`, `pinmap`, `symbol`, `footprint`, `power_w`, `voltage_v`,
+`tolerance` (fraction), `height_mm`, `manufacturer`, `mpn`, `datasheet`, `provenance`,
+`catalogue`, and the bound model's other parameters (diode: `is_a`, `ideality`). Ratings and
+height are UNKNOWN when absent or written `unknown`; an explicit 0 is rejected. Diode
+parameters default to a generic idealized model, not a manufacturer datasheet. A component may
+add `(override (power_w ...) (voltage_v ...) (height_mm ...) (tolerance ...) (provenance "..."))`,
+which takes precedence over the part's data for that component only.
+`project new --catalogue FILE` overlays your catalogue on the bundled default (same id
+replaces). No provider infers procurement data from KiCad geometry.
 
 Project fields: `version`, `name`, `nets`, `parts`, `components`, `board`, `rules`,
 `geometry`, `targets`. Unknown or duplicate structured fields are rejected.

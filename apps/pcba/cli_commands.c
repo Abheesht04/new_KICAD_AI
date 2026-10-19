@@ -42,14 +42,16 @@ static int backend(PcbaContext *ctx, const PcbaCommand *cmd, Bargs *b) {
     return pcba_run_backend(ctx, path, b->v);
 }
 
+enum { ANY_NUMBER, NON_NEGATIVE, POSITIVE };
+
 static int check_numbers(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a, const char *const *names,
-                         int nonnegative) {
+                         int sign) {
+    static const char *const words[] = {"", " non-negative", " positive"};
     for (size_t i = 0; names[i]; ++i) {
         const char *v = pcba_opt(cmd, a, names[i]);
         double d;
-        if (v && (!pcba_parse_double(v, &d) || (nonnegative && d < 0)))
-            return pcba_usage_error(ctx, cmd, "%s needs a finite%s number, got '%s'", names[i],
-                                    nonnegative ? " non-negative" : "", v);
+        if (v && (!pcba_parse_double(v, &d) || (sign == NON_NEGATIVE && d < 0) || (sign == POSITIVE && d <= 0)))
+            return pcba_usage_error(ctx, cmd, "%s needs a finite%s number, got '%s'", names[i], words[sign], v);
     }
     return -1;
 }
@@ -82,7 +84,7 @@ static int run_new(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) 
     const char *t = a->positional[0];
     if (strcmp(t, "divider") && strcmp(t, "rc") && strcmp(t, "rl") && strcmp(t, "diode"))
         return pcba_usage_error(ctx, cmd, "unknown template '%s' (choose divider, rc, rl or diode)", t);
-    int rc = check_numbers(ctx, cmd, a, numbers, 0);
+    int rc = check_numbers(ctx, cmd, a, numbers, ANY_NUMBER);
     if (rc >= 0) return rc;
     const char *files[] = {pcba_opt(cmd, a, "--catalogue"), pcba_opt(cmd, a, "--rules")};
     for (size_t i = 0; i < 2; ++i)
@@ -165,20 +167,33 @@ static int run_parts_search(PcbaContext *ctx, const PcbaCommand *cmd, const Pcba
 }
 
 static int run_parts_add(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
-    static const char *const numbers[] = {"--power", "--voltage", "--tolerance", "--height", NULL};
+    static const char *const ratings[] = {"--power", "--voltage", "--height", NULL};
+    static const char *const fractions[] = {"--tolerance", NULL};
     static const char *const map[][2] = {{"--catalogue", "--file"}, {"--id", "--id"}, {"--kind", "--kind"},
                                          {"--symbol", "--symbol"}, {"--footprint", "--footprint"},
                                          {"--power", "--power"}, {"--voltage", "--voltage"},
                                          {"--tolerance", "--tolerance"}, {"--height", "--height"},
                                          {"--manufacturer", "--manufacturer"}, {"--mpn", "--mpn"},
-                                         {"--datasheet", "--datasheet"}};
+                                         {"--datasheet", "--datasheet"}, {"--model", "--model"},
+                                         {"--pinmap", "--pinmap"}, {"--provenance", "--provenance"}};
     const char *kind = pcba_opt(cmd, a, "--kind");
     if (strlen(kind) != 1 || !strchr("RCLDVIJU", kind[0]))
         return pcba_usage_error(ctx, cmd, "--kind must be one of R C L D V I J U (got '%s')", kind);
-    int rc = check_numbers(ctx, cmd, a, numbers, 1);
+    int rc = check_numbers(ctx, cmd, a, ratings, POSITIVE);
+    if (rc < 0) rc = check_numbers(ctx, cmd, a, fractions, NON_NEGATIVE);
     if (rc >= 0) return rc;
     Bargs b = {{0}, 0};
     push(&b, "part-add");
+    pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    return backend(ctx, cmd, &b);
+}
+
+static int run_parts_remove(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const map[][2] = {{"--catalogue", "--file"}, {"--id", "--id"}};
+    int rc = missing_file(ctx, cmd, pcba_opt(cmd, a, "--catalogue"), 0);
+    if (rc >= 0) return rc;
+    Bargs b = {{0}, 0};
+    push(&b, "part-remove");
     pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
     return backend(ctx, cmd, &b);
 }
@@ -253,13 +268,20 @@ static const PcbaOption ADD_OPTIONS[] = {
     {"--kind", "K", 1, "Model kind: R C L D V I J U"},
     {"--symbol", "LIB:NAME", 0, "KiCad symbol, e.g. Device:R"},
     {"--footprint", "LIB:NAME", 0, "KiCad footprint, e.g. Resistor_SMD:R_0603_1608Metric"},
-    {"--power", "W", 0, "Power rating from the datasheet (0 = unknown)"},
-    {"--voltage", "V", 0, "Voltage rating from the datasheet (0 = unknown)"},
+    {"--power", "W", 0, "Power rating from the datasheet; omit when unknown"},
+    {"--voltage", "V", 0, "Voltage rating from the datasheet; omit when unknown"},
     {"--tolerance", "FRACTION", 0, "Value tolerance, e.g. 0.01"},
-    {"--height", "MM", 0, "Assembled height (0 = unknown)"},
+    {"--height", "MM", 0, "Assembled height from the datasheet; omit when unknown"},
     {"--manufacturer", "TEXT", 0, "Manufacturer (procurement metadata only)"},
     {"--mpn", "TEXT", 0, "Manufacturer part number (procurement metadata only)"},
     {"--datasheet", "URL", 0, "Datasheet reference"},
+    {"--model", "ID", 0, "Device model id (copper-core models); default: the kind's model"},
+    {"--pinmap", "MAP", 0, "Terminal to symbol pin map, e.g. cathode=1,anode=2"},
+    {"--provenance", "TEXT", 0, "Where the ratings come from, e.g. a datasheet revision"},
+};
+static const PcbaOption REMOVE_OPTIONS[] = {
+    {"--catalogue", "FILE", 1, "Catalogue file to edit (the bundled default is read-only)"},
+    {"--id", "ID", 1, "Part identifier to remove"},
 };
 static const PcbaOption SCAN_OPTIONS[] = {
     {"--symbols", "DIR", 0, "KiCad symbol library directory"},
@@ -334,11 +356,17 @@ static const PcbaCommand COMMANDS[] = {
      "pcba parts search resistor\npcba parts search 0603 --catalogue custom.parts", OPTS(SEARCH_OPTIONS), NULL,
      run_parts_search},
     {"parts", "add", "", 0, 0, "Add one part definition to a catalogue file",
-     "Adds a part with real KiCad symbol/footprint identifiers and datasheet ratings. Unknown ratings stay 0 "
-     "(unknown) and are reported as UNVERIFIED by checks.",
-     "pcba parts add --catalogue custom.parts --id precision_r --kind R --symbol Device:R "
-     "--footprint Resistor_SMD:R_0603_1608Metric --power 0.1 --voltage 50 --tolerance 0.01",
+     "Adds a part with real KiCad symbol/footprint identifiers, an optional device model and terminal pin map, "
+     "and datasheet ratings with their provenance. Omit a rating you do not know: it stays UNKNOWN and checks "
+     "report UNVERIFIED. The whole catalogue is validated by copper-core before the file is written.",
+     "pcba parts add --catalogue custom.parts --id my_r --kind R --symbol Device:R "
+     "--footprint Resistor_SMD:R_0603_1608Metric --power <W> --voltage <V> --provenance \"<datasheet>\"\n"
+     "pcba parts add --catalogue custom.parts --id my_d --kind D --model shockley.diode --pinmap cathode=1,anode=2 "
+     "--symbol Device:D --footprint Diode_SMD:D_SOD-123",
      OPTS(ADD_OPTIONS), NULL, run_parts_add},
+    {"parts", "remove", "", 0, 0, "Remove one part definition from a catalogue file",
+     "Removes a part by id. Projects keep their own embedded snapshot until re-created.",
+     "pcba parts remove --catalogue custom.parts --id my_r", OPTS(REMOVE_OPTIONS), NULL, run_parts_remove},
     {"parts", "import", "<catalogue-file>", 1, 1, "Import an external catalogue with provenance",
      "Schema-validated catalogue import (accepted/rejected/duplicate reporting) does not exist yet.",
      "pcba parts import jlcpcb_export.csv", NONE, "Prompt 7: user-extensible part registry", run_planned},

@@ -93,8 +93,10 @@ python tools/hwc_kicad.py custom-symbol --help
 ```
 
 `--catalogue custom.parts` and `--rules profiles/conservative.rules` are accepted by
-`new`. Custom template catalogues must contain the template's required IDs (start by
-copying `profiles/default.parts`). A hand-written project can use any defined ID.
+`new`. A custom catalogue is overlaid on `profiles/default.parts`: a part with the same id
+replaces the bundled one, so you only list what you change. A hand-written project can use
+any defined ID. Device models, pin maps and rating provenance are described in
+[DEVICE_MODEL_CONTRACT.md](docs/engineering/DEVICE_MODEL_CONTRACT.md).
 After changing a catalogue, update/re-create the embedded project part definition:
 projects deliberately snapshot their parts rather than silently changing underneath you.
 

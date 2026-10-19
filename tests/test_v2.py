@@ -156,6 +156,112 @@ class V2(Base):
  def test_path_traversal_library_id_rejected(self):
   for s in ['../../evil:foo','Device:../../x','/etc:passwd','Device:x/y']:
    with self.assertRaises(ValueError):copper.safe_lib_id(s)
+def part_named(tree,name):return next(p for p in direct(one(tree,'parts'),'part') if p[1]==name)
+def component_named(tree,ref):return next(c for c in direct(one(tree,'components'),'component') if c[1]==ref)
+class ModelContract(Base):
+ """Prompt 2: device model / part / pin-map / rating / provenance contracts on the V2 project path."""
+ def core_error(self,tree):
+  r=self.run_core(tree);self.assertEqual(r.returncode,2,r.stdout);self.assertIn('PROJECT ERROR',r.stderr);self.assertFalse(r.stdout.strip());return r.stderr
+ def test_models_are_queryable(self):
+  r=subprocess.run([CORE,'models'],capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);d=json.loads(r.stdout)
+  self.assertEqual(d['contract_version'],1);models={m['id']:m for m in d['models']}
+  self.assertEqual(set(models),{'ideal.resistor','ideal.capacitor','ideal.inductor','shockley.diode','ideal.voltage_source','ideal.current_source'})
+  for m in models.values():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':False});self.assertTrue(m['assumptions'])
+  self.assertEqual([t['name'] for t in models['shockley.diode']['terminals']],['cathode','anode'])
+  self.assertEqual(models['ideal.resistor']['params'][0],{'name':'resistance','unit':'ohm','minimum':0,'maximum':1e12,'min_exclusive':True,'default':None,'bound_to_value':True,'meaning':'resistance'})
+ def test_report_binds_every_component(self):
+  rc,r=self.analyze(self.tree());c={x['ref']:x for x in r['components']}
+  self.assertEqual(c['R1']['model'],{'id':'ideal.resistor','version':1,'source':'kind_default'});self.assertEqual(c['R1']['terminals'],{'p':'1','n':'2'})
+  self.assertEqual(c['R1']['params'],{'resistance':10000});self.assertIsNone(c['J1']['model']);self.assertEqual(c['J1']['capabilities']['dc'],False)
+  self.assertFalse(c['R1']['capabilities']['ac'])
+ def test_explicit_model_and_pin_map_are_name_based(self):
+  base=self.analyze(self.tree('diode'))[1]['nodes'][2]['voltage_v']
+  t=self.tree('diode');p=part_named(t,'diode');p.append(parse_sexpr('(model shockley.diode)'));p.append(parse_sexpr('(pinmap (anode 2) (cathode 1 1))'))
+  d=component_named(t,'D1');pins=one(d,'pins');pins[1:]=reversed(pins[1:])  # pin order in the component no longer matters
+  rc,r=self.analyze(t);self.assertEqual(rc,0);self.assertEqual(r['nodes'][2]['voltage_v'],base)
+  b=next(x for x in r['components'] if x['ref']=='D1');self.assertEqual(b['model']['source'],'explicit');self.assertEqual(b['terminals'],{'cathode':'1','anode':'2'})
+ def test_invalid_bindings_are_rejected(self):
+  cases={'(model shockley.diode)':('resistor','is a diode'),'(model no.such)':('resistor','unknown device model'),
+         '(pinmap (p 1))':('resistor','exactly once'),'(pinmap (p 1) (x 2))':('resistor','no terminal'),
+         '(pinmap (p 1) (n 1))':('resistor','mapped to two terminals'),'(pinmap (p 1) (p 2))':('resistor','mapped twice'),
+         '(pinmap (p 1 2) (n 2))':('resistor','pad'),'(pinmap (1 1) (2 2) (3 3))':('header3','needs a device model'),
+         '(model ideal.resistor)':('header3','has no device model'),'(is_a 1e-12)':('resistor','Unknown field')}
+  for extra,(part,message) in cases.items():
+   t=self.tree();part_named(t,part).append(parse_sexpr(extra));self.assertIn(message,self.core_error(t),extra)
+  t=self.tree();part_named(t,'resistor').append(parse_sexpr('(pinmap (p 1) (n 3))'));self.assertIn('missing from (pins',self.core_error(t))
+  t=self.tree();one(component_named(t,'J1'),'pins')[2][0]=A('1');self.assertIn('duplicate pin',self.core_error(t))
+  t=self.tree();one(component_named(t,'R1'),'pins').append(parse_sexpr('(3 OUT)'));self.assertIn('exactly the 2 pins',self.core_error(t))
+ def test_unknown_ratings_stay_unknown_and_zero_is_rejected(self):
+  rc,r=self.analyze(self.tree());c={x['ref']:x for x in r['components']}
+  self.assertEqual(c['R1']['ratings'],{'power_w':{'known':False},'voltage_v':{'known':False},'height_mm':{'known':False}})
+  t=self.tree();part_named(t,'resistor').append(parse_sexpr('(power_w unknown)'));rc,r=self.analyze(t)
+  self.assertIn('rating_unknown',[i['rule'] for i in r['issues'] if i['object']=='R1'])
+  for field in ('power_w','voltage_v','height_mm'):
+   t=self.tree();part_named(t,'resistor').append(copper.sx(field,A('0')));self.assertIn('zero is not a rating',self.core_error(t),field)
+   t=self.tree();part_named(t,'resistor').append(copper.sx(field,A('-1')));self.core_error(t)
+ def test_override_precedence_and_provenance(self):
+  t=rated(self.tree());part_named(t,'resistor').append(parse_sexpr('(provenance "synthetic test value")'))
+  component_named(t,'R1').append(parse_sexpr('(override (power_w 0.25) (provenance "synthetic project override"))'))
+  rc,r=self.analyze(t);c={x['ref']:x for x in r['components']}
+  self.assertEqual(c['R1']['ratings']['power_w'],{'known':True,'value':0.25,'source':'override:R1'});self.assertEqual(c['R1']['override_provenance'],'synthetic project override')
+  self.assertEqual(c['R2']['ratings']['power_w'],{'known':True,'value':0.1,'source':'part:resistor'});self.assertEqual(c['R2']['provenance'],'synthetic test value')
+  t=rated(self.tree());component_named(t,'R1').append(parse_sexpr('(override (power_w 0.25))'));self.assertIn('provenance',self.core_error(t))
+  t=rated(self.tree());component_named(t,'R1').append(parse_sexpr('(override (symbol "Device:C") (provenance "x"))'));self.assertIn('Unknown field',self.core_error(t))
+ def test_semantic_identity_survives_save_and_build(self):
+  t=rated(self.tree());p=part_named(t,'resistor');p.append(parse_sexpr('(model ideal.resistor)'));p.append(parse_sexpr('(pinmap (p 1) (n 2))'))
+  p.append(parse_sexpr('(provenance "synthetic test value")'));component_named(t,'R2').append(parse_sexpr('(override (height_mm 0.6) (provenance "synthetic"))'))
+  before=self.analyze(t)[1]['components'];copper.write_tree(self.dir/'saved.copper',t)
+  self.assertEqual(self.analyze(copper.load(self.dir/'saved.copper'))[1]['components'],before)
+  _,out,rc=self.build(t);self.assertEqual(rc,0)
+  self.assertEqual(json.loads((out/'report.json').read_text())['components'],before)  # resolved.copper keeps identity
+  bom={row['Reference']:row for row in csv.DictReader(io.StringIO((out/'bom.csv').read_text(encoding='utf-8')))}
+  self.assertEqual(bom['R2']['Height_mm'],'0.6');self.assertEqual(bom['R1']['Height_mm'],'0.55')
+  _,out,rc=self.build(self.tree(),name='generic')
+  bom={row['Reference']:row for row in csv.DictReader(io.StringIO((out/'bom.csv').read_text(encoding='utf-8')))}
+  self.assertEqual((bom['R1']['Power_W'],bom['J1']['Height_mm']),('UNKNOWN','UNKNOWN'))
+ def test_swapped_pin_names_are_caught(self):
+  t=self.tree('diode');p=part_named(t,'diode');p.append(parse_sexpr('(pinmap (cathode 2) (anode 1))'))
+  args=type('Args',(),dict(project=str(self.write(t)),out=str(self.dir/'swap'),core=CORE,symbol_dir=str(FIX_SYM),footprint_dir=str(FIX_FP),no_route=False))()
+  with self.assertRaises(copper.InvalidInput) as caught,contextlib.redirect_stdout(io.StringIO()):copper.export_project(args)
+  self.assertIn('swapped',str(caught.exception));self.assertIn("named 'A'",str(caught.exception))
+ def write(self,tree,name='p.copper'):path=self.dir/name;copper.write_tree(path,tree);return path
+ def test_catalogue_overlay_precedence(self):
+  user=self.dir/'user.parts'
+  user.write_text('(catalogue (part resistor (kind R) (symbol "Device:R") (footprint "Resistor_SMD:R_0603_1608Metric") (power_w 0.1) (provenance "synthetic test value"))\n (part extra_r (kind R) (symbol "Device:R") (footprint "Resistor_SMD:R_0603_1608Metric")))\n')
+  args=lambda out:type('Args',(),dict(template='divider',out=str(out),catalogue=str(user),rules=None,vin=5,r=10000,r2=20000,c=1e-6,l=.01,target=None,target_tolerance=.05,force=False,core=CORE))()
+  with contextlib.redirect_stdout(io.StringIO()):copper.new_project(args(self.dir/'a.copper'));copper.new_project(args(self.dir/'b.copper'))
+  self.assertEqual((self.dir/'a.copper').read_bytes(),(self.dir/'b.copper').read_bytes())
+  parts={p[1]:p for p in direct(one(copper.load(self.dir/'a.copper'),'parts'),'part')}
+  self.assertEqual(list(parts)[:2],['resistor','capacitor']);self.assertEqual(list(parts)[-1],'extra_r')  # user replaces in place; new ids follow
+  self.assertEqual(text_at(parts['resistor'],'power_w'),'0.1');self.assertEqual(text_at(parts['resistor'],'catalogue'),'user:user.parts')
+  self.assertEqual(text_at(parts['capacitor'],'catalogue'),'bundled:default.parts')
+ def test_malformed_catalogues_change_nothing(self):
+  bad={'dup':'(catalogue (part r (kind R) (symbol "Device:R") (footprint "F:x")) (part r (kind R) (symbol "Device:R") (footprint "F:x")))',
+       'zero':'(catalogue (part r (kind R) (symbol "Device:R") (footprint "F:x") (power_w 0)))',
+       'model':'(catalogue (part r (kind R) (symbol "Device:R") (footprint "F:x") (model shockley.diode)))',
+       'root':'(parts (part r (kind R)))','syntax':'(catalogue (part r'}
+  for name,text in bad.items():
+   path=self.dir/f'{name}.parts';path.write_text(text);out=self.dir/f'{name}.copper'
+   args=type('Args',(),dict(template='divider',out=str(out),catalogue=str(path),rules=None,vin=5,r=1,r2=1,c=1,l=1,target=None,target_tolerance=.05,force=False,core=CORE))()
+   with self.assertRaises((ValueError,copper.Unverified),msg=name):copper.new_project(args)
+   self.assertFalse(out.exists(),name)
+  default=copper.BUNDLED_CATALOGUE.read_bytes()
+  self.assertEqual(copper.main(['--format','quiet','part-add','--file',str(copper.BUNDLED_CATALOGUE),'--id','x','--kind','R','--symbol','Device:R','--footprint','R:x']),2)
+  self.assertEqual(copper.BUNDLED_CATALOGUE.read_bytes(),default)
+ def test_part_add_and_remove(self):
+  cat=self.dir/'mine.parts';run=lambda *a:copper.main(['--format','quiet',*a])
+  self.assertEqual(run('part-add','--file',str(cat),'--id','g','--kind','R','--symbol','Device:R','--footprint','Resistor_SMD:R_0603_1608Metric','--core',CORE),0)
+  part=direct(copper.load(cat),'part')[0];self.assertIsNone(one(part,'power_w'));self.assertIsNone(one(part,'height_mm'))  # unknown is omitted, never 0
+  self.assertEqual(run('part-add','--file',str(cat),'--id','d','--kind','D','--model','shockley.diode','--pinmap','cathode=1,anode=2','--symbol','Device:D','--footprint','Diode_SMD:D_SOD-123','--provenance','synthetic','--core',CORE),0)
+  saved=cat.read_bytes()
+  for extra in (['--pinmap','cathode=1'],['--model','ideal.resistor'],['--power','0'],['--pinmap','gate=1,anode=2']):
+   self.assertEqual(run('part-add','--file',str(cat),'--id','bad','--kind','D','--symbol','Device:D','--footprint','Diode_SMD:D_SOD-123','--core',CORE,*extra),2,extra)
+   self.assertEqual(cat.read_bytes(),saved,extra)
+  self.assertEqual(run('part-remove','--file',str(cat),'--id','g'),0);self.assertEqual([p[1] for p in direct(copper.load(cat),'part')],['d'])
+  self.assertEqual(run('part-remove','--file',str(cat),'--id','g'),2)
+ def test_transient_uses_model_state(self):
+  r=self.run_core(self.tree('rc'),'transient',(.0001,100));self.assertEqual(r.returncode,0,r.stderr)
+  v=float(list(csv.DictReader(io.StringIO(r.stdout)))[-1]['OUT_V']);self.assertAlmostEqual(v,5*(1-(1/1.01)**100),places=8)
 class V2Native(Base):
  """Needs installed KiCad libraries (KICAD_SYMBOL_DIR/KICAD_FOOTPRINT_DIR); gates also need KiCad 9.x CLI."""
  def libraries(self):

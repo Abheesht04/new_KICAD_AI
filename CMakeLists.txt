@@ -29,6 +29,7 @@ add_library(hwcore STATIC
     src/IR.c
     src/nlp_rules.c
     src/design_validate.c
+    src/device_models.c
     src/kicad_schematic.c
     src/kicad_generic_provider.c
     src/kicad_pcb.c
@@ -92,6 +93,7 @@ if(HWCOMPILER_BUILD_TESTS)
         design_validate
         schematic_export
         mna_from_design
+        device_model
     )
 
     foreach(test_name IN LISTS TESTS)
@@ -187,7 +189,7 @@ if(COPPER_SANITIZE AND NOT MSVC)
 endif()
 find_package(Python3 COMPONENTS Interpreter)
 if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
-  add_test(NAME v2_integration COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_v2.py $<TARGET_FILE:copper-core> V2)
+  add_test(NAME v2_integration COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_v2.py $<TARGET_FILE:copper-core> V2 ModelContract)
   # Installed KiCad libraries / KiCad 9.x CLI. Exit 77 = skipped (UNVERIFIED), never reported as Passed.
   add_test(NAME v2_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_v2.py $<TARGET_FILE:copper-core> V2Native)
   set_tests_properties(v2_integration v2_native PROPERTIES SKIP_RETURN_CODE 77)

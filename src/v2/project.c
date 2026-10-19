@@ -49,8 +49,102 @@ void cp_init(CpProject *p) {
     memset(p,0,sizeof *p); arena_init(&p->arena,65536);
     pcb_board_init(&p->board,(PcbBoardSpec){40,30,1.6,0.035,2});
     p->fab=fab_profile_conservative_2layer();
+    char ignored[128]; model_registry_init(&p->models);
+    model_registry_register_builtin_devices(&p->models,ignored,sizeof ignored); /* a missing model fails cp_load */
 }
-void cp_free(CpProject *p) { pcb_board_free(&p->board); arena_destroy(&p->arena); memset(p,0,sizeof *p); }
+void cp_free(CpProject *p) { model_registry_free(&p->models); pcb_board_free(&p->board); arena_destroy(&p->arena); memset(p,0,sizeof *p); }
+static const char *keep(CpProject *p,const char *s) {
+    size_t n=strlen(s)+1; char *copy=arena_alloc(&p->arena,n); if(copy) memcpy(copy,s,n); return copy?copy:"";
+}
+/* Device family per part kind. J (ideal boundary) and U (unmodelled) never bind a device model. */
+static const char *kind_family(char kind) {
+    switch(kind) { case 'R': return "resistor"; case 'C': return "capacitor"; case 'L': return "inductor";
+    case 'D': return "diode"; case 'V': return "voltage_source"; case 'I': return "current_source"; default: return NULL; }
+}
+static const char *kind_default_model(char kind) {
+    switch(kind) { case 'R': return "ideal.resistor"; case 'C': return "ideal.capacitor"; case 'L': return "ideal.inductor";
+    case 'D': return "shockley.diode"; case 'V': return "ideal.voltage_source"; case 'I': return "ideal.current_source"; default: return NULL; }
+}
+/* A rating or dimension: absent leaves *q unchanged (UNKNOWN unless an earlier layer set it); 'unknown' makes it
+ * UNKNOWN; otherwise it must be finite and in (0, max]. Zero is rejected: it is not a rating. */
+static int quantity(const IRNode *n,const char *key,double max,const char *source,CpQuantity *q,const char *who,char *e,size_t cap) {
+    const IRNode *v=ir_list_find(n,key); double d=0;
+    if(!v) return 1;
+    if(ir_list_length(v)==2 && !strcmp(txt(v,1),"unknown")) { *q=(CpQuantity){0,0,source}; return 1; }
+    if(ir_list_length(v)!=2 || !num(v,1,&d) || d<=0 || d>max)
+        return errorf(e,cap,"%s: %s must be a positive finite value up to %g, or 'unknown'%s",who,key,max,
+                      ir_list_length(v)==2 && num(v,1,&d) && d==0 ? " (zero is not a rating; omit it or write unknown)" : "");
+    *q=(CpQuantity){d,1,source}; return 1;
+}
+/* A catalogue part definition, validated against its bound device model. */
+typedef struct {
+    char kind;
+    const DeviceModelSpec *model;
+    const char *model_source;
+    const char *terminal_pin[DEVICE_MODEL_MAX_TERMINALS];
+    double param_values[DEVICE_MODEL_MAX_PARAMS];
+    int param_present[DEVICE_MODEL_MAX_PARAMS];
+    double tolerance;
+    CpQuantity power_w, voltage_v, height_mm;
+} PartInfo;
+static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_t cap) {
+    static const char *const default_pins[DEVICE_MODEL_MAX_TERMINALS]={"1","2","3","4","5","6","7","8"};
+    const char *id=txt(part,1); char why[256];
+    memset(out,0,sizeof *out);
+    if(strcmp(txt(part,0),"part") || !id_ok(id)) return errorf(e,cap,"Invalid part definition %s",id);
+    const char *kind=field(part,"kind");
+    if(strlen(kind)!=1 || !strchr("RCLDVIJU",*kind)) return errorf(e,cap,"part %s: unknown kind '%s'",id,kind);
+    out->kind=*kind;
+    const IRNode *model=ir_list_find(part,"model");
+    if(model) {
+        if(!kind_family(out->kind)) return errorf(e,cap,"part %s: kind %c has no device model; remove (model ...)",id,out->kind);
+        out->model=model_registry_find_device(&p->models,txt(model,1)); out->model_source="explicit";
+        if(ir_list_length(model)!=2 || !out->model) return errorf(e,cap,"part %s: unknown device model '%s'",id,txt(model,1));
+        if(strcmp(out->model->family,kind_family(out->kind))) return errorf(e,cap,"part %s: model %s is a %s, not kind %c",id,out->model->id,out->model->family,out->kind);
+    } else if(kind_default_model(out->kind)) {
+        out->model=model_registry_find_device(&p->models,kind_default_model(out->kind)); out->model_source="kind_default";
+        if(!out->model) return errorf(e,cap,"built-in device model %s is not registered",kind_default_model(out->kind));
+    } else out->model_source="none";
+    /* Identity and data fields, plus the bound model's non-primary parameters; anything else is rejected. */
+    char allowed[640]="|kind||symbol||footprint||power_w||voltage_v||tolerance||height_mm||manufacturer||mpn||datasheet||model||pinmap||provenance||catalogue|";
+    for(size_t k=0;out->model && k<out->model->param_count;k++) if((int)k!=out->model->primary_param) {
+        size_t used=strlen(allowed); snprintf(allowed+used,sizeof allowed-used,"|%s|",out->model->params[k].name);
+    }
+    if(!fields(part,2,allowed,why,sizeof why)) return errorf(e,cap,"part %s: %s",id,why);
+    if(out->kind!='V' && out->kind!='I' && (!*field(part,"symbol") || !*field(part,"footprint"))) return errorf(e,cap,"part %s: physical part needs symbol and footprint",id);
+    snprintf(why,sizeof why,"part:%s",id); const char *source=keep(p,why);
+    out->power_w=out->voltage_v=out->height_mm=(CpQuantity){0,0,source};
+    if(!quantity(part,"power_w",1e9,source,&out->power_w,id,e,cap) || !quantity(part,"voltage_v",1e9,source,&out->voltage_v,id,e,cap) ||
+       !quantity(part,"height_mm",100,source,&out->height_mm,id,e,cap)) return 0;
+    if(!scalar(part,"tolerance",0,0,.99,&out->tolerance)) return errorf(e,cap,"part %s: invalid tolerance",id);
+    for(size_t k=0;out->model && k<out->model->param_count;k++) {
+        const IRNode *v=ir_list_find(part,out->model->params[k].name);
+        if(!v || (int)k==out->model->primary_param) continue;
+        if(ir_list_length(v)!=2 || !num(v,1,&out->param_values[k])) return errorf(e,cap,"part %s: %s must be a finite number",id,out->model->params[k].name);
+        out->param_present[k]=1;
+    }
+    /* Explicit logical terminal -> KiCad symbol pin map; default: terminal i -> pin "i+1". */
+    const IRNode *map=ir_list_find(part,"pinmap");
+    if(map && !out->model) return errorf(e,cap,"part %s: (pinmap ...) needs a device model",id);
+    if(!out->model) return 1;
+    if(!map) { for(size_t t=0;t<out->model->terminal_count;t++) out->terminal_pin[t]=default_pins[t]; return 1; }
+    if(ir_list_length(map)-1!=out->model->terminal_count)
+        return errorf(e,cap,"part %s: pinmap must map each of the %zu terminals of %s exactly once",id,out->model->terminal_count,out->model->id);
+    for(size_t j=1;j<ir_list_length(map);j++) {
+        const IRNode *entry=ir_child_at(map,j); const char *name=txt(entry,0), *pin=txt(entry,1);
+        int t=device_model_terminal_index(out->model,name);
+        if(ir_list_length(entry)<2 || ir_list_length(entry)>3) return errorf(e,cap,"part %s: pinmap entries are (terminal symbol_pin [pad])",id);
+        if(t<0) return errorf(e,cap,"part %s: model %s has no terminal '%s'",id,out->model->id,name);
+        if(out->terminal_pin[t]) return errorf(e,cap,"part %s: terminal '%s' is mapped twice",id,name);
+        if(!id_ok(pin)) return errorf(e,cap,"part %s: invalid symbol pin for terminal '%s'",id,name);
+        if(ir_list_length(entry)==3 && strcmp(txt(entry,2),pin))
+            return errorf(e,cap,"part %s: terminal %s maps symbol pin %s to pad %s; KiCad pairs symbol pin N with footprint pad N, so they must match",id,name,pin,txt(entry,2));
+        for(size_t u=0;u<out->model->terminal_count;u++)
+            if(out->terminal_pin[u] && !strcmp(out->terminal_pin[u],pin)) return errorf(e,cap,"part %s: symbol pin %s is mapped to two terminals",id,pin);
+        out->terminal_pin[t]=pin;
+    }
+    return 1;
+}
 static int load_rules(CpProject *p,const IRNode *n,char *e,size_t cap) {
     if(n && !fields(n,1,"|trace_width_mm||clearance_mm||edge_mm||via_diameter_mm||drill_mm||annular_mm||hole_gap_mm||max_aspect||mask_expansion_mm||mask_web_mm||courtyard_gap_mm||max_drop_v||max_current_density_a_mm2||power_derating||voltage_derating||max_height_mm|",e,cap)) return 0;
 #define RULE(k,d,lo,hi,f) if(!scalar(n,k,d,lo,hi,&(f))) return errorf(e,cap,"Invalid rule %s",k)
@@ -97,30 +191,32 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     if(!load_rules(p,ir_list_find(root,"rules"),e,cap)) return 0;
     const IRNode *parts=ir_list_find(root,"parts"), *cs=ir_list_find(root,"components");
     for(size_t i=1;i<ir_list_length(parts);i++) {
-        const IRNode *part=ir_child_at(parts,i);
-        if(strcmp(txt(part,0),"part") || !id_ok(txt(part,1)) || !fields(part,2,"|kind||symbol||footprint||power_w||voltage_v||tolerance||is_a||ideality||height_mm||manufacturer||mpn||datasheet|",e,cap)) return errorf(e,cap,"Invalid part definition %s",txt(part,1));
+        const IRNode *part=ir_child_at(parts,i); PartInfo info;
+        if(!read_part(p,part,&info,e,cap)) return 0;
         for(size_t j=1;j<i;j++) if(!strcmp(txt(part,1),txt(ir_child_at(parts,j),1))) return errorf(e,cap,"Duplicate part %s",txt(part,1));
     }
     for(size_t i=1;i<ir_list_length(cs);i++) {
-        const IRNode *n=ir_child_at(cs,i);
+        const IRNode *n=ir_child_at(cs,i); PartInfo info; char why[256];
         if(p->component_count==CP_MAX_COMPONENTS || strcmp(txt(n,0),"component") || !id_ok(txt(n,1)) || comp_index(p,txt(n,1))!=SIZE_MAX) return errorf(e,cap,"Invalid/duplicate component %s",txt(n,1));
-        if(!fields(n,2,"|part||value||pins||at|",e,cap)) return 0;
+        if(!fields(n,2,"|part||value||pins||at||override|",e,cap)) return 0;
         const IRNode *part=ir_list_find_named(parts,"part",field(n,"part"));
         if(!part) return errorf(e,cap,"%s: part '%s' is not in catalogue",txt(n,1),field(n,"part"));
+        if(!read_part(p,part,&info,e,cap)) return 0;
         CpComponent *c=&p->components[p->component_count++];
         c->ref=txt(n,1); c->part=txt(part,1); c->symbol=field(part,"symbol"); c->footprint=field(part,"footprint");
         c->manufacturer=field(part,"manufacturer"); c->mpn=field(part,"mpn"); c->datasheet=field(part,"datasheet");
-        const char *kind=field(part,"kind");
-        if(strlen(kind)!=1 || !strchr("RCLDVIJU",*kind)) return errorf(e,cap,"%s: unknown kind",c->ref);
-        c->kind=*kind;
-        if(c->kind!='V' && c->kind!='I' && (!*c->symbol || !*c->footprint)) return errorf(e,cap,"%s: physical part needs symbol and footprint",c->ref);
-        /* Model-bearing kinds must state their value; an omitted value is never defaulted. */
-        if(strchr("RCLVI",c->kind) && !ir_list_find(n,"value")) return errorf(e,cap,"%s: kind %c requires an explicit (value ...)",c->ref,c->kind);
-        if(!scalar(n,"value",0,-1e12,1e12,&c->value) || (strchr("RCL",c->kind) && c->value<=0)) return errorf(e,cap,"%s: invalid SI value",c->ref);
-#define PVAL(k,d,lo,hi,f) if(!scalar(part,k,d,lo,hi,&c->f)) return errorf(e,cap,"%s: invalid %s",c->ref,k)
-        PVAL("power_w",0,0,1e9,power_w); PVAL("voltage_v",0,0,1e9,voltage_v);
-        PVAL("height_mm",0,0,100,height_mm); PVAL("tolerance",0,0,.99,tolerance); PVAL("is_a",1e-14,1e-30,1,is_a); PVAL("ideality",1,.1,10,ideality);
-#undef PVAL
+        c->provenance=field(part,"provenance"); c->catalogue=field(part,"catalogue"); c->override_provenance="";
+        c->kind=info.kind; c->model=info.model; c->model_source=info.model_source; c->tolerance=info.tolerance;
+        c->power_w=info.power_w; c->voltage_v=info.voltage_v; c->height_mm=info.height_mm;
+        /* A model's primary parameter comes from (value ...); an omitted value is never defaulted. */
+        int primary=c->model ? c->model->primary_param : -1;
+        const IRNode *value=ir_list_find(n,"value");
+        if(primary>=0 && !value) return errorf(e,cap,"%s: kind %c requires an explicit (value ...)",c->ref,c->kind);
+        if(value && (ir_list_length(value)!=2 || !num(value,1,&c->value))) return errorf(e,cap,"%s: invalid SI value",c->ref);
+        if(c->model) {
+            if(primary>=0) { info.param_values[primary]=c->value; info.param_present[primary]=1; }
+            if(!device_model_resolve_params(c->model,info.param_values,info.param_present,c->params,why,sizeof why)) return errorf(e,cap,"%s: invalid SI value: %s",c->ref,why);
+        }
         const IRNode *pins=ir_list_find(n,"pins");
         for(size_t j=1;j<ir_list_length(pins);j++) {
             const IRNode *pin=ir_child_at(pins,j); size_t ni=net_index(p,txt(pin,1));
@@ -128,7 +224,27 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
             for(size_t k=0;k<c->pin_count;k++) if(!strcmp(c->pins[k],txt(pin,0))) return errorf(e,cap,"%s: duplicate pin",c->ref);
             c->pins[c->pin_count]=txt(pin,0); c->nodes[c->pin_count++]=ni;
         }
-        if(c->pin_count==0 || (strchr("RCLDVI",c->kind) && (c->pin_count!=2 || strcmp(c->pins[0],"1") || strcmp(c->pins[1],"2") || c->nodes[0]==c->nodes[1]))) return errorf(e,cap,"%s: model requires ordered distinct pins 1 and 2",c->ref);
+        if(c->pin_count==0) return errorf(e,cap,"%s: no pins",c->ref);
+        /* Bind every model terminal to exactly one connected pin through the part's pin map. */
+        for(size_t t=0;c->model && t<c->model->terminal_count;t++) {
+            size_t k=0; while(k<c->pin_count && strcmp(c->pins[k],info.terminal_pin[t])) k++;
+            if(k==c->pin_count) return errorf(e,cap,"%s: terminal %s of %s is symbol pin %s, which is missing from (pins ...)",c->ref,c->model->terminals[t].name,c->model->id,info.terminal_pin[t]);
+            c->terminal_pin[t]=k;
+        }
+        if(c->model && c->pin_count!=c->model->terminal_count) return errorf(e,cap,"%s: pins must be exactly the %zu pins mapped to %s terminals",c->ref,c->model->terminal_count,c->model->id);
+        if(c->model && c->model->terminal_count==2 && c->nodes[c->terminal_pin[0]]==c->nodes[c->terminal_pin[1]])
+            return errorf(e,cap,"%s: both terminals are on net %s; the part would short itself",c->ref,p->nets[c->nodes[c->terminal_pin[0]]]);
+        /* Project override: data only (ratings, height, tolerance), with mandatory provenance. Highest precedence. */
+        const IRNode *ov=ir_list_find(n,"override");
+        if(ov) {
+            if(!fields(ov,1,"|power_w||voltage_v||height_mm||tolerance||provenance|",why,sizeof why)) return errorf(e,cap,"%s: override: %s",c->ref,why);
+            c->override_provenance=field(ov,"provenance");
+            if(!*c->override_provenance) return errorf(e,cap,"%s: (override ...) needs (provenance \"...\") naming its data source",c->ref);
+            snprintf(why,sizeof why,"override:%s",c->ref); const char *source=keep(p,why);
+            if(!quantity(ov,"power_w",1e9,source,&c->power_w,c->ref,e,cap) || !quantity(ov,"voltage_v",1e9,source,&c->voltage_v,c->ref,e,cap) ||
+               !quantity(ov,"height_mm",100,source,&c->height_mm,c->ref,e,cap)) return 0;
+            if(!scalar(ov,"tolerance",c->tolerance,0,.99,&c->tolerance)) return errorf(e,cap,"%s: override: invalid tolerance",c->ref);
+        }
         const IRNode *at=ir_list_find(n,"at");
         if(at && (ir_list_length(at)!=4 || !num(at,1,&c->x) || !num(at,2,&c->y) || !num(at,3,&c->rotation))) return errorf(e,cap,"%s: invalid placement",c->ref);
         if(fabs(c->x)>500 || fabs(c->y)>500 || fmod(c->rotation,90)!=0) return errorf(e,cap,"%s: placement requires 90-degree rotation",c->ref);
@@ -160,40 +276,47 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
             PcbPad pad={.component_id=(uint32_t)ci,.pin_number=(uint16_t)(pi+1),.net_id=(uint32_t)ni+1,.x_mm=v[0],.y_mm=v[1],.pad_diameter_mm=v[2],.drill_mm=v[3],.layer=(uint8_t)v[4],.plated=v[3]>0,.width_mm=v[5],.height_mm=v[6],.rectangular=(int)v[7],.corner_radius_mm=v[8]};
             rc=pcb_add_pad(&p->board,pad);
         } else if(!strcmp(type,"via")) rc=pcb_add_via(&p->board,(PcbVia){(uint32_t)ni+1,v[0],v[1],v[2],v[3],0,2,true});
-        else rc=pcb_add_placement(&p->board,(PcbPlacement){(uint32_t)ci,v[0],v[1],0,v[2],v[3],v[4]});
+        else {
+            /* Height comes from part data; geometry may restate it (0 = not stated) but never invent it. */
+            const CpComponent *bc=&p->components[ci]; double h=bc->height_mm.known ? bc->height_mm.value : 0;
+            if(v[4]!=0 && (!bc->height_mm.known || fabs(v[4]-h)>1e-9)) return errorf(e,cap,"%s: body height %g disagrees with the part data",bc->ref,v[4]);
+            rc=pcb_add_placement(&p->board,(PcbPlacement){(uint32_t)ci,v[0],v[1],0,v[2],v[3],h});
+        }
         if(rc) return errorf(e,cap,"Invalid %s geometry",type);
     }
     return 1;
 }
-/* Independent constant-current device for the existing Newton/MNA engine. */
-typedef struct { size_t a,b; double i; } Current;
-static size_t no_unknown(const void *d) { (void)d; return 0; }
-static int current_load(void *d,const MnaDevice *dev,MnaAssembly *a) {
-    (void)dev; Current *c=d;
-    return (!c->a || mna_assembly_add_residual(a,c->a-1,c->i)) && (!c->b || mna_assembly_add_residual(a,c->b-1,-c->i));
+typedef double CpState[DEVICE_MODEL_MAX_STATE];
+static void terminal_nodes(const CpComponent *c,size_t *nodes) {
+    for(size_t t=0;t<c->model->terminal_count;t++) nodes[t]=c->nodes[c->terminal_pin[t]];
 }
-static const MnaDeviceOps current_ops={MNA_DEVICE_LINEAR,no_unknown,current_load,free,NULL};
-static int add_current(MnaCircuit *m,size_t a,size_t b,double i) {
-    Current *c=malloc(sizeof *c); if(!c) return 0; *c=(Current){a,b,i};
-    if(!mna_add_device(m,&current_ops,c)) { free(c); return 0; } return 1;
+/* Voltage from model terminal 0 to terminal 1 (two-terminal models). */
+static double terminal_voltage(const CpComponent *c,const MnaResult *r) {
+    return mna_node_voltage(r,c->nodes[c->terminal_pin[0]])-mna_node_voltage(r,c->nodes[c->terminal_pin[1]]);
 }
-static int assemble(const CpProject *p,MnaCircuit *m,double dt,const double *state) {
+/* Stamps every component through its device model. Returns 1, or 0 with the reporting rule and a reason:
+ * unsupported_model (no model, kind U), unsupported_analysis (model lacks the capability), model_stamp. */
+static int assemble(const CpProject *p,MnaCircuit *m,DeviceAnalysis analysis,double dt,CpState *state,
+                    const char **rule,char *why,size_t cap) {
     mna_circuit_init(m,p->net_count-1);
     for(size_t i=0;i<p->component_count;i++) {
-        const CpComponent *c=&p->components[i]; size_t a=c->nodes[0],b=c->nodes[1]; int ok=1;
-        switch(c->kind) {
-        case 'R': ok=mna_add_resistor(m,a,b,c->value); break;
-        case 'V': ok=mna_add_voltage_source(m,a,b,c->value); break;
-        case 'I': ok=add_current(m,a,b,c->value); break;
-        case 'D': ok=mna_add_diode(m,b,a,c->is_a,c->ideality,300); break;
-        case 'C': if(dt>0) ok=mna_add_resistor(m,a,b,dt/c->value) && add_current(m,a,b,-c->value/dt*state[i]); break;
-        case 'L': if(dt>0) ok=mna_add_resistor(m,a,b,c->value/dt) && add_current(m,a,b,state[i]);
-                  else ok=mna_add_voltage_source(m,a,b,0);
-                  break;
-        case 'J': break; /* Explicit ideal connector boundary; no device stamp. */
-        default: return 0; /* Never silently omit an active unmodelled device. */
+        const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
+        if(!c->model) {
+            if(c->kind=='J') continue; /* Explicit ideal connector boundary; no device stamp. */
+            *rule="unsupported_model"; snprintf(why,cap,"%s: part %s (kind %c) has no device model; analysis is blocked.",c->ref,c->part,c->kind);
+            return 0; /* Never silently omit an active unmodelled device. */
         }
-        if(!ok) return 0;
+        if(!device_model_supports(c->model,analysis)) {
+            *rule="unsupported_analysis";
+            snprintf(why,cap,"%s: model %s v%u does not support %s analysis.",c->ref,c->model->id,c->model->version,device_analysis_name(analysis));
+            return 0;
+        }
+        DeviceStampContext ctx={analysis,dt,state?state[i]:NULL};
+        terminal_nodes(c,nodes);
+        if(!(analysis==DEVICE_ANALYSIS_DC ? c->model->stamp_dc : c->model->stamp_transient)(m,nodes,c->params,&ctx)) {
+            *rule="model_stamp"; snprintf(why,cap,"%s: model %s could not be stamped (allocation failure).",c->ref,c->model->id);
+            return 0;
+        }
     }
     return 1;
 }
@@ -225,21 +348,22 @@ static unsigned tolerance_corners(const CpProject *p,Report *report,double *lo,d
     *copy=*p; /* Shared immutable IR/geometry; only copied component values change. */
     double power[CP_MAX_COMPONENTS]={0},voltage[CP_MAX_COMPONENTS]={0};unsigned done=0;
     for(unsigned mask=0;mask<(1u<<count);mask++) {
-        for(size_t j=0;j<count;j++){size_t i=indices[j];copy->components[i].value=p->components[i].value*(1+((mask&(1u<<j))?1:-1)*p->components[i].tolerance);}
-        MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);
-        int ok=assemble(copy,&m,0,NULL);if(ok){mna_solve(&m,&o,&r);ok=r.status==MNA_STATUS_SUCCESS&&mna_validate(&m,&r,&o,&v)&&v.valid;}
+        for(size_t j=0;j<count;j++){size_t i=indices[j];CpComponent *c=&copy->components[i];
+            c->value=p->components[i].value*(1+((mask&(1u<<j))?1:-1)*p->components[i].tolerance);c->params[c->model->primary_param]=c->value;}
+        MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);const char *rule;char why[256];
+        int ok=assemble(copy,&m,DEVICE_ANALYSIS_DC,0,NULL,&rule,why,sizeof why);if(ok){mna_solve(&m,&o,&r);ok=r.status==MNA_STATUS_SUCCESS&&mna_validate(&m,&r,&o,&v)&&v.valid;}
         if(!ok){issue(report,2,"corner_solve","circuit",mask,0,"Tolerance corner did not solve.");mna_result_free(&r);mna_circuit_free(&m);break;}
         done++;
         for(size_t i=0;i<p->net_count;i++){double value=mna_node_voltage(&r,i);lo[i]=fmin(lo[i],value);hi[i]=fmax(hi[i],value);}
         for(size_t i=0;i<p->component_count;i++)if(copy->components[i].kind=='R') {
-            const CpComponent *c=&copy->components[i];double vv=mna_node_voltage(&r,c->nodes[0])-mna_node_voltage(&r,c->nodes[1]);
+            const CpComponent *c=&copy->components[i];double vv=terminal_voltage(c,&r);
             power[i]=fmax(power[i],vv*vv/c->value);voltage[i]=fmax(voltage[i],fabs(vv));
         }
         mna_result_free(&r);mna_circuit_free(&m);
     }
     for(size_t i=0;i<p->component_count;i++){const CpComponent*c=&p->components[i];
-        if(c->power_w>0&&power[i]>c->power_w*p->power_derating)issue(report,2,"corner_power",c->ref,power[i],c->power_w*p->power_derating,"Worst enumerated resistor tolerance corner exceeds power derating.");
-        if(c->voltage_v>0&&voltage[i]>c->voltage_v*p->voltage_derating)issue(report,2,"corner_voltage",c->ref,voltage[i],c->voltage_v*p->voltage_derating,"Worst enumerated resistor corner exceeds voltage derating.");
+        if(c->power_w.known&&power[i]>c->power_w.value*p->power_derating)issue(report,2,"corner_power",c->ref,power[i],c->power_w.value*p->power_derating,"Worst enumerated resistor tolerance corner exceeds power derating.");
+        if(c->voltage_v.known&&voltage[i]>c->voltage_v.value*p->voltage_derating)issue(report,2,"corner_voltage",c->ref,voltage[i],c->voltage_v.value*p->voltage_derating,"Worst enumerated resistor corner exceeds voltage derating.");
     }
     const IRNode *ts=ir_list_find(p->root,"targets");
     for(size_t i=1;i<ir_list_length(ts);i++){const IRNode*t=ir_child_at(ts,i);double a=0,b=0;num(t,2,&a);num(t,3,&b);size_t n=net_index(p,txt(t,1));
@@ -257,7 +381,7 @@ static void physical(const CpProject *p,Report *r) {
     } pcb_dfm_report_free(&dr);
     for(size_t i=0;i<p->component_count;i++) {
         const CpComponent *c=&p->components[i]; if(c->kind=='V'||c->kind=='I') continue;
-        if(c->height_mm==0) issue(r,1,"height_unknown",c->ref,0,0,"Assembly height is not supplied by the part catalogue.");
+        if(!c->height_mm.known) issue(r,1,"height_unknown",c->ref,0,0,"Assembly height is not supplied by the part catalogue.");
         for(size_t k=0;k<c->pin_count;k++) { int found=0;
             for(size_t j=0;j<vec_len(b->pads);j++) if(b->pads[j].component_id==i && b->pads[j].pin_number==k+1) found=1;
             if(!found) issue(r,2,"pad_missing",c->ref,(double)(k+1),0,"Electrical pin has no physical pad.");
@@ -294,26 +418,114 @@ static void physical(const CpProject *p,Report *r) {
         if(v==COPPER_RESULT_TOO_CLOSE || v==COPPER_RESULT_SHORT) issue(r,2,"courtyard_gap","component pair",0,p->courtyard_gap,"Assembly envelopes overlap or violate separation.");
     }
 }
+static void quantity_json(FILE *f,const char *name,const CpQuantity *q) {
+    fprintf(f,"\"%s\":{\"known\":%s",name,q->known?"true":"false");
+    if(q->known) { fprintf(f,",\"value\":%.12g,\"source\":",q->value); js(f,q->source); }
+    fputc('}',f);
+}
+static void capabilities_json(FILE *f,const DeviceModelSpec *m) {
+    fprintf(f,"{\"dc\":%s,\"transient\":%s,\"ac\":%s}",device_model_supports(m,DEVICE_ANALYSIS_DC)?"true":"false",
+            device_model_supports(m,DEVICE_ANALYSIS_TRANSIENT)?"true":"false",device_model_supports(m,DEVICE_ANALYSIS_AC)?"true":"false");
+}
+/* Per-component binding: model identity and capabilities, terminal -> pin map, parameters, ratings with
+ * provenance, and catalogue identity. Lets reports and tools trace every value to its source. */
+static void components_json(const CpProject *p,FILE *f) {
+    fputs(",\"components\":[",f);
+    for(size_t i=0;i<p->component_count;i++) {
+        const CpComponent *c=&p->components[i];
+        if(i) fputc(',',f);
+        fputs("{\"ref\":",f); js(f,c->ref); fputs(",\"part\":",f); js(f,c->part); fprintf(f,",\"kind\":\"%c\",\"model\":",c->kind);
+        if(c->model) { fputs("{\"id\":",f); js(f,c->model->id); fprintf(f,",\"version\":%u,\"source\":",c->model->version); js(f,c->model_source); fputc('}',f); }
+        else fputs("null",f);
+        fputs(",\"capabilities\":",f); capabilities_json(f,c->model);
+        fputs(",\"terminals\":{",f);
+        for(size_t t=0;c->model && t<c->model->terminal_count;t++) { if(t) fputc(',',f); js(f,c->model->terminals[t].name); fputc(':',f); js(f,c->pins[c->terminal_pin[t]]); }
+        fputs("},\"params\":{",f);
+        for(size_t k=0;c->model && k<c->model->param_count;k++) { if(k) fputc(',',f); js(f,c->model->params[k].name); fprintf(f,":%.12g",c->params[k]); }
+        fputs("},\"ratings\":{",f);
+        quantity_json(f,"power_w",&c->power_w); fputc(',',f); quantity_json(f,"voltage_v",&c->voltage_v); fputc(',',f); quantity_json(f,"height_mm",&c->height_mm);
+        fprintf(f,"},\"tolerance\":%.12g,\"identity\":{\"symbol\":",c->tolerance); js(f,c->symbol);
+        fputs(",\"footprint\":",f); js(f,c->footprint); fputs(",\"manufacturer\":",f); js(f,c->manufacturer);
+        fputs(",\"mpn\":",f); js(f,c->mpn); fputs(",\"datasheet\":",f); js(f,c->datasheet);
+        fputs("},\"provenance\":",f); js(f,c->provenance); fputs(",\"catalogue\":",f); js(f,c->catalogue);
+        fputs(",\"override_provenance\":",f); js(f,c->override_provenance); fputc('}',f);
+    }
+    fputc(']',f);
+}
+int cp_check_catalogue(const char *path,FILE *f,char *e,size_t cap) {
+    CpProject *p=malloc(sizeof *p); IRError ie; int ok=0;
+    if(!p) return errorf(e,cap,"out of memory");
+    cp_init(p); p->root=ir_parse_file(&p->arena,path,&ie);
+    if(!p->root) { errorf(e,cap,"Parse at %zu:%zu: %s",ie.line,ie.column,ie.message?ie.message:"I/O failure"); goto done; }
+    if(strcmp(txt(p->root,0),"catalogue")) { errorf(e,cap,"Expected (catalogue (part ...) ...)"); goto done; }
+    for(size_t i=1;i<ir_list_length(p->root);i++) {
+        const IRNode *part=ir_child_at(p->root,i); PartInfo info;
+        if(!read_part(p,part,&info,e,cap)) goto done;
+        for(size_t j=1;j<i;j++) if(!strcmp(txt(part,1),txt(ir_child_at(p->root,j),1))) { errorf(e,cap,"Duplicate part %s",txt(part,1)); goto done; }
+    }
+    fputs("{\"parts\":[",f);
+    for(size_t i=1;i<ir_list_length(p->root);i++) {
+        const IRNode *part=ir_child_at(p->root,i); PartInfo info; read_part(p,part,&info,e,cap);
+        if(i>1) fputc(',',f);
+        fputs("{\"id\":",f); js(f,txt(part,1)); fprintf(f,",\"kind\":\"%c\",\"model\":",info.kind);
+        if(info.model) js(f,info.model->id); else fputs("null",f);
+        fputs(",\"model_source\":",f); js(f,info.model_source); fputs(",\"terminals\":{",f);
+        for(size_t t=0;info.model && t<info.model->terminal_count;t++) { if(t) fputc(',',f); js(f,info.model->terminals[t].name); fputc(':',f); js(f,info.terminal_pin[t]); }
+        fputs("},\"ratings\":{",f);
+        quantity_json(f,"power_w",&info.power_w); fputc(',',f); quantity_json(f,"voltage_v",&info.voltage_v); fputc(',',f); quantity_json(f,"height_mm",&info.height_mm);
+        fputs("}}",f);
+    }
+    fputs("]}\n",f); ok=!ferror(f);
+ done:
+    cp_free(p); free(p); return ok;
+}
+int cp_models_json(FILE *f) {
+    ModelRegistry reg; char err[256];
+    model_registry_init(&reg);
+    if(!model_registry_register_builtin_devices(&reg,err,sizeof err)) { model_registry_free(&reg); fprintf(stderr,"MODEL ERROR: %s\n",err); return 2; }
+    fprintf(f,"{\"contract_version\":%u,\"models\":[",DEVICE_MODEL_CONTRACT_VERSION);
+    for(size_t i=0;i<model_registry_device_count(&reg);i++) {
+        const DeviceModelSpec *m=model_registry_device_at(&reg,i);
+        if(i) fputc(',',f);
+        fputs("{\"id\":",f); js(f,m->id); fprintf(f,",\"version\":%u,\"family\":",m->version); js(f,m->family);
+        fputs(",\"summary\":",f); js(f,m->summary); fputs(",\"assumptions\":",f); js(f,m->assumptions);
+        fputs(",\"terminals\":[",f);
+        for(size_t t=0;t<m->terminal_count;t++) { if(t) fputc(',',f); fputs("{\"name\":",f); js(f,m->terminals[t].name);
+            fputs(",\"role\":",f); js(f,m->terminals[t].role); fputs(",\"pin_names\":",f);
+            if(m->terminals[t].pin_names) js(f,m->terminals[t].pin_names); else fputs("null",f); fputc('}',f); }
+        fputs("],\"params\":[",f);
+        for(size_t k=0;k<m->param_count;k++) { const DeviceParam *q=&m->params[k]; if(k) fputc(',',f);
+            fputs("{\"name\":",f); js(f,q->name); fputs(",\"unit\":",f); js(f,device_unit_symbol(q->unit));
+            fprintf(f,",\"minimum\":%.12g,\"maximum\":%.12g,\"min_exclusive\":%s,\"default\":",q->minimum,q->maximum,q->min_exclusive?"true":"false");
+            if(q->has_default) fprintf(f,"%.12g",q->default_value); else fputs("null",f);
+            fprintf(f,",\"bound_to_value\":%s,\"meaning\":",(int)k==m->primary_param?"true":"false"); js(f,q->meaning); fputc('}',f); }
+        fputs("],\"capabilities\":",f); capabilities_json(f,m); fprintf(f,",\"state_count\":%zu}",m->state_count);
+    }
+    fputs("]}\n",f);
+    model_registry_free(&reg);
+    return ferror(f)?3:0;
+}
 int cp_analyze(const CpProject *p,FILE *f) {
     MnaCircuit m={0}; MnaResult result={0}; MnaOptions opt; MnaValidation valid={0}; mna_options_default(&opt);
-    int supported=assemble(p,&m,0,NULL); if(supported) { mna_solve(&m,&opt,&result); if(result.status==MNA_STATUS_SUCCESS) mna_validate(&m,&result,&opt,&valid); }
+    const char *rule="mna_failure"; char why[256];
+    int supported=assemble(p,&m,DEVICE_ANALYSIS_DC,0,NULL,&rule,why,sizeof why); if(supported) { mna_solve(&m,&opt,&result); if(result.status==MNA_STATUS_SUCCESS) mna_validate(&m,&result,&opt,&valid); }
     int solved=supported && result.status==MNA_STATUS_SUCCESS && valid.valid;
     fprintf(f,"{\"schema\":2,\"name\":"); js(f,p->name); fprintf(f,",\"dc_solved\":%s,\"physical_checked\":%s,\"issues\":[",solved?"true":"false",p->has_geometry?"true":"false");
     Report r={.f=f};
-    if(!solved) issue(&r,2,supported?"mna_failure":"unsupported_model","circuit",supported?result.status:0,0,supported?"DC solve failed: check floating nodes, ideal-source loops and nonlinear convergence.":"An active device lacks a supported model; analysis is blocked.");
+    if(!solved) issue(&r,2,rule,"circuit",supported?result.status:0,0,supported?"DC solve failed: check floating nodes, ideal-source loops and nonlinear convergence.":why);
     size_t degree[CP_MAX_NETS]={0};
     for(size_t i=0;i<p->component_count;i++) for(size_t j=0;j<p->components[i].pin_count;j++) degree[p->components[i].nodes[j]]++;
     for(size_t i=0;i<p->net_count;i++) if(degree[i]<2) issue(&r,2,"open_node",p->nets[i],(double)degree[i],2,"Net has fewer than two terminals.");
     if(solved) {
         for(size_t i=0;i<p->component_count;i++) {
-            const CpComponent *c=&p->components[i]; if(c->kind=='V'||c->kind=='I'||c->kind=='J') continue;
-            double v=mna_node_voltage(&result,c->nodes[0])-mna_node_voltage(&result,c->nodes[1]);
-            if(c->voltage_v==0) issue(&r,1,"rating_unknown",c->ref,0,0,"Voltage rating not supplied by catalogue; not verified.");
-            else if(fabs(v)>c->voltage_v*p->voltage_derating) issue(&r,2,"voltage_derating",c->ref,fabs(v),c->voltage_v*p->voltage_derating,"Operating voltage exceeds derated rating.");
+            const CpComponent *c=&p->components[i]; if(!c->model||c->kind=='V'||c->kind=='I') continue;
+            double v=terminal_voltage(c,&result);
+            if(!c->voltage_v.known) issue(&r,1,"rating_unknown",c->ref,0,0,"Voltage rating not supplied by catalogue; not verified.");
+            else if(fabs(v)>c->voltage_v.value*p->voltage_derating) issue(&r,2,"voltage_derating",c->ref,fabs(v),c->voltage_v.value*p->voltage_derating,"Operating voltage exceeds derated rating.");
             if(c->kind=='R') {
                 double watts=v*v/c->value;
-                if(c->power_w==0) issue(&r,1,"rating_unknown",c->ref,watts,0,"Resistor power rating is unknown.");
-                else if(watts>c->power_w*p->power_derating) issue(&r,2,"power_derating",c->ref,watts,c->power_w*p->power_derating,"V^2/R exceeds derated resistor power.");
+                if(!c->power_w.known) issue(&r,1,"rating_unknown",c->ref,watts,0,"Resistor power rating is unknown.");
+                else if(watts>c->power_w.value*p->power_derating) issue(&r,2,"power_derating",c->ref,watts,c->power_w.value*p->power_derating,"V^2/R exceeds derated resistor power.");
             }
         }
         const IRNode *ts=ir_list_find(p->root,"targets");
@@ -349,7 +561,7 @@ int cp_analyze(const CpProject *p,FILE *f) {
     if(corner_count)for(size_t i=0;i<p->net_count;i++){if(i)fputc(',',f);fputs("{\"name\":",f);js(f,p->nets[i]);fprintf(f,",\"min_v\":%.12g,\"max_v\":%.12g}",corner_lo[i],corner_hi[i]);}
     fputs("],\"calculations\":[",f); int count=0;
     if(solved) for(size_t i=0;i<p->component_count;i++) { const CpComponent *c=&p->components[i]; if(c->kind!='R')continue;
-        double v=mna_node_voltage(&result,c->nodes[0])-mna_node_voltage(&result,c->nodes[1]);
+        double v=terminal_voltage(c,&result);
         if(count++)fputc(',',f);
         fputs("{\"ref\":",f);js(f,c->ref);
         fprintf(f,",\"formula\":\"I=(Va-Vb)/R; P=I*I*R\",\"voltage_v\":%.12g,\"resistance_ohm\":%.12g,\"current_a\":%.12g,\"power_w\":%.12g}",v,c->value,v/c->value,v*v/c->value);
@@ -361,23 +573,29 @@ int cp_analyze(const CpProject *p,FILE *f) {
         if(i)fputc(',',f);
         fprintf(f,"{\"trace\":%zu,\"current_budget_a\":%.12g,\"resistance_ohm_20c\":%.12g,\"drop_budget_v\":%.12g,\"loss_budget_w\":%.12g}",i,budget,resistance,budget*resistance,budget*budget*resistance);
     }
-    fprintf(f,"],\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. No AC, thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
+    fputc(']',f); components_json(p,f);
+    fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. No AC, thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
     mna_result_free(&result);mna_circuit_free(&m);return ferror(f)?3:(r.errors?2:0);
 }
 int cp_transient(const CpProject *p,double dt,size_t steps,FILE *f) {
     if(!isfinite(dt)||dt<=0||dt>1000||steps==0||steps>100000) return 2;
-    double state[CP_MAX_COMPONENTS]={0};
+    CpState state[CP_MAX_COMPONENTS], next;
+    memset(state,0,sizeof state);
     fputs("time_s",f); for(size_t i=0;i<p->net_count;i++) fprintf(f,",%s_V",p->nets[i]); fputc('\n',f);
     /* zero stored energy at t=0; ideal DC sources step on for first solve. */
     for(size_t step=1;step<=steps;step++) {
-        MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);
-        if(!assemble(p,&m,dt,state)) {mna_circuit_free(&m);return 2;}
+        MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);const char *rule;char why[256];
+        if(!assemble(p,&m,DEVICE_ANALYSIS_TRANSIENT,dt,state,&rule,why,sizeof why)) {mna_circuit_free(&m);fprintf(stderr,"TRANSIENT %s: %s\n",rule,why);return 2;}
         mna_solve(&m,&o,&r);
         if(r.status!=MNA_STATUS_SUCCESS || !mna_validate(&m,&r,&o,&v) || !v.valid) {mna_result_free(&r);mna_circuit_free(&m);return 2;}
         fprintf(f,"%.12g",step*dt); for(size_t i=0;i<p->net_count;i++)fprintf(f,",%.12g",mna_node_voltage(&r,i));fputc('\n',f);
-        for(size_t i=0;i<p->component_count;i++) {const CpComponent *c=&p->components[i]; double voltage=mna_node_voltage(&r,c->nodes[0])-mna_node_voltage(&r,c->nodes[1]);
-            if(c->kind=='C')state[i]=voltage;
-            if(c->kind=='L')state[i]+=dt/c->value*voltage;
+        /* Commit model state only after the step solved and validated. */
+        for(size_t i=0;i<p->component_count;i++) {const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
+            if(!c->model || !c->model->state_count) continue;
+            DeviceStampContext ctx={DEVICE_ANALYSIS_TRANSIENT,dt,state[i]};
+            terminal_nodes(c,nodes);
+            if(!c->model->commit_transient(&r,nodes,c->params,&ctx,next)) {mna_result_free(&r);mna_circuit_free(&m);return 2;}
+            memcpy(state[i],next,sizeof next);
         }
         mna_result_free(&r);mna_circuit_free(&m);
     }
