@@ -571,6 +571,32 @@ def dfm_check(args):
     elif args.format=='json':print(json.dumps(args.outcome['data'],indent=2))
     return 0 if scopes['physical']=='PASS' else 2
 
+AC_RULE_OUTCOME={'unsupported_model':Unverified,'unsupported_analysis':Unverified,'no_excitation':InvalidInput,
+                 'invalid_sweep':InvalidInput,'singular':Failed,'operating_point':Failed,'model_stamp':Failed}
+def ac_sweep(args):
+    """Small-signal AC sweep by copper-core on the project's real circuit; rows keep complex phasors."""
+    project=Path(existing(args.project)).resolve()
+    result=subprocess.run([core_path(args.core),'ac',str(project),repr(args.start),repr(args.stop),str(args.points),args.sweep],capture_output=True,text=True,timeout=600)
+    message=result.stderr.strip()
+    if result.returncode==2 and message.startswith('PROJECT ERROR'):raise InvalidInput(message)
+    rule=message[3:].split(':',1)[0] if message.startswith('AC ') else ''
+    if result.returncode not in (0,2) or (result.returncode==2 and rule not in AC_RULE_OUTCOME):raise CoreError(message or f'copper-core ac failed ({result.returncode})')
+    reader=csv.reader(io.StringIO(result.stdout));header=next(reader,[])
+    rows=[{name:(value if name=='status' else (float(value) if value else None)) for name,value in zip(header,row)} for row in reader]
+    args.outcome['data']={'project':str(project),'sweep':args.sweep,'start_hz':args.start,'stop_hz':args.stop,'points':args.points,
+                          'columns':header,'rows':rows,'csv':None}
+    if args.out and result.stdout:
+        Path(args.out).parent.mkdir(parents=True,exist_ok=True);Path(args.out).write_text(result.stdout);args.outcome['data']['csv']=str(Path(args.out).resolve())
+    if args.format=='human' and rows:
+        nets=[c[2:-len(')_mag')] for c in header if c.startswith('V(') and c.endswith(')_mag')]
+        print(f"{'frequency_hz':>14}"+''.join(f'{"|V("+n+")|":>16}{"phase_deg":>11}' for n in nets))
+        for row in rows:
+            if row['status']!='ok':print(f"{row['frequency_hz']:>14.6g}  {row['status']}");continue
+            print(f"{row['frequency_hz']:>14.6g}"+''.join(f"{row[f'V({n})_mag']:>16.6g}{row[f'V({n})_phase_deg']:>11.3f}" for n in nets))
+        if args.out:print(f'CSV with node voltage and branch current phasors: {args.out}')
+    elif args.format=='json':sys.stdout.write(result.stdout)
+    if rule:raise AC_RULE_OUTCOME[rule](message[3:])
+    return 0
 def run_command(args):
     o=args.outcome;fmt=args.format
     if args.command=='new':rc=new_project(args);o['data']={'path':str(Path(args.out).resolve())};return rc
@@ -597,6 +623,7 @@ def run_command(args):
         else:
             o['data']['rows']=[[float(x) for x in r] for r in samples];sys.stdout.write(data)
         return 0
+    if args.command=='ac':return ac_sweep(args)
     if args.command=='build':
         existing(args.project);rc=export_project(args);m=json.loads((Path(args.out)/'manifest.json').read_text())
         o.update(status={STATUS_PASS:'PASS',STATUS_UNVERIFIED:'UNVERIFIED'}.get(m['status'],'FAIL'),data={'out':str(Path(args.out).resolve()),'build_status':m['status'],'unverified_rules':m['unverified_rules'],'native_verification':'NOT_RUN'})
@@ -681,6 +708,7 @@ def main(argv=None):
     p=sub.add_parser('part-add',help='Unknown ratings are omitted, never written as 0');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJU'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float);p.add_argument('--voltage',type=float);p.add_argument('--tolerance',type=float);p.add_argument('--height',type=float);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
     p.add_argument('--model',help='device model id (copper-core models); default: the kind default');p.add_argument('--pinmap',help='terminal=symbol_pin,... e.g. cathode=1,anode=2');p.add_argument('--provenance',default='',help='where the ratings come from');p.add_argument('--core')
     p=sub.add_parser('part-remove');p.add_argument('--file',required=True);p.add_argument('--id',required=True)
+    p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
     p=sub.add_parser('library-scan');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')

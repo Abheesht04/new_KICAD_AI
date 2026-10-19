@@ -14,6 +14,12 @@ static int dummy_stamp(MnaCircuit *m, const size_t *n, const double *p, const De
     return 1;
 }
 
+static int dummy_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    (void)s, (void)n, (void)p, (void)c;
+    return 1;
+}
+
 static int dummy_commit(const MnaResult *r, const size_t *n, const double *p, const DeviceStampContext *c, double *s)
 {
     (void)r, (void)n, (void)p, (void)c;
@@ -31,7 +37,7 @@ static const DeviceParam BAD_UNIT[] = {{"r", DEVICE_UNIT_INVALID, 0.0, 10.0, 0, 
 static DeviceModelSpec valid_spec(void)
 {
     DeviceModelSpec s = {"test.two", 1, "resistor", "test-only spec", "none", TWO, 2, GOOD, 1, 0,
-                         DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT, 0, dummy_stamp, dummy_stamp, NULL};
+                         DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT, 0, dummy_stamp, dummy_stamp, NULL, NULL, 0, 0, 0};
     return s;
 }
 
@@ -60,14 +66,22 @@ static void test_spec_rules(void)
     s = valid_spec(); s.params = BAD_DEFAULT; expect_invalid(s, "default on exclusive minimum");
     s = valid_spec(); s.params = BAD_UNIT; expect_invalid(s, "unknown unit");
     s = valid_spec(); s.primary_param = 1; expect_invalid(s, "primary out of range");
-    s = valid_spec(); s.capabilities |= DEVICE_CAP_AC; expect_invalid(s, "AC has no hook in v1");
-    s = valid_spec(); s.capabilities |= DEVICE_CAP_TEMPERATURE; expect_invalid(s, "temperature has no hook in v1");
+    s = valid_spec(); s.capabilities |= DEVICE_CAP_AC; expect_invalid(s, "AC capability without stamp_ac");
+    s = valid_spec(); s.stamp_ac = dummy_ac; expect_invalid(s, "stamp_ac without AC capability");
+    s = valid_spec(); s.ac_branch_count = 1; expect_invalid(s, "AC branch without AC capability");
+    s = valid_spec(); s.ac_excitation = 1; expect_invalid(s, "AC excitation without AC capability");
+    s = valid_spec(); s.needs_operating_point = 1; expect_invalid(s, "operating point without AC capability");
+    s = valid_spec(); s.capabilities = DEVICE_CAP_AC; s.stamp_ac = dummy_ac; s.stamp_dc = NULL; s.stamp_transient = NULL;
+    expect_invalid(s, "AC without DC");
+    s = valid_spec(); s.capabilities |= DEVICE_CAP_TEMPERATURE; expect_invalid(s, "temperature has no hook");
     s = valid_spec(); s.stamp_dc = NULL; expect_invalid(s, "DC capability without stamp");
     s = valid_spec(); s.capabilities = DEVICE_CAP_DC; expect_invalid(s, "transient stamp without capability");
     s = valid_spec(); s.capabilities = DEVICE_CAP_TRANSIENT; s.stamp_dc = NULL; expect_invalid(s, "transient without DC");
     s = valid_spec(); s.state_count = 1; expect_invalid(s, "state without commit");
     s = valid_spec(); s.commit_transient = dummy_commit; expect_invalid(s, "commit without state");
     s = valid_spec(); s.state_count = 1; s.commit_transient = dummy_commit;
+    assert(device_model_validate_spec(&s, err, sizeof err));
+    s = valid_spec(); s.capabilities |= DEVICE_CAP_AC; s.stamp_ac = dummy_ac; s.ac_branch_count = 1; s.needs_operating_point = 1;
     assert(device_model_validate_spec(&s, err, sizeof err));
 }
 
@@ -90,13 +104,17 @@ static void test_registry(void)
     assert(model_registry_find_device(&reg, "test.two") == &fresh);
     assert(model_registry_find_device(&reg, "no.such.model") == NULL);
 
-    /* Every built-in declares DC and transient, and none claims AC. */
+    /* Every built-in declares DC, transient and (contract v2) AC; only the sources take AC excitation,
+     * only the diode needs an operating point, and V/L each need one branch unknown. */
     for (size_t i = 0; i < 6; ++i) {
         const DeviceModelSpec *m = model_registry_device_at(&reg, i);
         assert(device_model_validate_spec(m, err, sizeof err));
         assert(device_model_supports(m, DEVICE_ANALYSIS_DC));
         assert(device_model_supports(m, DEVICE_ANALYSIS_TRANSIENT));
-        assert(!device_model_supports(m, DEVICE_ANALYSIS_AC));
+        assert(device_model_supports(m, DEVICE_ANALYSIS_AC) && m->stamp_ac && m->version == 2);
+        assert(m->ac_excitation == (!strcmp(m->family, "voltage_source") || !strcmp(m->family, "current_source")));
+        assert(m->needs_operating_point == !strcmp(m->family, "diode"));
+        assert(m->ac_branch_count == (size_t)(!strcmp(m->family, "voltage_source") || !strcmp(m->family, "inductor")));
     }
     assert(!device_model_supports(NULL, DEVICE_ANALYSIS_DC));
     model_registry_free(&reg);

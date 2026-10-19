@@ -35,6 +35,8 @@ typedef struct {
     double value;                    /* the (value ...) atom; equals params[primary] when bound */
     double tolerance;
     CpQuantity power_w, voltage_v, height_mm;
+    Cplx ac;    /* AC excitation phasor of an independent source; 0 unless (ac MAG PHASE) */
+    int has_ac;
     double x, y, rotation;
     size_t nodes[CP_MAX_PINS];
     const char *pins[CP_MAX_PINS];
@@ -59,6 +61,13 @@ void cp_free(CpProject *p);
 int cp_load(CpProject *p, const char *path, char *error, size_t cap);
 int cp_analyze(const CpProject *p, FILE *json);
 int cp_transient(const CpProject *p, double dt, size_t steps, FILE *csv);
+/* Small-signal AC sweep over the project's circuit (docs/engineering/AC_ANALYSIS.md).
+ * Writes CSV (frequency, per-frequency status, node voltage and branch current
+ * phasors with magnitude and phase) and returns 0; returns 2 with
+ * "AC <rule>: <reason>" on stderr when the sweep is invalid, a device lacks an
+ * AC model, no source is excited, the operating point fails, or any frequency
+ * is singular (rows for singular frequencies carry the status and no values). */
+int cp_ac(const CpProject *p, double start_hz, double stop_hz, size_t points, int logarithmic, FILE *csv);
 /* Writes the registered device model specs as JSON (contract version, terminals,
  * parameters, capabilities). Returns 0 on success. */
 int cp_models_json(FILE *json);

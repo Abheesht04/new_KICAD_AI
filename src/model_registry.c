@@ -332,11 +332,24 @@ int device_model_validate_spec(const DeviceModelSpec *spec, char *err, size_t ca
     if (spec->primary_param < -1 || spec->primary_param >= (int)spec->param_count) {
         return fail(err, cap, "%s: primary_param out of range", spec->id);
     }
-    if (spec->capabilities & (DEVICE_CAP_AC | DEVICE_CAP_TEMPERATURE)) {
-        return fail(err, cap, "%s: AC and temperature capabilities have no hook in contract v1", spec->id);
+    if (spec->capabilities & DEVICE_CAP_TEMPERATURE) {
+        return fail(err, cap, "%s: the temperature capability has no hook in contract v2", spec->id);
     }
-    if (spec->capabilities & ~(unsigned)(DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT)) {
+    if (spec->capabilities & ~(unsigned)(DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT | DEVICE_CAP_AC)) {
         return fail(err, cap, "%s: unknown capability bits", spec->id);
+    }
+    if (!(spec->capabilities & DEVICE_CAP_AC) != !spec->stamp_ac) {
+        return fail(err, cap, "%s: AC capability and stamp_ac must be declared together", spec->id);
+    }
+    if ((spec->capabilities & DEVICE_CAP_AC) && !(spec->capabilities & DEVICE_CAP_DC)) {
+        return fail(err, cap, "%s: AC requires DC (the operating point)", spec->id);
+    }
+    if (!(spec->capabilities & DEVICE_CAP_AC) &&
+        (spec->ac_branch_count || spec->ac_excitation || spec->needs_operating_point)) {
+        return fail(err, cap, "%s: AC declarations need the AC capability", spec->id);
+    }
+    if (spec->ac_branch_count > DEVICE_MODEL_MAX_TERMINALS) {
+        return fail(err, cap, "%s: too many AC branch unknowns", spec->id);
     }
     if (!(spec->capabilities & DEVICE_CAP_DC) != !spec->stamp_dc) {
         return fail(err, cap, "%s: DC capability and stamp_dc must be declared together", spec->id);

@@ -115,7 +115,7 @@ supplied example); `fabricate` blocks until these are supplied and all checks pa
 
 This is a working, bounded V2, not a finished replacement for KiCad or a general circuit
 synthesis system. Complex IC model libraries, multi-unit symbols, arbitrary rotated
-pads, zones/planes, complex board outlines, general SPICE/AC analysis, thermal fields,
+pads, zones/planes, complex board outlines, general SPICE analysis (AC covers only the built-in models), thermal fields,
 SI/EMC, assembly stencil analysis and industrial-scale autorouting remain out of scope.
 The desktop currently edits project source, not graphical wires or footprints.
 

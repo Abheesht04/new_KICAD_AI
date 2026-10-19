@@ -160,10 +160,15 @@ and produces a finding. It is never inferred from a package name.
 
 The transient solver starts with zero capacitor voltage and zero inductor current.
 It applies constant sources at the first positive time step. There is no arbitrary
-waveform source or AC solver. Each step solves MNA and checks residual/KCL before
+waveform source. Each step solves MNA and checks residual/KCL before
 emitting CSV. Backward Euler is first-order and introduces numerical damping; the
 user chooses a suitable step. The tests compare both its exact discrete solution
 and an analytical RC/RL response.
+
+Small-signal AC (`pcba simulate ac`, `copper-core ac`) solves the complex system
+A(jw) x = b(jw) at each frequency of a log or linear sweep; independent sources need
+`(ac MAGNITUDE PHASE_DEG)` on the component, and the diode is linearised at the DC
+operating point. See [AC_ANALYSIS.md](../engineering/AC_ANALYSIS.md).
 
 At most eight resistors with nonzero tolerance are exhaustively corner-tested.
 For each corner the actual MNA equations are re-solved, node ranges accumulated,

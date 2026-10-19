@@ -3,7 +3,8 @@
  *
  * Each spec states its terminals, parameters, assumptions and analyses, and
  * stamps its equations through the existing MnaDeviceOps engine. The
- * equations are exactly those previously inlined in src/v2/project.c.
+ * DC/transient equations are exactly those previously inlined in src/v2/project.c;
+ * AC stamps (contract v2) linearise the same equations.
  * Transient integration is fixed-step Backward Euler (see Prompt 5 for the
  * planned DAE contract); the state of C/L instances is one value each.
  */
@@ -117,6 +118,59 @@ static int inductor_commit(const MnaResult *r, const size_t *n, const double *p,
     return 1;
 }
 
+/* ---- AC small-signal stamps (contract v2) ---- */
+static int resistor_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    (void)c;
+    mna_ac_stamp_admittance(s, n[0], n[1], cplx(1.0 / p[0], 0.0));
+    return 1;
+}
+
+static int capacitor_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    mna_ac_stamp_admittance(s, n[0], n[1], cplx(0.0, c->omega * p[0])); /* Y = jwC; open at w = 0 */
+    return 1;
+}
+
+/* Branch current I flows p -> n through the inductor: V(p) - V(n) - jwL I = 0 (a short at w = 0). */
+static int inductor_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    mna_ac_stamp_branch(s, n[0], n[1], c->branch);
+    mna_ac_add_branch_entry(s, c->branch, c->branch, cplx(0.0, -c->omega * p[0]));
+    return 1;
+}
+
+/* Linearised at the DC operating point: g = dI/dV of the same Shockley equation DC uses.
+ * The model stores no charge, so there is no capacitive term (see its assumptions). */
+static int diode_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    if (!c->operating_point) {
+        return 0;
+    }
+    MnaDiode d = {n[1], n[0], p[0], p[1], 300.0};
+    double current, conductance;
+    mna_diode_evaluate(&d, mna_node_voltage(c->operating_point, n[1]) - mna_node_voltage(c->operating_point, n[0]),
+                       &current, &conductance);
+    mna_ac_stamp_admittance(s, n[1], n[0], cplx(conductance, 0.0));
+    return 1;
+}
+
+/* A DC source contributes zero AC excitation unless the component declares (ac MAG PHASE). */
+static int voltage_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    (void)p;
+    mna_ac_stamp_branch(s, n[0], n[1], c->branch);
+    mna_ac_add_branch_rhs(s, c->branch, c->excitation);
+    return 1;
+}
+
+static int current_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c)
+{
+    (void)p;
+    mna_ac_inject_current(s, n[0], n[1], c->excitation);
+    return 1;
+}
+
 /* ---- specs ---- */
 static const DeviceTerminal PASSIVE[] = {{"p", "passive terminal 1 (KiCad pin 1)", NULL},
                                          {"n", "passive terminal 2 (KiCad pin 2)", NULL}};
@@ -139,31 +193,33 @@ static const DeviceParam SHOCKLEY[] = {
 };
 
 #define COUNT(a) (sizeof a / sizeof a[0])
-#define DC_TRAN (DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT)
+#define ALL (DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT | DEVICE_CAP_AC)
 
 static const DeviceModelSpec BUILTIN[] = {
-    {"ideal.resistor", 1, "resistor", "Ideal linear resistor, V = I*R",
+    {"ideal.resistor", 2, "resistor", "Ideal linear resistor, V = I*R",
      "No tolerance drift, temperature coefficient, parasitic inductance/capacitance or noise.",
-     PASSIVE, COUNT(PASSIVE), RESISTANCE, COUNT(RESISTANCE), 0, DC_TRAN, 0, resistor_stamp, resistor_stamp, NULL},
-    {"ideal.capacitor", 1, "capacitor", "Ideal capacitor, i = C dv/dt; open circuit at DC",
+     PASSIVE, COUNT(PASSIVE), RESISTANCE, COUNT(RESISTANCE), 0, ALL, 0, resistor_stamp, resistor_stamp, NULL,
+     resistor_ac, 0, 0, 0},
+    {"ideal.capacitor", 2, "capacitor", "Ideal capacitor, i = C dv/dt; open circuit at DC",
      "No ESR, ESL, leakage, dielectric absorption or voltage coefficient. Transient: Backward Euler, "
      "zero initial voltage.",
-     PASSIVE, COUNT(PASSIVE), CAPACITANCE, COUNT(CAPACITANCE), 0, DC_TRAN, 1, capacitor_dc, capacitor_transient,
-     capacitor_commit},
-    {"ideal.inductor", 1, "inductor", "Ideal inductor, v = L di/dt; short circuit at DC",
+     PASSIVE, COUNT(PASSIVE), CAPACITANCE, COUNT(CAPACITANCE), 0, ALL, 1, capacitor_dc, capacitor_transient,
+     capacitor_commit, capacitor_ac, 0, 0, 0},
+    {"ideal.inductor", 2, "inductor", "Ideal inductor, v = L di/dt; short circuit at DC",
      "No DCR, core saturation, losses or self-resonance. Transient: Backward Euler, zero initial current.",
-     PASSIVE, COUNT(PASSIVE), INDUCTANCE, COUNT(INDUCTANCE), 0, DC_TRAN, 1, inductor_dc, inductor_transient,
-     inductor_commit},
-    {"shockley.diode", 1, "diode", "Shockley diode, I = Is*(exp(V/(n*Vt)) - 1) at 300 K",
-     "No series resistance, junction or diffusion capacitance (memoryless in transient), breakdown or temperature "
-     "dependence; the exponent is clamped at +/-40.",
-     DIODE, COUNT(DIODE), SHOCKLEY, COUNT(SHOCKLEY), -1, DC_TRAN, 0, diode_stamp, diode_stamp, NULL},
-    {"ideal.voltage_source", 1, "voltage_source", "Ideal constant voltage source (simulation boundary, not a BOM part)",
+     PASSIVE, COUNT(PASSIVE), INDUCTANCE, COUNT(INDUCTANCE), 0, ALL, 1, inductor_dc, inductor_transient,
+     inductor_commit, inductor_ac, 1, 0, 0},
+    {"shockley.diode", 2, "diode", "Shockley diode, I = Is*(exp(V/(n*Vt)) - 1) at 300 K",
+     "No series resistance, junction or diffusion capacitance (memoryless in transient; AC is the operating-point "
+     "conductance only), breakdown or temperature dependence; the exponent is clamped at +/-40.",
+     DIODE, COUNT(DIODE), SHOCKLEY, COUNT(SHOCKLEY), -1, ALL, 0, diode_stamp, diode_stamp, NULL, diode_ac, 0, 0, 1},
+    {"ideal.voltage_source", 2, "voltage_source", "Ideal constant voltage source (simulation boundary, not a BOM part)",
      "Zero output impedance and unlimited current; switched on at t=0+ in transient.",
-     SOURCE, COUNT(SOURCE), VOLTAGE, COUNT(VOLTAGE), 0, DC_TRAN, 0, voltage_stamp, voltage_stamp, NULL},
-    {"ideal.current_source", 1, "current_source", "Ideal constant current source (simulation boundary, not a BOM part)",
+     SOURCE, COUNT(SOURCE), VOLTAGE, COUNT(VOLTAGE), 0, ALL, 0, voltage_stamp, voltage_stamp, NULL, voltage_ac, 1, 1, 0},
+    {"ideal.current_source", 2, "current_source", "Ideal constant current source (simulation boundary, not a BOM part)",
      "Infinite output impedance and unlimited compliance voltage; switched on at t=0+ in transient.",
-     CURRENT, COUNT(CURRENT), CURRENT_PARAM, COUNT(CURRENT_PARAM), 0, DC_TRAN, 0, current_stamp, current_stamp, NULL},
+     CURRENT, COUNT(CURRENT), CURRENT_PARAM, COUNT(CURRENT_PARAM), 0, ALL, 0, current_stamp, current_stamp, NULL,
+     current_ac, 0, 1, 0},
 };
 
 int model_registry_register_builtin_devices(ModelRegistry *registry, char *err, size_t cap)

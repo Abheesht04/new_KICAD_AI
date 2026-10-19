@@ -29,13 +29,13 @@ reach the child unchanged.
 | `pcba project verify --out DIR` | stable | `copper.py verify` |
 | `pcba project fabricate --out DIR` | stable | `copper.py fabricate` |
 | `pcba simulate dc <file.copper>` | stable | `copper.py check --scope dc` |
+| `pcba simulate ac <file.copper> --start HZ --stop HZ --points N` | stable | `copper.py ac` → `copper-core ac` |
 | `pcba simulate transient <file.copper> --dt S --steps N` | stable | `copper.py transient` |
 | `pcba parts search <query>` | stable | `copper.py catalogue` |
 | `pcba parts add --catalogue FILE --id ID --kind K` | stable | `copper.py part-add` |
 | `pcba parts remove --catalogue FILE --id ID` | stable | `copper.py part-remove` |
 | `pcba library scan` | stable | `copper.py library-scan` (reuses `hwc_kicad.py` indexers) |
 | `pcba dfm check <file-or-build-dir>` | stable | `copper.py dfm` |
-| `pcba simulate ac … --start --stop --points` | NOT_IMPLEMENTED (Prompt 3) | — |
 | `pcba parts import <catalogue-file>` | NOT_IMPLEMENTED (Prompt 7) | — |
 | `pcba place <file.copper>` | NOT_IMPLEMENTED (Prompt 8) | — |
 | `pcba route <file.copper>` | NOT_IMPLEMENTED (Prompt 8; routing runs inside `project build`) | — |

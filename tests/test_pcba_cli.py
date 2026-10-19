@@ -15,8 +15,8 @@ FIX_SYM=ROOT/'examples/generated/divider/libraries/symbols'
 FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
-        'simulate dc','simulate transient','parts search','parts add','parts remove','library scan','dfm check'}
-PLANNED={'simulate ac','parts import','place','route'}
+        'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library scan','dfm check'}
+PLANNED={'parts import','place','route'}
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
 
 def clean_env(**extra):
@@ -82,6 +82,10 @@ class Usage(Base):
         cases+=[['parts','search'],['parts','add','--catalogue','c.parts','--id','x','--kind','Q'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','-1'],['parts','add','--id','x','--kind','R'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','0'],['parts','remove','--id','x'],
+                ['simulate','ac',rc],['simulate','ac',rc,'--start','1','--stop','10'],
+                ['simulate','ac',rc,'--start','0','--stop','10','--points','3'],['simulate','ac',rc,'--start','10','--stop','1','--points','3'],
+                ['simulate','ac',rc,'--start','1','--stop','10','--points','0'],['simulate','ac',rc,'--start','1','--stop','10','--points','1'],
+                ['simulate','ac',rc,'--start','nan','--stop','10','--points','3','--sweep','lin'],['simulate','ac',rc,'--start','1','--stop','10','--points','3','--sweep','cubic'],
                 ['dfm','check'],['library','scan','extra'],['doctor','extra'],['test','--quick','--full'],['test','--bogus'],
                 ['version','extra'],['help','no-such-command']]
         for argv in cases:
@@ -96,10 +100,10 @@ class Usage(Base):
             self.assertEqual(envelope(self,run(*argv,'--json',cwd=self.dir))['status'],'INVALID_INPUT')
     def test_planned_commands_are_not_implemented(self):
         f=ROOT/'examples/v2/rc.copper'
-        for argv in [['simulate','ac',f,'--start','10','--stop','1e5','--points','5'],['place',f],['route',f],['parts','import',f]]:
+        for argv in [['place',f],['route',f],['parts','import',f]]:
             r=run(*argv);self.assertEqual(r.returncode,4,argv);self.assertIn('NOT_IMPLEMENTED',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json'))['status'],'NOT_IMPLEMENTED')
-        self.assertEqual(run('simulate','ac',f).returncode,64)  # interface is still validated
+        self.assertEqual(run('place').returncode,64)  # interface is still validated
 
 class Output(Base):
     def test_colour_policy(self):
@@ -115,6 +119,7 @@ class Output(Base):
         forced=clean_env(PCBA_FORCE_COLOR='1');f=ROOT/'examples/v2/divider.copper'
         cases=[['version'],['help'],['doctor','--out',self.dir/'o'],['project','check',f],['simulate','dc',f],['dfm','check',f],
                ['parts','search','resistor'],['simulate','transient',ROOT/'examples/v2/rc.copper','--dt','1e-4','--steps','5'],
+               ['simulate','ac',ROOT/'examples/v2/rc_ac.copper','--start','1','--stop','100','--points','3'],
                ['project','check',self.dir/'missing.copper'],['project','frob'],['place',f]]
         for argv in cases:
             r=run(*argv,'--json',env=forced);doc=envelope(self,r)
@@ -134,6 +139,16 @@ class ExitCodes(Base):
         self.assertEqual(run('project','check',self.write(t)).returncode,2)  # contract violation: INVALID_INPUT
         t=tree_with();one(t,'nets').append(A('FLOAT'))
         self.assertEqual(run('simulate','dc',self.write(t)).returncode,1)   # singular system: FAIL
+    def test_ac(self):
+        ac=ROOT/'examples/v2/rc_ac.copper';out=self.dir/'ac.csv'
+        r=run('simulate','ac',ac,'--start','1','--stop','1e4','--points','5','--out',out);self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('|V(OUT)|',r.stdout);self.assertTrue(out.read_text().startswith('frequency_hz,status,V(VIN)_re'))
+        doc=envelope(self,run('simulate','ac',ac,'--start','15.9154943091895','--stop','15.9154943091895','--points','1','--json'))
+        row=doc['result']['data']['rows'][0];self.assertAlmostEqual(row['V(OUT)_mag'],2**-0.5,places=9);self.assertAlmostEqual(row['V(OUT)_phase_deg'],-45,places=6)
+        self.assertEqual(run('simulate','ac',ROOT/'examples/v2/rc.copper','--start','1','--stop','10','--points','2').returncode,2)  # no AC excitation
+        t=tree_with('rc');one(direct(one(t,'parts'),'part')[0],'kind')[1]=A('U');v=next(c for c in direct(one(t,'components'),'component') if c[1]=='V1')
+        v.append(copper.sx('ac',A('1'),A('0')))
+        self.assertEqual(envelope(self,run('simulate','ac',self.write(t),'--start','1','--stop','10','--points','2','--json'))['status'],'UNVERIFIED')
     def test_transient(self):
         rc=ROOT/'examples/v2/rc.copper'
         r=run('simulate','transient',rc,'--dt','1e-4','--steps','100');self.assertEqual(r.returncode,0,r.stderr);self.assertTrue(r.stdout.startswith('time_s,'))

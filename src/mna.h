@@ -165,6 +165,12 @@ int mna_add_diode(MnaCircuit *circuit, size_t node_anode, size_t node_cathode,
                   double saturation_current_a, double ideality_factor,
                   double temperature_k);
 
+/* The diode's Shockley equation at anode-cathode voltage voltage_v: current and
+ * dI/dV (the small-signal conductance used by AC). The exponent is clamped at
+ * +/-40, exactly as in DC. */
+void mna_diode_evaluate(const MnaDiode *diode, double voltage_v,
+                        double *current_a, double *conductance_s);
+
 /* --------------------------------------------------------------------------
  * Solver configuration
  * --------------------------------------------------------------------------

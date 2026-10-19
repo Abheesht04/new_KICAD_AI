@@ -154,6 +154,39 @@ static int run_transient(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArg
     return backend(ctx, cmd, &b);
 }
 
+static int run_ac(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    double start, stop;
+    long points;
+    const char *start_text = pcba_opt(cmd, a, "--start"), *stop_text = pcba_opt(cmd, a, "--stop");
+    const char *points_text = pcba_opt(cmd, a, "--points"), *sweep = pcba_opt(cmd, a, "--sweep");
+    if (!sweep) sweep = "log";
+    if (strcmp(sweep, "log") && strcmp(sweep, "lin"))
+        return pcba_usage_error(ctx, cmd, "--sweep must be log or lin (got '%s')", sweep);
+    if (!pcba_parse_double(start_text, &start) || !pcba_parse_double(stop_text, &stop) || start < 0 || stop < start)
+        return pcba_usage_error(ctx, cmd, "--start and --stop must be finite frequencies with 0 <= start <= stop");
+    if (!strcmp(sweep, "log") && start <= 0)
+        return pcba_usage_error(ctx, cmd, "a log sweep needs --start > 0 (use --sweep lin to include 0 Hz)");
+    if (!pcba_parse_count(points_text, 1, 100000, &points))
+        return pcba_usage_error(ctx, cmd, "--points must be an integer from 1 to 100000 (got '%s')", points_text);
+    if ((points == 1) != (start == stop))
+        return pcba_usage_error(ctx, cmd, "use --points 1 exactly when --start equals --stop");
+    int rc = missing_file(ctx, cmd, a->positional[0], 0);
+    if (rc >= 0) return rc;
+    Bargs b = {{0}, 0};
+    push(&b, "ac");
+    push(&b, a->positional[0]);
+    push(&b, "--start");
+    push(&b, start_text);
+    push(&b, "--stop");
+    push(&b, stop_text);
+    push(&b, "--points");
+    push(&b, points_text);
+    push(&b, "--sweep");
+    push(&b, sweep);
+    if (pcba_opt(cmd, a, "--out")) { push(&b, "--out"); push(&b, pcba_opt(cmd, a, "--out")); }
+    return backend(ctx, cmd, &b);
+}
+
 static int run_parts_search(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     const char *catalogue = pcba_opt(cmd, a, "--catalogue");
     int rc;
@@ -250,9 +283,11 @@ static const PcbaOption VERIFY_OPTIONS[] = {
     {"--kicad-cli", "PATH", 0, "kicad-cli executable; KiCad 9.x only"},
 };
 static const PcbaOption AC_OPTIONS[] = {
-    {"--start", "HZ", 1, "First frequency"},
+    {"--start", "HZ", 1, "First frequency (> 0 for a log sweep)"},
     {"--stop", "HZ", 1, "Last frequency"},
-    {"--points", "N", 1, "Number of frequency points"},
+    {"--points", "N", 1, "Number of frequencies, 1..100000 (1 only when start == stop)"},
+    {"--sweep", "log|lin", 0, "Frequency spacing (default log)"},
+    {"--out", "CSV", 0, "Write every node voltage and branch current phasor (re, im, magnitude, phase)"},
 };
 static const PcbaOption TRANSIENT_OPTIONS[] = {
     {"--dt", "S", 1, "Fixed time step in seconds, 0 < dt <= 1000"},
@@ -343,9 +378,14 @@ static const PcbaCommand COMMANDS[] = {
      "Status is the DC solve itself: PASS when solved, FAIL for singular/non-converged systems, UNVERIFIED when a "
      "device has no supported model. Rating and DFM findings are listed for information.",
      "pcba simulate dc examples/v2/divider.copper", NONE, NULL, run_check},
-    {"simulate", "ac", "<file.copper>", 1, 1, "AC small-signal frequency sweep",
-     "Complex-valued AC analysis does not exist yet.", "pcba simulate ac filter.copper --start 10 --stop 1e5 --points 50",
-     OPTS(AC_OPTIONS), "Prompt 3: AC small-signal MNA", run_planned},
+    {"simulate", "ac", "<file.copper>", 1, 1, "Small-signal AC sweep (complex MNA: magnitude and phase)",
+     "Solves A(jw) x = b(jw) on the project's circuit at each frequency. Independent sources need (ac MAGNITUDE "
+     "PHASE_DEG); a DC value is not AC excitation. Nonlinear devices are linearised at the DC operating point (the "
+     "diode model has no capacitance). A device without an AC model is UNVERIFIED, never omitted; a singular "
+     "frequency is FAIL.",
+     "pcba simulate ac examples/v2/rc_ac.copper --start 1 --stop 1e4 --points 41\n"
+     "pcba simulate ac examples/v2/rc_ac.copper --start 0 --stop 100 --points 11 --sweep lin --out out/rc_ac.csv",
+     OPTS(AC_OPTIONS), NULL, run_ac},
     {"simulate", "transient", "<file.copper>", 1, 1, "Backward Euler transient from zero stored energy",
      "Fixed-step Backward Euler with constant sources switched on at t=0 and zero initial capacitor voltage and "
      "inductor current. Fails without emitting a waveform if any step does not solve.",

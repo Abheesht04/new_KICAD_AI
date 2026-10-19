@@ -1,6 +1,7 @@
-# Device model and part contracts (Prompt 2)
+# Device model and part contracts (Prompts 2 and 3)
 
-Contract version: **1** (`DEVICE_MODEL_CONTRACT_VERSION`). This document covers the device
+Contract version: **2** (`DEVICE_MODEL_CONTRACT_VERSION`). v1 (Prompt 2) defined DC and
+transient; v2 (Prompt 3) adds the AC small-signal hook. This document covers the device
 model registry, the `.copper` part/component schema additions, ownership and lifetime, and
 what is deliberately not implemented yet.
 
@@ -43,9 +44,9 @@ the existing `MnaDeviceOps`/`MnaAssembly` engine.
 - more than 8 parameters, duplicate parameter names, an unknown unit, a non-finite range or
   `minimum > maximum`, or a default outside its range (including on an exclusive minimum);
 - an out-of-range `primary_param`;
-- the AC or temperature capability. Contract v1 defines no hook for either, so no model can
-  claim them until a later stage adds the hook;
-- a capability declared without its stamp function, or the reverse; transient without DC;
+- the temperature capability, which has no hook yet, so no model can claim it;
+- a capability declared without its stamp function, or the reverse; transient or AC without DC;
+- `ac_branch_count`, `ac_excitation` or `needs_operating_point` without the AC capability;
 - transient state without a commit function or the transient capability, or the reverse.
 
 **Ownership and lifetime.** Specs, and their terminal and parameter arrays, are static and
@@ -68,7 +69,21 @@ through `DeviceStampContext.state`. `commit_transient` computes the next state o
 step has solved and validated. A failed step leaves the accepted state untouched, because the
 run stops.
 
-## Built-in models (all v1; DC and transient; no AC)
+## AC hook (contract v2)
+
+`stamp_ac(MnaAcSystem*, nodes, params, DeviceAcContext*)` stamps a model's small-signal
+equations at angular frequency `omega` into the complex system from `src/mna_ac.h`. The
+context carries:
+- the DC operating point, which is passed only when the spec sets `needs_operating_point`;
+- the AC excitation phasor, which is zero unless the component declares `(ac MAG PHASE)`;
+- the first of the instance's `ac_branch_count` branch unknowns.
+
+A spec that sets `ac_excitation` is an independent source and may receive `(ac ...)`.
+Linearisation must come from the model's own equations: the diode uses
+`mna_diode_evaluate`, which is the same Shockley evaluation DC uses. Capacitive
+behaviour must come from the model's own charge or capacitance, never from a DC Jacobian.
+
+## Built-in models (all v2; DC, transient and AC)
 
 | Id | Kind | Terminals (default pins) | Parameters (unit, range, default) |
 |---|---|---|---|
@@ -79,7 +94,17 @@ run stops.
 | `ideal.voltage_source` | V | positive, negative | voltage V, [-1e12, 1e12], from `value` |
 | `ideal.current_source` | I | p, n | current A, [-1e12, 1e12], from `value` |
 
-The equations are exactly those previously inlined in `project.c`. Each spec's
+DC and transient equations are exactly those previously inlined in `project.c`; v2 added
+the AC stamps, so every built-in is now version 2:
+- R: G = 1/R.
+- C: jωC.
+- L: branch row `V(p) − V(n) − jωL·I = 0`.
+- D: dI/dV at the operating point. There is no capacitance, so this is valid only where junction
+  capacitance is negligible.
+- V: branch row whose right-hand side is the excitation.
+- I: injected excitation.
+
+Each spec's
 `assumptions` text lists what it leaves out (ESR, junction capacitance, breakdown and so on).
 `copper-core models` prints all specs as JSON.
 
@@ -146,8 +171,8 @@ accepted, because they carry no evidence either way.
 
 ## Not implemented (deliberately)
 
-- **AC small-signal and temperature hooks.** These are reserved capability bits; registration
-  rejects them (Prompt 3 adds AC).
+- **Temperature hook.** It is a reserved capability bit, and registration rejects it.
+- **Diode junction/diffusion capacitance, BJT, MOSFET.** Prompt 4.
 - **User-defined equations.** There is no dynamic C loading and no declarative equation
   language. Users bind data-only parts to the registered models. A compiled-extension ABI is
   a later, separate decision.

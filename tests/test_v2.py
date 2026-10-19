@@ -164,16 +164,18 @@ class ModelContract(Base):
   r=self.run_core(tree);self.assertEqual(r.returncode,2,r.stdout);self.assertIn('PROJECT ERROR',r.stderr);self.assertFalse(r.stdout.strip());return r.stderr
  def test_models_are_queryable(self):
   r=subprocess.run([CORE,'models'],capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);d=json.loads(r.stdout)
-  self.assertEqual(d['contract_version'],1);models={m['id']:m for m in d['models']}
+  self.assertEqual(d['contract_version'],2);models={m['id']:m for m in d['models']}
   self.assertEqual(set(models),{'ideal.resistor','ideal.capacitor','ideal.inductor','shockley.diode','ideal.voltage_source','ideal.current_source'})
-  for m in models.values():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':False});self.assertTrue(m['assumptions'])
+  for m in models.values():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':True});self.assertEqual(m['version'],2);self.assertTrue(m['assumptions'])
+  self.assertEqual({i for i,m in models.items() if m['ac_excitation']},{'ideal.voltage_source','ideal.current_source'})
+  self.assertEqual({i for i,m in models.items() if m['needs_operating_point']},{'shockley.diode'})
   self.assertEqual([t['name'] for t in models['shockley.diode']['terminals']],['cathode','anode'])
   self.assertEqual(models['ideal.resistor']['params'][0],{'name':'resistance','unit':'ohm','minimum':0,'maximum':1e12,'min_exclusive':True,'default':None,'bound_to_value':True,'meaning':'resistance'})
  def test_report_binds_every_component(self):
   rc,r=self.analyze(self.tree());c={x['ref']:x for x in r['components']}
-  self.assertEqual(c['R1']['model'],{'id':'ideal.resistor','version':1,'source':'kind_default'});self.assertEqual(c['R1']['terminals'],{'p':'1','n':'2'})
+  self.assertEqual(c['R1']['model'],{'id':'ideal.resistor','version':2,'source':'kind_default'});self.assertEqual(c['R1']['terminals'],{'p':'1','n':'2'})
   self.assertEqual(c['R1']['params'],{'resistance':10000});self.assertIsNone(c['J1']['model']);self.assertEqual(c['J1']['capabilities']['dc'],False)
-  self.assertFalse(c['R1']['capabilities']['ac'])
+  self.assertTrue(c['R1']['capabilities']['ac'])
  def test_explicit_model_and_pin_map_are_name_based(self):
   base=self.analyze(self.tree('diode'))[1]['nodes'][2]['voltage_v']
   t=self.tree('diode');p=part_named(t,'diode');p.append(parse_sexpr('(model shockley.diode)'));p.append(parse_sexpr('(pinmap (anode 2) (cathode 1 1))'))
@@ -262,6 +264,72 @@ class ModelContract(Base):
  def test_transient_uses_model_state(self):
   r=self.run_core(self.tree('rc'),'transient',(.0001,100));self.assertEqual(r.returncode,0,r.stderr)
   v=float(list(csv.DictReader(io.StringIO(r.stdout)))[-1]['OUT_V']);self.assertAlmostEqual(v,5*(1-(1/1.01)**100),places=8)
+class AcAnalysis(Base):
+ """Prompt 3: AC sweep on project circuits, checked against closed forms computed here in Python."""
+ def ac(self,tree,start,stop,points,sweep='log'):
+  p=self.dir/'ac.copper';copper.write_tree(p,tree)
+  r=subprocess.run([CORE,'ac',str(p),str(start),str(stop),str(points),sweep],capture_output=True,text=True,timeout=60)
+  return r,list(csv.DictReader(io.StringIO(r.stdout)))
+ def with_ac(self,tree,ref,mag,phase):
+  c=component_named(tree,ref);c.append(parse_sexpr(f'(ac {mag} {phase})'));return tree
+ def backend_status(self,tree,*extra):
+  p=self.dir/'b.copper';copper.write_tree(p,tree);result=self.dir/'r.json'
+  copper.main(['--format','quiet','--result-json',str(result),'ac',str(p),'--core',CORE,*extra]);return json.loads(result.read_text())
+ def test_rc_low_pass_matches_closed_form(self):
+  r,rows=self.ac(copper.load(ROOT/'examples/v2/rc_ac.copper'),1,1e4,41);self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(len(rows),41)
+  R,C=10000,1e-6
+  for row in rows:
+   f=float(row['frequency_hz']);wrc=2*math.pi*f*R*C;self.assertEqual(row['status'],'ok')
+   self.assertAlmostEqual(float(row['V(OUT)_mag']),1/math.sqrt(1+wrc*wrc),places=10)
+   self.assertAlmostEqual(float(row['V(OUT)_phase_deg']),-math.degrees(math.atan(wrc)),places=8)
+   self.assertTrue(math.isclose(math.hypot(float(row['V(OUT)_re']),float(row['V(OUT)_im'])),float(row['V(OUT)_mag']),rel_tol=1e-11))  # CSV has 12 significant digits
+  fc=1/(2*math.pi*R*C);r,rows=self.ac(copper.load(ROOT/'examples/v2/rc_ac.copper'),fc,fc,1)
+  self.assertAlmostEqual(float(rows[0]['V(OUT)_mag']),1/math.sqrt(2),places=10);self.assertAlmostEqual(float(rows[0]['V(OUT)_phase_deg']),-45,places=8)
+ def test_series_rlc_resonance_on_a_project(self):
+  t=self.tree();t.remove(one(t,'targets'));one(t,'nets')[1:]=[A('GND'),A('VIN'),A('A'),A('B')]
+  one(t,'components')[1:]=[parse_sexpr(x) for x in ['(component V1 (part voltage) (value 0) (ac 1 0) (pins (1 VIN) (2 GND)))',
+   '(component R1 (part resistor) (value 10) (pins (1 VIN) (2 A)))','(component L1 (part inductor) (value 0.01) (pins (1 A) (2 B)))',
+   '(component C1 (part capacitor) (value 1e-6) (pins (1 B) (2 GND)))']]
+  f0=1/(2*math.pi*math.sqrt(0.01*1e-6));r,rows=self.ac(t,f0/10,f0*10,201);self.assertEqual(r.returncode,0,r.stderr)
+  for row in rows:
+   w=2*math.pi*float(row['frequency_hz']);x=w*0.01-1/(w*1e-6)
+   self.assertAlmostEqual(float(row['I(L1)_mag']),1/math.hypot(10,x),places=9)
+  r,rows=self.ac(t,f0,f0,1);self.assertAlmostEqual(float(rows[0]['I(L1)_mag']),0.1,places=9);self.assertAlmostEqual(float(rows[0]['I(L1)_phase_deg']),0,places=5)
+  self.assertAlmostEqual(float(rows[0]['I(V1)_mag']),0.1,places=9);self.assertAlmostEqual(abs(float(rows[0]['I(V1)_phase_deg'])),180,places=5)  # branch current + to - through the source
+ def test_diode_is_linearised_at_the_operating_point(self):
+  t=self.with_ac(self.tree('diode'),'V1',0.001,0);rc,report=self.analyze(t);vd=report['nodes'][2]['voltage_v']
+  vt=1.380649e-23*300/1.602176634e-19;gd=1e-14/vt*math.exp(vd/vt)
+  r,rows=self.ac(t,1e3,1e3,1);self.assertEqual(r.returncode,0,r.stderr)
+  self.assertAlmostEqual(float(rows[0]['V(OUT)_re'])/(1e-3/(1+1000*gd)),1.0,places=8)
+ def test_zero_hz_and_singular_frequencies(self):
+  r,rows=self.ac(copper.load(ROOT/'examples/v2/rc_ac.copper'),0,100,3,'lin');self.assertEqual(r.returncode,0,r.stderr)
+  self.assertEqual([float(x['frequency_hz']) for x in rows],[0,50,100]);self.assertAlmostEqual(float(rows[0]['V(OUT)_mag']),1,places=12)
+  t=self.with_ac(self.tree('rc'),'V1',1,0);c=component_named(t,'R1');one(c,'part')[1]=A('capacitor');one(c,'value')[1]=A('1e-6')
+  r,rows=self.ac(t,0,100,2,'lin');self.assertEqual(r.returncode,2);self.assertIn('AC singular',r.stderr)
+  self.assertEqual([x['status'] for x in rows],['singular','ok']);self.assertEqual(rows[0]['V(OUT)_mag'],'');self.assertAlmostEqual(float(rows[1]['V(OUT)_mag']),0.5,places=12)
+ def test_fails_closed(self):
+  r,_=self.ac(self.tree('rc'),1,10,2);self.assertEqual(r.returncode,2);self.assertIn('AC no_excitation',r.stderr)  # a DC value is not AC excitation
+  t=self.with_ac(self.tree(),'V1',1,0);one(part_named(t,'resistor'),'kind')[1]=A('U')
+  r,rows=self.ac(t,1,10,2);self.assertEqual(r.returncode,2);self.assertIn('AC unsupported_model',r.stderr);self.assertEqual(rows,[])
+  for bad in [(0,10,2,'log'),(10,1,2,'log'),(1,10,1,'log'),(1,1,3,'log'),(1,10,0,'log'),(1,10,100001,'log'),(float('nan'),10,2,'lin')]:
+   r,_=self.ac(self.with_ac(self.tree(),'V1',1,0),*bad);self.assertEqual(r.returncode,2,bad);self.assertIn('AC invalid_sweep',r.stderr,bad)
+  for extra in ['(ac 1 0)','(ac -1 0)','(ac 1)','(ac nan 0)']:
+   t=self.tree();component_named(t,'R1' if extra=='(ac 1 0)' else 'V1').append(parse_sexpr(extra));r=self.run_core(t);self.assertEqual(r.returncode,2,extra);self.assertIn('PROJECT ERROR',r.stderr)
+ def test_backend_statuses(self):
+  t=self.with_ac(self.tree(),'V1',1,0)
+  ok=self.backend_status(t,'--start','1','--stop','1e3','--points','4');self.assertEqual(ok['status'],'PASS');self.assertEqual(len(ok['data']['rows']),4)
+  self.assertEqual(self.backend_status(self.tree(),'--start','1','--stop','10','--points','2')['status'],'INVALID_INPUT')
+  u=self.with_ac(self.tree(),'V1',1,0);one(part_named(u,'resistor'),'kind')[1]=A('U')
+  self.assertEqual(self.backend_status(u,'--start','1','--stop','10','--points','2')['status'],'UNVERIFIED')
+  s=self.with_ac(self.tree('rc'),'V1',1,0);c=component_named(s,'R1');one(c,'part')[1]=A('capacitor');one(c,'value')[1]=A('1e-6')
+  bad=self.backend_status(s,'--start','0','--stop','100','--points','2','--sweep','lin');self.assertEqual(bad['status'],'FAIL');self.assertEqual(bad['data']['rows'][0]['status'],'singular')
+ def test_columns_and_determinism(self):
+  t=copper.load(ROOT/'examples/v2/rc_ac.copper');r1,_=self.ac(t,1,1e5,11);r2,_=self.ac(t,1,1e5,11)
+  self.assertEqual(r1.stdout,r2.stdout)
+  header=r1.stdout.splitlines()[0].split(',');self.assertEqual(header[:2],['frequency_hz','status'])
+  self.assertEqual(header[2:],[f'{q}_{p}' for q in ('V(VIN)','V(OUT)','I(V1)') for p in ('re','im','mag','phase_deg')])
+  freqs=[float(l.split(',')[0]) for l in r1.stdout.splitlines()[1:]];self.assertEqual(freqs,sorted(freqs));self.assertEqual((freqs[0],freqs[-1]),(1,1e5))
+  self.assertNotIn('nan',r1.stdout.lower());self.assertNotIn('inf',r1.stdout.lower())
 class V2Native(Base):
  """Needs installed KiCad libraries (KICAD_SYMBOL_DIR/KICAD_FOOTPRINT_DIR); gates also need KiCad 9.x CLI."""
  def libraries(self):

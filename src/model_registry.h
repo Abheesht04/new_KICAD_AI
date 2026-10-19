@@ -7,6 +7,7 @@
 #include "constraint.h"
 #include "diagnostic.h"
 #include "mna.h"
+#include "mna_ac.h"
 
 struct Component;
 
@@ -30,7 +31,8 @@ typedef struct {
 } ModelOps;
 
 /* --------------------------------------------------------------------------
- * Device model contract, version 1 (docs/engineering/DEVICE_MODEL_CONTRACT.md)
+ * Device model contract, version 2 (docs/engineering/DEVICE_MODEL_CONTRACT.md)
+ * v2 adds the AC small-signal hook (stamp_ac) and its declarations.
  *
  * A DeviceModelSpec says what equations a model implements, on which ordered
  * terminals, with which validated parameters, and for which analyses. It is
@@ -44,7 +46,7 @@ typedef struct {
  * --------------------------------------------------------------------------
  */
 
-#define DEVICE_MODEL_CONTRACT_VERSION 1u
+#define DEVICE_MODEL_CONTRACT_VERSION 2u
 #define DEVICE_MODEL_MAX_TERMINALS 8
 #define DEVICE_MODEL_MAX_PARAMS 8
 #define DEVICE_MODEL_MAX_STATE 2
@@ -66,8 +68,8 @@ typedef enum {
   DEVICE_ANALYSIS_AC
 } DeviceAnalysis;
 
-/* Capability bits. AC and TEMPERATURE are reserved: contract v1 defines no
- * hook for them, so registration rejects a spec that claims either. */
+/* Capability bits. TEMPERATURE is reserved: the contract defines no hook for
+ * it, so registration rejects a spec that claims it. */
 enum {
   DEVICE_CAP_DC = 1u << 0,
   DEVICE_CAP_TRANSIENT = 1u << 1,
@@ -111,6 +113,22 @@ typedef int (*DeviceCommitFn)(const MnaResult *result, const size_t *nodes,
                               const DeviceStampContext *context,
                               double *next_state);
 
+/* Small-signal AC stamping at angular frequency omega. Linearise around the DC
+ * operating point (always provided when the spec sets needs_operating_point),
+ * stamp the complex admittances/branch equations, and for an independent
+ * source add its AC excitation phasor (zero unless the component declares one).
+ * Instance branch unknowns are branch .. branch + ac_branch_count - 1. */
+typedef struct {
+  double omega;                     /* rad/s, >= 0 */
+  const MnaResult *operating_point; /* DC solution, or NULL when not needed */
+  Cplx excitation;                  /* AC phasor of an independent source */
+  size_t branch;                    /* first branch unknown of this instance */
+} DeviceAcContext;
+
+typedef int (*DeviceAcStampFn)(MnaAcSystem *system, const size_t *nodes,
+                               const double *params,
+                               const DeviceAcContext *context);
+
 typedef struct {
   const char *id;          /* stable, e.g. "ideal.resistor" */
   unsigned version;        /* model version, >= 1 */
@@ -127,6 +145,11 @@ typedef struct {
   DeviceStampFn stamp_dc;
   DeviceStampFn stamp_transient;
   DeviceCommitFn commit_transient;
+  /* AC small-signal (capability DEVICE_CAP_AC). */
+  DeviceAcStampFn stamp_ac;
+  size_t ac_branch_count;    /* branch unknowns needed in the AC system */
+  int ac_excitation;         /* 1: an independent source that accepts (ac MAG PHASE) */
+  int needs_operating_point; /* 1: nonlinear; AC linearises around the DC solution */
 } DeviceModelSpec;
 
 typedef struct {

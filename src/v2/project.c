@@ -198,7 +198,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     for(size_t i=1;i<ir_list_length(cs);i++) {
         const IRNode *n=ir_child_at(cs,i); PartInfo info; char why[256];
         if(p->component_count==CP_MAX_COMPONENTS || strcmp(txt(n,0),"component") || !id_ok(txt(n,1)) || comp_index(p,txt(n,1))!=SIZE_MAX) return errorf(e,cap,"Invalid/duplicate component %s",txt(n,1));
-        if(!fields(n,2,"|part||value||pins||at||override|",e,cap)) return 0;
+        if(!fields(n,2,"|part||value||pins||at||override||ac|",e,cap)) return 0;
         const IRNode *part=ir_list_find_named(parts,"part",field(n,"part"));
         if(!part) return errorf(e,cap,"%s: part '%s' is not in catalogue",txt(n,1),field(n,"part"));
         if(!read_part(p,part,&info,e,cap)) return 0;
@@ -234,6 +234,14 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
         if(c->model && c->pin_count!=c->model->terminal_count) return errorf(e,cap,"%s: pins must be exactly the %zu pins mapped to %s terminals",c->ref,c->model->terminal_count,c->model->id);
         if(c->model && c->model->terminal_count==2 && c->nodes[c->terminal_pin[0]]==c->nodes[c->terminal_pin[1]])
             return errorf(e,cap,"%s: both terminals are on net %s; the part would short itself",c->ref,p->nets[c->nodes[c->terminal_pin[0]]]);
+        /* AC excitation: only independent sources; DC sources contribute zero AC unless declared. */
+        const IRNode *ac=ir_list_find(n,"ac"); double mag=0,phase=0;
+        if(ac) {
+            if(!c->model || !c->model->ac_excitation) return errorf(e,cap,"%s: (ac ...) is only valid on an independent source",c->ref);
+            if(ir_list_length(ac)!=3 || !num(ac,1,&mag) || !num(ac,2,&phase) || mag<0 || mag>1e12 || fabs(phase)>1e6)
+                return errorf(e,cap,"%s: (ac MAGNITUDE PHASE_DEG) needs a finite magnitude >= 0 and a finite phase",c->ref);
+            c->ac=cplx_polar_deg(mag,phase); c->has_ac=1;
+        }
         /* Project override: data only (ratings, height, tolerance), with mandatory provenance. Highest precedence. */
         const IRNode *ov=ir_list_find(n,"override");
         if(ov) {
@@ -499,7 +507,9 @@ int cp_models_json(FILE *f) {
             fprintf(f,",\"minimum\":%.12g,\"maximum\":%.12g,\"min_exclusive\":%s,\"default\":",q->minimum,q->maximum,q->min_exclusive?"true":"false");
             if(q->has_default) fprintf(f,"%.12g",q->default_value); else fputs("null",f);
             fprintf(f,",\"bound_to_value\":%s,\"meaning\":",(int)k==m->primary_param?"true":"false"); js(f,q->meaning); fputc('}',f); }
-        fputs("],\"capabilities\":",f); capabilities_json(f,m); fprintf(f,",\"state_count\":%zu}",m->state_count);
+        fputs("],\"capabilities\":",f); capabilities_json(f,m);
+        fprintf(f,",\"state_count\":%zu,\"ac_branch_count\":%zu,\"ac_excitation\":%s,\"needs_operating_point\":%s}",m->state_count,
+                m->ac_branch_count,m->ac_excitation?"true":"false",m->needs_operating_point?"true":"false");
     }
     fputs("]}\n",f);
     model_registry_free(&reg);
@@ -574,7 +584,7 @@ int cp_analyze(const CpProject *p,FILE *f) {
         fprintf(f,"{\"trace\":%zu,\"current_budget_a\":%.12g,\"resistance_ohm_20c\":%.12g,\"drop_budget_v\":%.12g,\"loss_budget_w\":%.12g}",i,budget,resistance,budget*resistance,budget*budget*resistance);
     }
     fputc(']',f); components_json(p,f);
-    fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. No AC, thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
+    fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. AC and transient are separate analyses (simulate ac/transient). No thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
     mna_result_free(&result);mna_circuit_free(&m);return ferror(f)?3:(r.errors?2:0);
 }
 int cp_transient(const CpProject *p,double dt,size_t steps,FILE *f) {
@@ -600,4 +610,96 @@ int cp_transient(const CpProject *p,double dt,size_t steps,FILE *f) {
         mna_result_free(&r);mna_circuit_free(&m);
     }
     return ferror(f)?3:0;
+}
+static void ac_columns(FILE *f,const char *label) {
+    fprintf(f,",%s_re,%s_im,%s_mag,%s_phase_deg",label,label,label,label);
+}
+static void ac_values(FILE *f,Cplx v) {
+    fprintf(f,",%.12g,%.12g,%.12g,%.12g",v.re,v.im,cplx_abs(v),cplx_arg_deg(v));
+}
+int cp_ac(const CpProject *p,double start,double stop,size_t points,int logarithmic,FILE *f) {
+    double *freq=points && points<=100000 ? malloc(points*sizeof *freq) : NULL;
+    if(!freq || !mna_ac_frequency_grid(start,stop,points,logarithmic,freq)) {
+        free(freq);
+        fprintf(stderr,"AC invalid_sweep: need finite start <= stop, 1..100000 points (1 point only when start == stop), "
+                       "and start > 0 for a logarithmic sweep\n");
+        return 2;
+    }
+    /* Every device must have an AC model; none is ever omitted. */
+    int needs_op=0, excited=0; size_t branches=0;
+    for(size_t i=0;i<p->component_count;i++) {
+        const CpComponent *c=&p->components[i];
+        if(!c->model) {
+            if(c->kind=='J') continue;
+            fprintf(stderr,"AC unsupported_model: %s: part %s (kind %c) has no device model; AC analysis is blocked.\n",c->ref,c->part,c->kind);
+            free(freq); return 2;
+        }
+        if(!device_model_supports(c->model,DEVICE_ANALYSIS_AC)) {
+            fprintf(stderr,"AC unsupported_analysis: %s: model %s v%u has no AC small-signal model.\n",c->ref,c->model->id,c->model->version);
+            free(freq); return 2;
+        }
+        needs_op|=c->model->needs_operating_point; branches+=c->model->ac_branch_count;
+        if(c->has_ac && (c->ac.re!=0 || c->ac.im!=0)) excited=1;
+    }
+    if(!excited) {
+        fprintf(stderr,"AC no_excitation: no independent source declares a non-zero (ac MAGNITUDE PHASE_DEG); "
+                       "DC values are not AC excitation, so every response would be zero.\n");
+        free(freq); return 2;
+    }
+    /* Nonlinear devices are linearised around the DC operating point. */
+    MnaCircuit m={0}; MnaResult op={0}; MnaOptions o; MnaValidation v={0}; mna_options_default(&o);
+    if(needs_op) {
+        const char *rule; char why[256]="";
+        int ok=assemble(p,&m,DEVICE_ANALYSIS_DC,0,NULL,&rule,why,sizeof why);
+        if(ok) { mna_solve(&m,&o,&op); ok=op.status==MNA_STATUS_SUCCESS && mna_validate(&m,&op,&o,&v) && v.valid; }
+        if(!ok) {
+            fprintf(stderr,"AC operating_point: the DC operating point needed to linearise nonlinear devices did not solve%s%s\n",
+                    *why?": ":"",*why?why:"");
+            mna_result_free(&op); mna_circuit_free(&m); free(freq); return 2;
+        }
+    }
+    MnaAcSystem sys; Cplx *x=NULL; int rc=0; size_t singular=0;
+    if(!mna_ac_init(&sys,p->net_count-1,branches) || !(x=calloc(sys.size?sys.size:1,sizeof *x))) {
+        fprintf(stderr,"AC model_stamp: out of memory\n"); rc=2; goto done;
+    }
+    fputs("frequency_hz,status",f);
+    for(size_t i=1;i<p->net_count;i++) { char label[160]; snprintf(label,sizeof label,"V(%s)",p->nets[i]); ac_columns(f,label); }
+    for(size_t i=0;i<p->component_count;i++) {
+        const CpComponent *c=&p->components[i];
+        if(c->model && c->model->ac_branch_count) { char label[160]; snprintf(label,sizeof label,"I(%s)",c->ref); ac_columns(f,label); }
+    }
+    fputc('\n',f);
+    for(size_t k=0;k<points;k++) {
+        mna_ac_clear(&sys);
+        size_t branch=0;
+        for(size_t i=0;i<p->component_count;i++) {
+            const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
+            if(!c->model) continue;
+            DeviceAcContext ctx={2.0*3.14159265358979323846*freq[k],needs_op?&op:NULL,c->has_ac?c->ac:cplx(0,0),branch};
+            terminal_nodes(c,nodes);
+            if(!c->model->stamp_ac(&sys,nodes,c->params,&ctx)) {
+                fprintf(stderr,"AC model_stamp: %s: model %s could not be linearised\n",c->ref,c->model->id); rc=2; goto done;
+            }
+            branch+=c->model->ac_branch_count;
+        }
+        MnaAcStatus st=mna_ac_solve(&sys,x);
+        fprintf(f,"%.12g,%s",freq[k],mna_ac_status_name(st));
+        if(st==MNA_AC_OK) {
+            for(size_t i=1;i<p->net_count;i++) ac_values(f,x[i-1]);
+            for(size_t i=0,b=0;i<p->component_count;i++) {
+                const CpComponent *c=&p->components[i];
+                if(c->model && c->model->ac_branch_count) { ac_values(f,x[sys.node_count+b]); b+=c->model->ac_branch_count; }
+            }
+        } else {
+            singular++;
+            size_t columns=(p->net_count-1)*4; /* plus branch columns */
+            for(size_t i=0;i<p->component_count;i++) if(p->components[i].model) columns+=4*p->components[i].model->ac_branch_count;
+            for(size_t i=0;i<columns;i++) fputc(',',f);
+        }
+        fputc('\n',f);
+    }
+    if(singular) { fprintf(stderr,"AC singular: no unique solution at %zu of %zu frequencies (status column)\n",singular,points); rc=2; }
+ done:
+    free(x); mna_ac_free(&sys); mna_result_free(&op); mna_circuit_free(&m); free(freq);
+    return rc ? rc : (ferror(f)?3:0);
 }

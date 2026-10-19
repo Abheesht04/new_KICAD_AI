@@ -5,7 +5,7 @@
 #include <stdlib.h>
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS | classify TEXT | models | catalogue FILE\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"catalogue")) {
         char error[512];
         if(cp_check_catalogue(argv[2],stdout,error,sizeof error)) return 0;
@@ -19,6 +19,13 @@ int main(int argc,char **argv) {
         char *end;errno=0;double dt=strtod(argv[3],&end);if(*end||errno||end==argv[3])goto done;
         errno=0;unsigned long steps=strtoul(argv[4],&end,10);if(*end||errno||end==argv[4])goto done;
         rc=cp_transient(p,dt,steps,stdout);
+    } else if(!strcmp(argv[1],"ac") && (argc==6 || argc==7)) {
+        char *end;double start,stop;unsigned long points;int log_sweep=1;
+        errno=0;start=strtod(argv[3],&end);if(*end||errno||end==argv[3])goto done;
+        errno=0;stop=strtod(argv[4],&end);if(*end||errno||end==argv[4])goto done;
+        errno=0;points=strtoul(argv[5],&end,10);if(*end||errno||end==argv[5])goto done;
+        if(argc==7){if(!strcmp(argv[6],"lin"))log_sweep=0;else if(strcmp(argv[6],"log"))goto done;}
+        rc=cp_ac(p,start,stop,points,log_sweep,stdout);
     } else {fprintf(stderr,"Unknown command/argument count\n");rc=64;}
  done: cp_free(p);free(p);return rc;
 }

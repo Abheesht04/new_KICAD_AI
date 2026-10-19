@@ -410,7 +410,7 @@ static double diode_thermal_voltage(const MnaDiode *diode) {
   return (MNA_BOLTZMANN * diode->temperature_k) / MNA_ELEMENTARY_CHARGE;
 }
 
-static void diode_evaluate(const MnaDiode *diode, double voltage_v,
+void mna_diode_evaluate(const MnaDiode *diode, double voltage_v,
                            double *current_a, double *conductance_s) {
   double vt;
   double exponent;
@@ -453,7 +453,7 @@ static int diode_load(void *data, const MnaDevice *device,
   vc = node_voltage_from_x(assembly, diode->node_cathode);
   vd = va - vc;
 
-  diode_evaluate(diode, vd, &current, &conductance);
+  mna_diode_evaluate(diode, vd, &current, &conductance);
 
   add_two_terminal_residual(assembly, diode->node_anode, diode->node_cathode,
                             current);
