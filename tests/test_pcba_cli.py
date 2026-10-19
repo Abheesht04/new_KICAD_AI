@@ -79,6 +79,7 @@ class Usage(Base):
                ['simulate','transient',rc,'--steps','10'],['simulate','transient',rc,'--dt','1e-4']]
         cases+=[['simulate','transient',rc,'--dt',dt,'--steps',steps] for dt,steps in
                 [('abc','10'),('-1','10'),('0','10'),('nan','10'),('inf','10'),('1001','10'),('1e-4','0'),('1e-4','1.5'),('1e-4','100001'),('1e-4','-3')]]
+        cases+=[['simulate','transient',rc,'--dt','1e-4','--steps','10','--method','rk4']]
         cases+=[['parts','search'],['parts','add','--catalogue','c.parts','--id','x','--kind','X'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','-1'],['parts','add','--id','x','--kind','R'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','0'],['parts','remove','--id','x'],
@@ -153,6 +154,8 @@ class ExitCodes(Base):
         rc=ROOT/'examples/v2/rc.copper'
         r=run('simulate','transient',rc,'--dt','1e-4','--steps','100');self.assertEqual(r.returncode,0,r.stderr);self.assertTrue(r.stdout.startswith('time_s,'))
         doc=envelope(self,run('simulate','transient',rc,'--dt','1e-4','--steps','100','--json'))
+        self.assertEqual(doc['result']['data']['method'],'backward_euler')
+        self.assertEqual(envelope(self,run('simulate','transient',rc,'--dt','1e-4','--steps','5','--method','trap','--json'))['result']['data']['method'],'trapezoidal')
         self.assertAlmostEqual(doc['result']['data']['final']['OUT_V'],5*(1-(1/1.01)**100),places=8);self.assertEqual(len(doc['result']['data']['rows']),100)
         out=self.dir/'w.csv';self.assertEqual(run('simulate','transient',rc,'--dt','1e-4','--steps','10','--out',out).returncode,0);self.assertTrue(out.is_file())
         t=tree_with('rc');one(direct(one(t,'parts'),'part')[1],'kind')[1]=A('U')

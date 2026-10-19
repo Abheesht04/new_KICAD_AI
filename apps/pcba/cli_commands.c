@@ -141,6 +141,9 @@ static int run_transient(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArg
         return pcba_usage_error(ctx, cmd, "--dt must be a time step in seconds, 0 < dt <= 1000 (got '%s')", dt_text);
     if (!pcba_parse_count(steps_text, 1, 100000, &steps))
         return pcba_usage_error(ctx, cmd, "--steps must be an integer from 1 to 100000 (got '%s')", steps_text);
+    const char *method = pcba_opt(cmd, a, "--method");
+    if (method && strcmp(method, "be") && strcmp(method, "trap"))
+        return pcba_usage_error(ctx, cmd, "--method must be be or trap (got '%s')", method);
     int rc = missing_file(ctx, cmd, a->positional[0], 0);
     if (rc >= 0) return rc;
     Bargs b = {{0}, 0};
@@ -150,6 +153,8 @@ static int run_transient(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArg
     push(&b, dt_text);
     push(&b, "--steps");
     push(&b, steps_text);
+    push(&b, "--method");
+    push(&b, method ? method : "be");
     if (pcba_opt(cmd, a, "--out")) { push(&b, "--out"); push(&b, pcba_opt(cmd, a, "--out")); }
     return backend(ctx, cmd, &b);
 }
@@ -293,6 +298,7 @@ static const PcbaOption TRANSIENT_OPTIONS[] = {
     {"--dt", "S", 1, "Fixed time step in seconds, 0 < dt <= 1000"},
     {"--steps", "N", 1, "Number of steps, 1..100000"},
     {"--out", "CSV", 0, "Write the waveform here (default: CSV on stdout)"},
+    {"--method", "be|trap", 0, "Backward Euler (default) or trapezoidal; trapezoidal takes its first step with Backward Euler"},
 };
 static const PcbaOption SEARCH_OPTIONS[] = {
     {"--catalogue", "FILE", 0, "Catalogue to search (default profiles/default.parts)"},
@@ -386,10 +392,13 @@ static const PcbaCommand COMMANDS[] = {
      "pcba simulate ac examples/v2/rc_ac.copper --start 1 --stop 1e4 --points 41\n"
      "pcba simulate ac examples/v2/rc_ac.copper --start 0 --stop 100 --points 11 --sweep lin --out out/rc_ac.csv",
      OPTS(AC_OPTIONS), NULL, run_ac},
-    {"simulate", "transient", "<file.copper>", 1, 1, "Backward Euler transient from zero stored energy",
-     "Fixed-step Backward Euler with constant sources switched on at t=0 and zero initial capacitor voltage and "
-     "inductor current. Fails without emitting a waveform if any step does not solve.",
-     "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv", OPTS(TRANSIENT_OPTIONS),
+    {"simulate", "transient", "<file.copper>", 1, 1, "Fixed-step transient (Backward Euler or trapezoidal)",
+     "Zero initial stored energy with constant sources switched on at t=0+. Every step is transactional: device "
+     "state is committed only after the step solves and validates. A failed step reports its time, step, solver "
+     "status, iterations, residual and device, and no successful waveform is claimed. Trapezoidal is second order "
+     "and energy-preserving for LC; Backward Euler is first order and damps. No adaptive step.",
+     "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv\n"
+     "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --method trap", OPTS(TRANSIENT_OPTIONS),
      NULL, run_transient},
     {"parts", "search", "<query>", 1, 1, "Search a part catalogue",
      "Case-insensitive substring search over catalogue entries (IDs, kinds, symbols, footprints, ratings).",

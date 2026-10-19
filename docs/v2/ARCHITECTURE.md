@@ -160,12 +160,13 @@ and produces a finding. It is never inferred from a package name.
 
 ## Calculations and limits
 
-The transient solver starts with zero capacitor voltage and zero inductor current.
-It applies constant sources at the first positive time step. There is no arbitrary
-waveform source. Each step solves MNA and checks residual/KCL before
-emitting CSV. Backward Euler is first-order and introduces numerical damping; the
-user chooses a suitable step. The tests compare both its exact discrete solution
-and an analytical RC/RL response.
+The transient solver (`src/transient.c`, [TRANSIENT.md](../engineering/TRANSIENT.md))
+starts with zero capacitor voltage and zero inductor current and applies constant
+sources at t = 0+. There is no arbitrary waveform source. Each step solves MNA, checks
+residual/KCL and commits device state only if everything succeeded; a failed step
+reports its time, step, solver status and device. Backward Euler (default) is first
+order and damps; trapezoidal (`--method trap`) is second order and takes its first step
+with Backward Euler. The step is fixed and chosen by the user.
 
 Small-signal AC (`pcba simulate ac`, `copper-core ac`) solves the complex system
 A(jw) x = b(jw) at each frequency of a log or linear sweep; independent sources need

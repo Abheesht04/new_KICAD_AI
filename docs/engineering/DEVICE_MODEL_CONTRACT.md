@@ -1,7 +1,8 @@
 # Device model and part contracts (Prompts 2 and 3)
 
-Contract version: **2** (`DEVICE_MODEL_CONTRACT_VERSION`). v1 (Prompt 2) defined DC and
-transient; v2 (Prompt 3) adds the AC small-signal hook. This document covers the device
+Contract version: **3** (`DEVICE_MODEL_CONTRACT_VERSION`). v1 (Prompt 2) defined DC and
+transient; v2 (Prompt 3) adds the AC small-signal hook; v3 (Prompt 5) adds declared
+integration methods and state meaning (see [TRANSIENT.md](TRANSIENT.md)). This document covers the device
 model registry, the `.copper` part/component schema additions, ownership and lifetime, and
 what is deliberately not implemented yet.
 
@@ -88,8 +89,8 @@ behaviour must come from the model's own charge or capacitance, never from a DC 
 | Id | Kind | Terminals (default pins) | Parameters (unit, range, default) |
 |---|---|---|---|
 | `ideal.resistor` | R | p (1), n (2) | resistance Ω, (0, 1e12], from `value` |
-| `ideal.capacitor` | C | p (1), n (2) | capacitance F, (0, 1e12], from `value`; BE state = voltage |
-| `ideal.inductor` | L | p (1), n (2) | inductance H, (0, 1e12], from `value`; BE state = current |
+| `ideal.capacitor` (v3) | C | p (1), n (2) | capacitance F, (0, 1e12], from `value`; state [v, i]; Backward Euler or trapezoidal |
+| `ideal.inductor` (v3) | L | p (1), n (2) | inductance H, (0, 1e12], from `value`; state [i, v]; Backward Euler or trapezoidal |
 | `shockley.diode` | D | cathode (1), anode (2) | is_a A [1e-30, 1] default 1e-14; ideality [0.1, 10] default 1 |
 | `ideal.voltage_source` | V | positive, negative | voltage V, [-1e12, 1e12], from `value` |
 | `ideal.current_source` | I | p, n | current A, [-1e12, 1e12], from `value` |

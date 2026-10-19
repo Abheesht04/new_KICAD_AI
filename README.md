@@ -51,7 +51,8 @@ this is a source distribution, not a relocatable installer.
 - Reference transistor models: first-order Ebers-Moll NPN/PNP and Level-1 NMOS/PMOS (no charge
   storage; see [NONLINEAR_MODELS.md](docs/engineering/NONLINEAR_MODELS.md)), with explicit models
   and pin maps; never a claim of manufacturer-model fidelity.
-- R/C/L/diode/source transients using backward Euler, with zero initial stored energy.
+- Fixed-step transients (Backward Euler or trapezoidal) with transactional state commits and
+  explicit failure reports, from zero initial stored energy; see [TRANSIENT.md](docs/engineering/TRANSIENT.md).
 - Explicit current/power calculations, KCL/residual validation, rating derating and voltage targets.
 - Exhaustive corners for up to eight uncertain resistors; nonlinear corner results are sampled
   extremes, not proof of every interior operating point.

@@ -84,18 +84,31 @@ static int capacitor_dc(MnaCircuit *m, const size_t *n, const double *p, const D
     return 1; /* open circuit */
 }
 
-/* Backward Euler: i = C/dt * (v - v_prev) -> conductance C/dt plus a history current. */
+/* Companion model of one step, i = G v + Ih (current p -> n), for the method in ctx.
+ * Capacitor, state [v, i]: Backward Euler G = C/dt,  Ih = -G v_prev
+ *                          trapezoidal    G = 2C/dt, Ih = -(G v_prev + i_prev)
+ * Both methods track i, so a Backward Euler first step can hand over to trapezoidal. */
+static void capacitor_companion(double c, const DeviceStampContext *ctx, double *g, double *ih)
+{
+    int trap = ctx->method == DEVICE_INTEGRATION_TRAPEZOIDAL;
+    *g = (trap ? 2.0 : 1.0) * c / ctx->dt_s;
+    *ih = -(*g * ctx->state[0]) - (trap ? ctx->state[1] : 0.0);
+}
+
 static int capacitor_transient(MnaCircuit *m, const size_t *n, const double *p, const DeviceStampContext *ctx)
 {
-    return mna_add_resistor(m, n[0], n[1], ctx->dt_s / p[0]) &&
-           add_current(m, n[0], n[1], -p[0] / ctx->dt_s * ctx->state[0]);
+    double g, ih;
+    capacitor_companion(p[0], ctx, &g, &ih);
+    return mna_add_resistor(m, n[0], n[1], 1.0 / g) && add_current(m, n[0], n[1], ih);
 }
 
 static int capacitor_commit(const MnaResult *r, const size_t *n, const double *p, const DeviceStampContext *ctx,
                             double *next)
 {
-    (void)p, (void)ctx;
-    next[0] = branch_voltage(r, n);
+    double g, ih, v = branch_voltage(r, n);
+    capacitor_companion(p[0], ctx, &g, &ih);
+    next[0] = v;
+    next[1] = g * v + ih;
     return 1;
 }
 
@@ -105,16 +118,29 @@ static int inductor_dc(MnaCircuit *m, const size_t *n, const double *p, const De
     return mna_add_voltage_source(m, n[0], n[1], 0.0); /* ideal short with a branch current */
 }
 
-/* Backward Euler: i = i_prev + dt/L * v -> conductance dt/L plus the previous current. */
+/* Inductor, state [i, v]: Backward Euler G = dt/L,   Ih = i_prev
+ *                         trapezoidal    G = dt/2L,  Ih = i_prev + G v_prev */
+static void inductor_companion(double l, const DeviceStampContext *ctx, double *g, double *ih)
+{
+    int trap = ctx->method == DEVICE_INTEGRATION_TRAPEZOIDAL;
+    *g = ctx->dt_s / ((trap ? 2.0 : 1.0) * l);
+    *ih = ctx->state[0] + (trap ? *g * ctx->state[1] : 0.0);
+}
+
 static int inductor_transient(MnaCircuit *m, const size_t *n, const double *p, const DeviceStampContext *ctx)
 {
-    return mna_add_resistor(m, n[0], n[1], p[0] / ctx->dt_s) && add_current(m, n[0], n[1], ctx->state[0]);
+    double g, ih;
+    inductor_companion(p[0], ctx, &g, &ih);
+    return mna_add_resistor(m, n[0], n[1], 1.0 / g) && add_current(m, n[0], n[1], ih);
 }
 
 static int inductor_commit(const MnaResult *r, const size_t *n, const double *p, const DeviceStampContext *ctx,
                            double *next)
 {
-    next[0] = ctx->state[0] + ctx->dt_s / p[0] * branch_voltage(r, n);
+    double g, ih, v = branch_voltage(r, n);
+    inductor_companion(p[0], ctx, &g, &ih);
+    next[0] = g * v + ih;
+    next[1] = v;
     return 1;
 }
 
@@ -295,43 +321,45 @@ static const DeviceParam SHOCKLEY[] = {
 
 #define COUNT(a) (sizeof a / sizeof a[0])
 #define ALL (DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT | DEVICE_CAP_AC)
+#define BE_TRAP (DEVICE_INTEGRATION_BACKWARD_EULER | DEVICE_INTEGRATION_TRAPEZOIDAL)
 #define BJT_ASSUMPTIONS                                                                                                 "First-order Ebers-Moll (transport form) at 300 K: no junction or diffusion charge (memoryless in transient; "      "AC is the quasi-static conductance matrix only), no Early effect, high injection, base/emitter/collector "         "resistance or breakdown. A learning/reference model, not Gummel-Poon."
 #define MOS_ASSUMPTIONS                                                                                               "Level-1 Shichman-Hodges with the body tied to the source: no body effect, subthreshold conduction, "              "gate/junction capacitance (memoryless in transient; AC is gm/gds only), mobility degradation or breakdown. "      "Symmetric channel: drain and source swap when Vds changes sign."
 
 static const DeviceModelSpec BUILTIN[] = {
     {"ideal.resistor", 2, "resistor", "Ideal linear resistor, V = I*R",
      "No tolerance drift, temperature coefficient, parasitic inductance/capacitance or noise.",
-     PASSIVE, COUNT(PASSIVE), RESISTANCE, COUNT(RESISTANCE), 0, ALL, 0, resistor_stamp, resistor_stamp, NULL,
+     PASSIVE, COUNT(PASSIVE), RESISTANCE, COUNT(RESISTANCE), 0, ALL, 0, 0, NULL, resistor_stamp, resistor_stamp, NULL,
      resistor_ac, 0, 0, 0},
-    {"ideal.capacitor", 2, "capacitor", "Ideal capacitor, i = C dv/dt; open circuit at DC",
-     "No ESR, ESL, leakage, dielectric absorption or voltage coefficient. Transient: Backward Euler, "
-     "zero initial voltage.",
-     PASSIVE, COUNT(PASSIVE), CAPACITANCE, COUNT(CAPACITANCE), 0, ALL, 1, capacitor_dc, capacitor_transient,
+    {"ideal.capacitor", 3, "capacitor", "Ideal capacitor, i = C dv/dt; open circuit at DC",
+     "No ESR, ESL, leakage, dielectric absorption or voltage coefficient. Transient: Backward Euler or "
+     "trapezoidal companion, zero initial voltage.",
+     PASSIVE, COUNT(PASSIVE), CAPACITANCE, COUNT(CAPACITANCE), 0, ALL, 2, BE_TRAP, "[0] voltage V(p)-V(n) in V, [1] current p->n in A", capacitor_dc, capacitor_transient,
      capacitor_commit, capacitor_ac, 0, 0, 0},
-    {"ideal.inductor", 2, "inductor", "Ideal inductor, v = L di/dt; short circuit at DC",
-     "No DCR, core saturation, losses or self-resonance. Transient: Backward Euler, zero initial current.",
-     PASSIVE, COUNT(PASSIVE), INDUCTANCE, COUNT(INDUCTANCE), 0, ALL, 1, inductor_dc, inductor_transient,
+    {"ideal.inductor", 3, "inductor", "Ideal inductor, v = L di/dt; short circuit at DC",
+     "No DCR, core saturation, losses or self-resonance. Transient: Backward Euler or trapezoidal companion, "
+     "zero initial current.",
+     PASSIVE, COUNT(PASSIVE), INDUCTANCE, COUNT(INDUCTANCE), 0, ALL, 2, BE_TRAP, "[0] current p->n in A, [1] voltage V(p)-V(n) in V", inductor_dc, inductor_transient,
      inductor_commit, inductor_ac, 1, 0, 0},
     {"shockley.diode", 2, "diode", "Shockley diode, I = Is*(exp(V/(n*Vt)) - 1) at 300 K",
      "No series resistance, junction or diffusion capacitance (memoryless in transient; AC is the operating-point "
      "conductance only), breakdown or temperature dependence; the exponent is clamped at +/-40.",
-     DIODE, COUNT(DIODE), SHOCKLEY, COUNT(SHOCKLEY), -1, ALL, 0, diode_stamp, diode_stamp, NULL, diode_ac, 0, 0, 1},
+     DIODE, COUNT(DIODE), SHOCKLEY, COUNT(SHOCKLEY), -1, ALL, 0, 0, NULL, diode_stamp, diode_stamp, NULL, diode_ac, 0, 0, 1},
     {"ideal.voltage_source", 2, "voltage_source", "Ideal constant voltage source (simulation boundary, not a BOM part)",
      "Zero output impedance and unlimited current; switched on at t=0+ in transient.",
-     SOURCE, COUNT(SOURCE), VOLTAGE, COUNT(VOLTAGE), 0, ALL, 0, voltage_stamp, voltage_stamp, NULL, voltage_ac, 1, 1, 0},
+     SOURCE, COUNT(SOURCE), VOLTAGE, COUNT(VOLTAGE), 0, ALL, 0, 0, NULL, voltage_stamp, voltage_stamp, NULL, voltage_ac, 1, 1, 0},
     {"ideal.current_source", 2, "current_source", "Ideal constant current source (simulation boundary, not a BOM part)",
      "Infinite output impedance and unlimited compliance voltage; switched on at t=0+ in transient.",
-     CURRENT, COUNT(CURRENT), CURRENT_PARAM, COUNT(CURRENT_PARAM), 0, ALL, 0, current_stamp, current_stamp, NULL,
+     CURRENT, COUNT(CURRENT), CURRENT_PARAM, COUNT(CURRENT_PARAM), 0, ALL, 0, 0, NULL, current_stamp, current_stamp, NULL,
      current_ac, 0, 1, 0},
     {"ebers_moll.npn", 1, "bjt", "NPN bipolar transistor, first-order Ebers-Moll", BJT_ASSUMPTIONS,
-     BJT, COUNT(BJT), EBERS_MOLL, COUNT(EBERS_MOLL), -1, ALL, 0, npn_stamp, npn_stamp, NULL, npn_ac, 0, 0, 1},
+     BJT, COUNT(BJT), EBERS_MOLL, COUNT(EBERS_MOLL), -1, ALL, 0, 0, NULL, npn_stamp, npn_stamp, NULL, npn_ac, 0, 0, 1},
     {"ebers_moll.pnp", 1, "bjt", "PNP bipolar transistor, first-order Ebers-Moll (polarity transform of NPN)",
-     BJT_ASSUMPTIONS, BJT, COUNT(BJT), EBERS_MOLL, COUNT(EBERS_MOLL), -1, ALL, 0, pnp_stamp, pnp_stamp, NULL, pnp_ac, 0,
+     BJT_ASSUMPTIONS, BJT, COUNT(BJT), EBERS_MOLL, COUNT(EBERS_MOLL), -1, ALL, 0, 0, NULL, pnp_stamp, pnp_stamp, NULL, pnp_ac, 0,
      0, 1},
     {"level1.nmos", 1, "mosfet", "N-channel MOSFET, Level-1 Shichman-Hodges", MOS_ASSUMPTIONS,
-     MOS, COUNT(MOS), LEVEL1, COUNT(LEVEL1), -1, ALL, 0, nmos_stamp, nmos_stamp, NULL, nmos_ac, 0, 0, 1},
+     MOS, COUNT(MOS), LEVEL1, COUNT(LEVEL1), -1, ALL, 0, 0, NULL, nmos_stamp, nmos_stamp, NULL, nmos_ac, 0, 0, 1},
     {"level1.pmos", 1, "mosfet", "P-channel MOSFET, Level-1 Shichman-Hodges (polarity transform of NMOS)",
-     MOS_ASSUMPTIONS, MOS, COUNT(MOS), LEVEL1, COUNT(LEVEL1), -1, ALL, 0, pmos_stamp, pmos_stamp, NULL, pmos_ac, 0, 0, 1},
+     MOS_ASSUMPTIONS, MOS, COUNT(MOS), LEVEL1, COUNT(LEVEL1), -1, ALL, 0, 0, NULL, pmos_stamp, pmos_stamp, NULL, pmos_ac, 0, 0, 1},
 };
 
 int model_registry_register_builtin_devices(ModelRegistry *registry, char *err, size_t cap)

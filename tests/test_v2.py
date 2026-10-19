@@ -164,11 +164,11 @@ class ModelContract(Base):
   r=self.run_core(tree);self.assertEqual(r.returncode,2,r.stdout);self.assertIn('PROJECT ERROR',r.stderr);self.assertFalse(r.stdout.strip());return r.stderr
  def test_models_are_queryable(self):
   r=subprocess.run([CORE,'models'],capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);d=json.loads(r.stdout)
-  self.assertEqual(d['contract_version'],2);models={m['id']:m for m in d['models']}
+  self.assertEqual(d['contract_version'],3);models={m['id']:m for m in d['models']}
   self.assertEqual(set(models),{'ideal.resistor','ideal.capacitor','ideal.inductor','shockley.diode','ideal.voltage_source','ideal.current_source',
                                 'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos'})
   transistors={'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos'}
-  for i,m in models.items():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':True});self.assertEqual(m['version'],1 if i in transistors else 2);self.assertTrue(m['assumptions'])
+  for i,m in models.items():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':True});self.assertEqual(m['version'],1 if i in transistors else 3 if i in ('ideal.capacitor','ideal.inductor') else 2);self.assertTrue(m['assumptions'])
   self.assertEqual({i for i,m in models.items() if m['ac_excitation']},{'ideal.voltage_source','ideal.current_source'})
   self.assertEqual({i for i,m in models.items() if m['needs_operating_point']},{'shockley.diode'}|transistors)
   self.assertEqual({p['name']:p['unit'] for p in models['level1.nmos']['params']},{'vto':'V','kp':'A/V^2','w':'m','l':'m','lambda':'1/V'})
@@ -399,6 +399,32 @@ class Transistors(Base):
   swapped={'model':{'id':'ebers_moll.npn'},'terminals':{'collector':'2','base':'1','emitter':'3'}}
   with self.assertRaises(copper.InvalidInput) as caught:copper.check_terminal_pin_names('Q1',swapped,specs['ebers_moll.npn'],pins)
   self.assertIn('swapped',str(caught.exception))
+class TransientEngine(Base):
+ """Prompt 5: transient through the project path: methods, reported settings, failure details."""
+ def result(self,tree,*extra):
+  p=self.dir/'t.copper';copper.write_tree(p,tree);out=self.dir/'r.json'
+  copper.main(['--format','quiet','--result-json',str(out),'transient',str(p),'--core',CORE,*extra]);return json.loads(out.read_text())
+ def test_trapezoidal_matches_its_recurrence(self):
+  r=self.run_core(self.tree('rc'),'transient',(.0001,100,'trap'));self.assertEqual(r.returncode,0,r.stderr)
+  rows=list(csv.DictReader(io.StringIO(r.stdout)));a=1e-4/(10000*1e-6);v=5*a/(1+a)  # first step Backward Euler
+  self.assertAlmostEqual(float(rows[0]['OUT_V']),v,places=10)
+  for row in rows[1:]:v=((1-a/2)*v+5*a)/(1+a/2);self.assertAlmostEqual(float(row['OUT_V']),v,places=10)
+  self.assertLess(abs(v-5*(1-math.exp(-1))),abs(5*(1-(1/1.01)**100)-5*(1-math.exp(-1)))/50)  # beats Backward Euler
+ def test_result_reports_method_and_settings(self):
+  d=self.result(self.tree('rc'),'--dt','1e-4','--steps','5','--method','trap')
+  self.assertEqual(d['status'],'PASS');data=d['data']
+  self.assertEqual((data['method'],data['first_step_method'],data['steps_accepted']),('trapezoidal','backward_euler',5))
+  self.assertIn('zero stored energy',data['initial_state']);self.assertEqual(data['tolerances']['absolute_update_v'],1e-9)
+  self.assertEqual(self.result(self.tree('rc'),'--dt','1e-4','--steps','5')['data']['method'],'backward_euler')
+ def test_failed_step_is_reported_not_claimed(self):
+  t2=self.tree('rc');one(t2,'nets').append(A('ISOLATED'))  # a node with nothing on it: singular every step
+  r=self.run_core(t2,'transient',(1e-4,10));self.assertEqual(r.returncode,2)
+  self.assertIn('TRANSIENT solve_failed: step 1 at t=0.0001 s',r.stderr);self.assertIn('iterations',r.stderr)
+  self.assertEqual(r.stdout.strip(),'time_s,GND_V,VIN_V,OUT_V,ISOLATED_V')  # header only: no accepted rows
+  d=self.result(t2,'--dt','1e-4','--steps','10');self.assertEqual(d['status'],'FAIL');self.assertEqual(d['data']['steps_accepted'],0)
+  self.assertIn('no successful waveform',d['message'])
+  u=self.tree('rc');one(part_named(u,'resistor'),'kind')[1]=A('U');d=self.result(u,'--dt','1e-4','--steps','3')
+  self.assertEqual(d['status'],'UNVERIFIED')
 class V2Native(Base):
  """Needs installed KiCad libraries (KICAD_SYMBOL_DIR/KICAD_FOOTPRINT_DIR); gates also need KiCad 9.x CLI."""
  def libraries(self):

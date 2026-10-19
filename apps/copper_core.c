@@ -5,7 +5,7 @@
 #include <stdlib.h>
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"catalogue")) {
         char error[512];
         if(cp_check_catalogue(argv[2],stdout,error,sizeof error)) return 0;
@@ -15,10 +15,12 @@ int main(int argc,char **argv) {
     CpProject *p=malloc(sizeof *p);if(!p)return 3;cp_init(p);char error[512];int rc=2;
     if(!cp_load(p,argv[2],error,sizeof error)) {fprintf(stderr,"PROJECT ERROR: %s\n",error);goto done;}
     if(!strcmp(argv[1],"analyze") && argc==3) rc=cp_analyze(p,stdout);
-    else if(!strcmp(argv[1],"transient") && argc==5) {
+    else if(!strcmp(argv[1],"transient") && (argc==5 || argc==6)) {
         char *end;errno=0;double dt=strtod(argv[3],&end);if(*end||errno||end==argv[3])goto done;
         errno=0;unsigned long steps=strtoul(argv[4],&end,10);if(*end||errno||end==argv[4])goto done;
-        rc=cp_transient(p,dt,steps,stdout);
+        int method=DEVICE_INTEGRATION_BACKWARD_EULER;
+        if(argc==6){if(!strcmp(argv[5],"trap"))method=DEVICE_INTEGRATION_TRAPEZOIDAL;else if(strcmp(argv[5],"be"))goto done;}
+        rc=cp_transient(p,dt,steps,method,stdout);
     } else if(!strcmp(argv[1],"ac") && (argc==6 || argc==7)) {
         char *end;double start,stop;unsigned long points;int log_sweep=1;
         errno=0;start=strtod(argv[3],&end);if(*end||errno||end==argv[3])goto done;

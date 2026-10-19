@@ -33,6 +33,7 @@ typedef struct {
 /* --------------------------------------------------------------------------
  * Device model contract, version 2 (docs/engineering/DEVICE_MODEL_CONTRACT.md)
  * v2 adds the AC small-signal hook (stamp_ac) and its declarations.
+ * v3 adds declared integration methods and the meaning of transient state.
  *
  * A DeviceModelSpec says what equations a model implements, on which ordered
  * terminals, with which validated parameters, and for which analyses. It is
@@ -46,7 +47,7 @@ typedef struct {
  * --------------------------------------------------------------------------
  */
 
-#define DEVICE_MODEL_CONTRACT_VERSION 2u
+#define DEVICE_MODEL_CONTRACT_VERSION 3u
 #define DEVICE_MODEL_MAX_TERMINALS 8
 #define DEVICE_MODEL_MAX_PARAMS 8
 #define DEVICE_MODEL_MAX_STATE 2
@@ -97,10 +98,17 @@ typedef struct {
   const char *meaning;
 } DeviceParam;
 
+/* Transient integration methods (bit flags for DeviceModelSpec.integration_methods). */
+enum {
+  DEVICE_INTEGRATION_BACKWARD_EULER = 1u << 0,
+  DEVICE_INTEGRATION_TRAPEZOIDAL = 1u << 1
+};
+
 typedef struct {
   DeviceAnalysis analysis;
   double dt_s;          /* transient time step; 0 for DC */
   const double *state;  /* previous accepted state (state_count values) */
+  unsigned method;      /* DEVICE_INTEGRATION_* used for this step; 0 for DC */
 } DeviceStampContext;
 
 /* nodes[] holds one MNA node per terminal, in spec terminal order (0 = ground).
@@ -145,6 +153,10 @@ typedef struct {
   int primary_param;       /* index bound to a component's (value ...), or -1 */
   unsigned capabilities;
   size_t state_count;      /* transient state values per instance */
+  /* Contract v3: integration methods a stateful model implements (0 for a memoryless
+   * model, which works with any method), and what each state value means. */
+  unsigned integration_methods;
+  const char *state_meaning;
   DeviceStampFn stamp_dc;
   DeviceStampFn stamp_transient;
   DeviceCommitFn commit_transient;

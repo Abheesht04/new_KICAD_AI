@@ -60,7 +60,8 @@ void cp_init(CpProject *p);
 void cp_free(CpProject *p);
 int cp_load(CpProject *p, const char *path, char *error, size_t cap);
 int cp_analyze(const CpProject *p, FILE *json);
-int cp_transient(const CpProject *p, double dt, size_t steps, FILE *csv);
+/* method: DEVICE_INTEGRATION_BACKWARD_EULER or DEVICE_INTEGRATION_TRAPEZOIDAL (src/transient.h). */
+int cp_transient(const CpProject *p, double dt, size_t steps, int method, FILE *csv);
 /* Small-signal AC sweep over the project's circuit (docs/engineering/AC_ANALYSIS.md).
  * Writes CSV (frequency, per-frequency status, node voltage and branch current
  * phasors with magnitude and phase) and returns 0; returns 2 with

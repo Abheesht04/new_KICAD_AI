@@ -571,6 +571,33 @@ def dfm_check(args):
     elif args.format=='json':print(json.dumps(args.outcome['data'],indent=2))
     return 0 if scopes['physical']=='PASS' else 2
 
+TRANSIENT_RULE_OUTCOME={'unsupported_model':Unverified,'unsupported_analysis':Unverified,'invalid_argument':InvalidInput,
+                        'solve_failed':Failed,'model_stamp':Failed,'state_commit':Failed,'allocation_failure':CoreError}
+TRANSIENT_METHODS={'be':'backward_euler','trap':'trapezoidal'}
+def transient_run(args):
+    """Fixed-step transient by copper-core (src/transient.c): transactional steps, zero initial stored energy."""
+    project=Path(existing(args.project)).resolve();o=args.outcome;method=getattr(args,'method','be')
+    if not (math.isfinite(args.dt) and 0<args.dt<=1000 and 1<=args.steps<=100000):raise InvalidInput('Transient requires 0 < dt <= 1000 s and 1 <= steps <= 100000')
+    result=subprocess.run([core_path(args.core),'transient',str(project),repr(args.dt),str(args.steps),method],capture_output=True,text=True,timeout=600)
+    message=result.stderr.strip()
+    if result.returncode==2 and message.startswith('PROJECT ERROR'):raise InvalidInput(message)
+    rule=message[len('TRANSIENT '):].split(':',1)[0] if message.startswith('TRANSIENT ') else ''
+    if result.returncode not in (0,2) or (result.returncode==2 and rule not in TRANSIENT_RULE_OUTCOME):raise CoreError(message or f'copper-core transient failed ({result.returncode})')
+    rows=list(csv.reader(io.StringIO(result.stdout)));header,samples=(rows[0],rows[1:]) if rows else ([],[])
+    defaults=MnaDefaults
+    o['data']={'project':str(project),'method':TRANSIENT_METHODS[method],'first_step_method':'backward_euler',
+               'initial_state':'zero stored energy; sources switch on at t = 0+','dt_s':args.dt,'steps_requested':args.steps,
+               'steps_accepted':len(samples),'tolerances':defaults,'columns':header,'csv':None,
+               'final':dict(zip(header,map(float,samples[-1]))) if samples else None}
+    if args.out and samples:
+        Path(args.out).parent.mkdir(parents=True,exist_ok=True);Path(args.out).write_text(result.stdout);o['data']['csv']=str(Path(args.out).resolve())
+    if rule:raise TRANSIENT_RULE_OUTCOME[rule](message[len('TRANSIENT '):]+f' ({len(samples)} step(s) accepted; no successful waveform is claimed)')
+    if args.out:print(args.out if args.format=='json' else f"{TRANSIENT_METHODS[method].replace('_',' ').capitalize()} (first step Backward Euler), dt={args.dt:g} s, {len(samples)} steps -> {args.out}")
+    else:o['data']['rows']=[[float(x) for x in r] for r in samples];sys.stdout.write(result.stdout)
+    return 0
+# Newton tolerances used by every analysis (src/mna.c mna_options_default).
+MnaDefaults={'max_iterations':100,'absolute_residual':1e-10,'relative_residual':1e-10,'max_voltage_step_v':0.25,
+             'absolute_update_v':1e-9,'relative_update':1e-9}
 AC_RULE_OUTCOME={'unsupported_model':Unverified,'unsupported_analysis':Unverified,'no_excitation':InvalidInput,
                  'invalid_sweep':InvalidInput,'singular':Failed,'operating_point':Failed,'model_stamp':Failed}
 def ac_sweep(args):
@@ -606,23 +633,7 @@ def run_command(args):
         if fmt=='human':render_report(report,None if args.scope=='dc' else scopes)
         else:print(json.dumps(report,indent=2))
         return rc
-    if args.command=='transient':
-        project=existing(args.project)
-        if not (math.isfinite(args.dt) and 0<args.dt<=1000 and 1<=args.steps<=100000):raise InvalidInput('Transient requires 0 < dt <= 1000 s and 1 <= steps <= 100000')
-        report,_=core_run(project,args.core)
-        if any(i['rule']=='unsupported_model' for i in report['issues']):raise Unverified('An active device lacks a supported model; transient analysis is blocked')
-        missing=[f"{c['ref']} ({c['model']['id']})" for c in report['components'] if c['model'] and not c['capabilities']['transient']]
-        if missing:raise Unverified('These device models do not support transient analysis: '+', '.join(missing))
-        data,rc=core_run(project,args.core,'transient',(args.dt,args.steps))
-        rows=list(csv.reader(io.StringIO(data)));header,samples=rows[0],rows[1:]
-        if rc or not samples:raise Failed(f'Transient solve failed after {len(samples)} accepted step(s); no successful waveform is claimed')
-        o['data']={'project':str(Path(project).resolve()),'method':'backward_euler','initial_state':'zero stored energy','dt_s':args.dt,'steps':args.steps,'columns':header,'final':dict(zip(header,map(float,samples[-1]))),'csv':None}
-        if args.out:
-            Path(args.out).parent.mkdir(parents=True,exist_ok=True);Path(args.out).write_text(data);o['data']['csv']=str(Path(args.out).resolve())
-            print(args.out if fmt=='json' else f'Backward Euler, dt={args.dt:g} s, {len(samples)} steps -> {args.out}')
-        else:
-            o['data']['rows']=[[float(x) for x in r] for r in samples];sys.stdout.write(data)
-        return 0
+    if args.command=='transient':return transient_run(args)
     if args.command=='ac':return ac_sweep(args)
     if args.command=='build':
         existing(args.project);rc=export_project(args);m=json.loads((Path(args.out)/'manifest.json').read_text())
@@ -699,7 +710,7 @@ def main(argv=None):
     for cmd in ['check','transient']:
         p=sub.add_parser(cmd);p.add_argument('project');p.add_argument('--core')
         if cmd=='check':p.add_argument('--scope',choices=['all','dc'],default='all',help='dc: status of the DC solve only')
-        if cmd=='transient':p.add_argument('--dt',type=float,default=1e-4);p.add_argument('--steps',type=int,default=1000);p.add_argument('--out',help='CSV path; omitted: CSV on stdout')
+        if cmd=='transient':p.add_argument('--dt',type=float,default=1e-4);p.add_argument('--steps',type=int,default=1000);p.add_argument('--method',choices=['be','trap'],default='be',help='be: Backward Euler; trap: trapezoidal (first step Backward Euler)');p.add_argument('--out',help='CSV path; omitted: CSV on stdout')
     p=sub.add_parser('build');p.add_argument('project');p.add_argument('--out',default='out/v2');p.add_argument('--core');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--no-route',action='store_true');p.add_argument('--draft',action='store_true',help='Allow electrical failures to produce an explicitly failed draft, never a verified package')
     for cmd in ['verify','fabricate']:
         p=sub.add_parser(cmd);p.add_argument('--out',default='out/v2');p.add_argument('--kicad-cli');p.add_argument('--core');p.add_argument('--project',help='Source .copper to check for freshness (default: path recorded at build)')

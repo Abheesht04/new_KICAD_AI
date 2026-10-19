@@ -363,6 +363,15 @@ int device_model_validate_spec(const DeviceModelSpec *spec, char *err, size_t ca
     if ((spec->capabilities & DEVICE_CAP_TRANSIENT) && !(spec->capabilities & DEVICE_CAP_DC)) {
         return fail(err, cap, "%s: transient requires DC (the initial operating point)", spec->id);
     }
+    if (spec->integration_methods &
+        ~(unsigned)(DEVICE_INTEGRATION_BACKWARD_EULER | DEVICE_INTEGRATION_TRAPEZOIDAL)) {
+        return fail(err, cap, "%s: unknown integration method bits", spec->id);
+    }
+    if ((spec->state_count > 0) != (spec->integration_methods != 0) ||
+        (spec->state_count > 0) != (spec->state_meaning != NULL)) {
+        return fail(err, cap, "%s: a stateful model declares its integration methods and state meaning; "
+                              "a memoryless one declares neither", spec->id);
+    }
     if (spec->state_count > DEVICE_MODEL_MAX_STATE ||
         (spec->state_count > 0) != (spec->commit_transient != NULL) ||
         (spec->state_count > 0 && !(spec->capabilities & DEVICE_CAP_TRANSIENT))) {

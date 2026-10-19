@@ -30,7 +30,7 @@ reach the child unchanged.
 | `pcba project fabricate --out DIR` | stable | `copper.py fabricate` |
 | `pcba simulate dc <file.copper>` | stable | `copper.py check --scope dc` |
 | `pcba simulate ac <file.copper> --start HZ --stop HZ --points N` | stable | `copper.py ac` → `copper-core ac` |
-| `pcba simulate transient <file.copper> --dt S --steps N` | stable | `copper.py transient` |
+| `pcba simulate transient <file.copper> --dt S --steps N [--method be\|trap]` | stable | `copper.py transient` |
 | `pcba parts search <query>` | stable | `copper.py catalogue` |
 | `pcba parts add --catalogue FILE --id ID --kind K` | stable | `copper.py part-add` |
 | `pcba parts remove --catalogue FILE --id ID` | stable | `copper.py part-remove` |

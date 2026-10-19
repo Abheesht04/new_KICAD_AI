@@ -37,7 +37,7 @@ static const DeviceParam BAD_UNIT[] = {{"r", DEVICE_UNIT_INVALID, 0.0, 10.0, 0, 
 static DeviceModelSpec valid_spec(void)
 {
     DeviceModelSpec s = {"test.two", 1, "resistor", "test-only spec", "none", TWO, 2, GOOD, 1, 0,
-                         DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT, 0, dummy_stamp, dummy_stamp, NULL, NULL, 0, 0, 0};
+                         DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT, 0, 0, NULL, dummy_stamp, dummy_stamp, NULL, NULL, 0, 0, 0};
     return s;
 }
 
@@ -77,9 +77,19 @@ static void test_spec_rules(void)
     s = valid_spec(); s.stamp_dc = NULL; expect_invalid(s, "DC capability without stamp");
     s = valid_spec(); s.capabilities = DEVICE_CAP_DC; expect_invalid(s, "transient stamp without capability");
     s = valid_spec(); s.capabilities = DEVICE_CAP_TRANSIENT; s.stamp_dc = NULL; expect_invalid(s, "transient without DC");
-    s = valid_spec(); s.state_count = 1; expect_invalid(s, "state without commit");
+    s = valid_spec(); s.state_count = 1; s.integration_methods = DEVICE_INTEGRATION_BACKWARD_EULER; s.state_meaning = "v";
+    expect_invalid(s, "state without commit");
     s = valid_spec(); s.commit_transient = dummy_commit; expect_invalid(s, "commit without state");
-    s = valid_spec(); s.state_count = 1; s.commit_transient = dummy_commit;
+    /* Contract v3: a stateful model declares its integration methods and state meaning; a memoryless one neither. */
+    s = valid_spec(); s.state_count = 1; s.commit_transient = dummy_commit; s.state_meaning = "v";
+    expect_invalid(s, "state without integration methods");
+    s = valid_spec(); s.state_count = 1; s.commit_transient = dummy_commit; s.integration_methods = DEVICE_INTEGRATION_BACKWARD_EULER;
+    expect_invalid(s, "state without meaning");
+    s = valid_spec(); s.integration_methods = DEVICE_INTEGRATION_TRAPEZOIDAL; expect_invalid(s, "methods on a memoryless model");
+    s = valid_spec(); s.state_count = 1; s.commit_transient = dummy_commit; s.state_meaning = "v"; s.integration_methods = 1u << 5;
+    expect_invalid(s, "unknown integration method");
+    s = valid_spec(); s.state_count = 1; s.commit_transient = dummy_commit; s.state_meaning = "v";
+    s.integration_methods = DEVICE_INTEGRATION_BACKWARD_EULER;
     assert(device_model_validate_spec(&s, err, sizeof err));
     s = valid_spec(); s.capabilities |= DEVICE_CAP_AC; s.stamp_ac = dummy_ac; s.ac_branch_count = 1; s.needs_operating_point = 1;
     assert(device_model_validate_spec(&s, err, sizeof err));
@@ -112,7 +122,10 @@ static void test_registry(void)
         assert(device_model_supports(m, DEVICE_ANALYSIS_DC));
         assert(device_model_supports(m, DEVICE_ANALYSIS_TRANSIENT));
         int transistor = !strcmp(m->family, "bjt") || !strcmp(m->family, "mosfet");
-        assert(device_model_supports(m, DEVICE_ANALYSIS_AC) && m->stamp_ac && m->version == (transistor ? 1u : 2u));
+        int reactive = !strcmp(m->family, "capacitor") || !strcmp(m->family, "inductor");
+        assert(device_model_supports(m, DEVICE_ANALYSIS_AC) && m->stamp_ac && m->version == (transistor ? 1u : reactive ? 3u : 2u));
+        assert(m->state_count == (reactive ? 2u : 0u) && (m->state_meaning != NULL) == reactive);
+        assert(m->integration_methods == (reactive ? (unsigned)(DEVICE_INTEGRATION_BACKWARD_EULER | DEVICE_INTEGRATION_TRAPEZOIDAL) : 0u));
         assert(m->ac_excitation == (!strcmp(m->family, "voltage_source") || !strcmp(m->family, "current_source")));
         assert(m->needs_operating_point == (!strcmp(m->family, "diode") || transistor));
         assert(m->terminal_count == (transistor ? 3u : 2u) && m->primary_param == (transistor || !strcmp(m->family, "diode") ? -1 : 0));

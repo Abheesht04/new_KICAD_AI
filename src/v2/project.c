@@ -1,5 +1,6 @@
 #include "project.h"
 #include "pcb_copper.h"
+#include "transient.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -298,7 +299,6 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     }
     return 1;
 }
-typedef double CpState[DEVICE_MODEL_MAX_STATE];
 static void terminal_nodes(const CpComponent *c,size_t *nodes) {
     for(size_t t=0;t<c->model->terminal_count;t++) nodes[t]=c->nodes[c->terminal_pin[t]];
 }
@@ -306,10 +306,11 @@ static void terminal_nodes(const CpComponent *c,size_t *nodes) {
 static double terminal_voltage(const CpComponent *c,const MnaResult *r) {
     return mna_node_voltage(r,c->nodes[c->terminal_pin[0]])-mna_node_voltage(r,c->nodes[c->terminal_pin[1]]);
 }
-/* Stamps every component through its device model. Returns 1, or 0 with the reporting rule and a reason:
- * unsupported_model (no model, kind U), unsupported_analysis (model lacks the capability), model_stamp. */
-static int assemble(const CpProject *p,MnaCircuit *m,DeviceAnalysis analysis,double dt,CpState *state,
-                    const char **rule,char *why,size_t cap) {
+/* Stamps every component's DC model. Returns 1, or 0 with the reporting rule and a reason:
+ * unsupported_model (no model, kind U), unsupported_analysis (model lacks DC), model_stamp.
+ * Transient analysis uses src/transient.c; AC uses cp_ac. */
+static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why,size_t cap) {
+    const DeviceAnalysis analysis=DEVICE_ANALYSIS_DC;
     mna_circuit_init(m,p->net_count-1);
     for(size_t i=0;i<p->component_count;i++) {
         const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
@@ -323,9 +324,9 @@ static int assemble(const CpProject *p,MnaCircuit *m,DeviceAnalysis analysis,dou
             snprintf(why,cap,"%s: model %s v%u does not support %s analysis.",c->ref,c->model->id,c->model->version,device_analysis_name(analysis));
             return 0;
         }
-        DeviceStampContext ctx={analysis,dt,state?state[i]:NULL};
+        DeviceStampContext ctx={analysis,0.0,NULL,0};
         terminal_nodes(c,nodes);
-        if(!(analysis==DEVICE_ANALYSIS_DC ? c->model->stamp_dc : c->model->stamp_transient)(m,nodes,c->params,&ctx)) {
+        if(!c->model->stamp_dc(m,nodes,c->params,&ctx)) {
             *rule="model_stamp"; snprintf(why,cap,"%s: model %s could not be stamped (allocation failure).",c->ref,c->model->id);
             return 0;
         }
@@ -363,7 +364,7 @@ static unsigned tolerance_corners(const CpProject *p,Report *report,double *lo,d
         for(size_t j=0;j<count;j++){size_t i=indices[j];CpComponent *c=&copy->components[i];
             c->value=p->components[i].value*(1+((mask&(1u<<j))?1:-1)*p->components[i].tolerance);c->params[c->model->primary_param]=c->value;}
         MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);const char *rule;char why[256];
-        int ok=assemble(copy,&m,DEVICE_ANALYSIS_DC,0,NULL,&rule,why,sizeof why);if(ok){mna_solve(&m,&o,&r);ok=r.status==MNA_STATUS_SUCCESS&&mna_validate(&m,&r,&o,&v)&&v.valid;}
+        int ok=assemble(copy,&m,&rule,why,sizeof why);if(ok){mna_solve(&m,&o,&r);ok=r.status==MNA_STATUS_SUCCESS&&mna_validate(&m,&r,&o,&v)&&v.valid;}
         if(!ok){issue(report,2,"corner_solve","circuit",mask,0,"Tolerance corner did not solve.");mna_result_free(&r);mna_circuit_free(&m);break;}
         done++;
         for(size_t i=0;i<p->net_count;i++){double value=mna_node_voltage(&r,i);lo[i]=fmin(lo[i],value);hi[i]=fmax(hi[i],value);}
@@ -522,7 +523,7 @@ int cp_models_json(FILE *f) {
 int cp_analyze(const CpProject *p,FILE *f) {
     MnaCircuit m={0}; MnaResult result={0}; MnaOptions opt; MnaValidation valid={0}; mna_options_default(&opt);
     const char *rule="mna_failure"; char why[256];
-    int supported=assemble(p,&m,DEVICE_ANALYSIS_DC,0,NULL,&rule,why,sizeof why); if(supported) { mna_solve(&m,&opt,&result); if(result.status==MNA_STATUS_SUCCESS) mna_validate(&m,&result,&opt,&valid); }
+    int supported=assemble(p,&m,&rule,why,sizeof why); if(supported) { mna_solve(&m,&opt,&result); if(result.status==MNA_STATUS_SUCCESS) mna_validate(&m,&result,&opt,&valid); }
     int solved=supported && result.status==MNA_STATUS_SUCCESS && valid.valid;
     fprintf(f,"{\"schema\":2,\"name\":"); js(f,p->name); fprintf(f,",\"dc_solved\":%s,\"physical_checked\":%s,\"issues\":[",solved?"true":"false",p->has_geometry?"true":"false");
     Report r={.f=f};
@@ -596,29 +597,43 @@ int cp_analyze(const CpProject *p,FILE *f) {
     fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. AC and transient are separate analyses (simulate ac/transient). No thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
     mna_result_free(&result);mna_circuit_free(&m);return ferror(f)?3:(r.errors?2:0);
 }
-int cp_transient(const CpProject *p,double dt,size_t steps,FILE *f) {
-    if(!isfinite(dt)||dt<=0||dt>1000||steps==0||steps>100000) return 2;
-    CpState state[CP_MAX_COMPONENTS], next;
-    memset(state,0,sizeof state);
-    fputs("time_s",f); for(size_t i=0;i<p->net_count;i++) fprintf(f,",%s_V",p->nets[i]); fputc('\n',f);
-    /* zero stored energy at t=0; ideal DC sources step on for first solve. */
-    for(size_t step=1;step<=steps;step++) {
-        MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);const char *rule;char why[256];
-        if(!assemble(p,&m,DEVICE_ANALYSIS_TRANSIENT,dt,state,&rule,why,sizeof why)) {mna_circuit_free(&m);fprintf(stderr,"TRANSIENT %s: %s\n",rule,why);return 2;}
-        mna_solve(&m,&o,&r);
-        if(r.status!=MNA_STATUS_SUCCESS || !mna_validate(&m,&r,&o,&v) || !v.valid) {mna_result_free(&r);mna_circuit_free(&m);return 2;}
-        fprintf(f,"%.12g",step*dt); for(size_t i=0;i<p->net_count;i++)fprintf(f,",%.12g",mna_node_voltage(&r,i));fputc('\n',f);
-        /* Commit model state only after the step solved and validated. */
-        for(size_t i=0;i<p->component_count;i++) {const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
-            if(!c->model || !c->model->state_count) continue;
-            DeviceStampContext ctx={DEVICE_ANALYSIS_TRANSIENT,dt,state[i]};
-            terminal_nodes(c,nodes);
-            if(!c->model->commit_transient(&r,nodes,c->params,&ctx,next)) {mna_result_free(&r);mna_circuit_free(&m);return 2;}
-            memcpy(state[i],next,sizeof next);
-        }
-        mna_result_free(&r);mna_circuit_free(&m);
+/* Fixed-step transient through src/transient.c: transactional steps, zero initial stored energy,
+ * sources switched on at t = 0+. Writes one CSV row per accepted step; on failure writes
+ * "TRANSIENT <rule>: ..." with time, step, MNA status, iterations, residual and device. */
+int cp_transient(const CpProject *p,double dt,size_t steps,int method,FILE *f) {
+    if(!isfinite(dt)||dt<=0||dt>1000||steps==0||steps>100000) {
+        fprintf(stderr,"TRANSIENT invalid_argument: need 0 < dt <= 1000 s and 1 <= steps <= 100000\n"); return 2;
     }
-    return ferror(f)?3:0;
+    TransientDevice *devices=calloc(p->component_count?p->component_count:1,sizeof *devices); size_t n=0;
+    if(!devices) { fprintf(stderr,"TRANSIENT allocation_failure: out of memory\n"); return 2; }
+    for(size_t i=0;i<p->component_count;i++) {
+        const CpComponent *c=&p->components[i];
+        if(!c->model) {
+            if(c->kind=='J') continue; /* ideal connector boundary: no equations */
+            fprintf(stderr,"TRANSIENT unsupported_model: %s: part %s (kind %c) has no device model; transient analysis is blocked.\n",c->ref,c->part,c->kind);
+            free(devices); return 2;
+        }
+        devices[n].model=c->model; devices[n].label=c->ref;
+        terminal_nodes(c,devices[n].nodes); memcpy(devices[n].params,c->params,sizeof c->params); n++;
+    }
+    TransientRun run; TransientFailure failure;
+    TransientStatus st=transient_init(&run,devices,n,p->net_count-1,(TransientMethod)method,dt,&failure);
+    if(st!=TRANSIENT_OK) { fprintf(stderr,"TRANSIENT %s: %s\n",transient_status_name(st),failure.message); free(devices); return 2; }
+    fputs("time_s",f); for(size_t i=0;i<p->net_count;i++) fprintf(f,",%s_V",p->nets[i]); fputc('\n',f);
+    for(size_t step=1;step<=steps;step++) {
+        MnaResult r={0};
+        st=transient_step(&run,&r,&failure);
+        if(st!=TRANSIENT_OK) {
+            fprintf(stderr,"TRANSIENT %s: step %zu at t=%.12g s, MNA status %d, %zu iterations, max residual %.3g%s%s: %s\n",
+                    transient_status_name(st),failure.step,failure.time_s,(int)failure.mna_status,failure.iterations,failure.max_residual,
+                    failure.device!=SIZE_MAX?", device ":"",failure.device!=SIZE_MAX?devices[failure.device].label:"",failure.message);
+            break;
+        }
+        fprintf(f,"%.12g",run.last.time_s); for(size_t i=0;i<p->net_count;i++)fprintf(f,",%.12g",mna_node_voltage(&r,i)); fputc('\n',f);
+        mna_result_free(&r);
+    }
+    transient_free(&run); free(devices);
+    return st!=TRANSIENT_OK ? 2 : (ferror(f)?3:0);
 }
 static void ac_columns(FILE *f,const char *label) {
     fprintf(f,",%s_re,%s_im,%s_mag,%s_phase_deg",label,label,label,label);
@@ -659,7 +674,7 @@ int cp_ac(const CpProject *p,double start,double stop,size_t points,int logarith
     MnaCircuit m={0}; MnaResult op={0}; MnaOptions o; MnaValidation v={0}; mna_options_default(&o);
     if(needs_op) {
         const char *rule; char why[256]="";
-        int ok=assemble(p,&m,DEVICE_ANALYSIS_DC,0,NULL,&rule,why,sizeof why);
+        int ok=assemble(p,&m,&rule,why,sizeof why);
         if(ok) { mna_solve(&m,&o,&op); ok=op.status==MNA_STATUS_SUCCESS && mna_validate(&m,&op,&o,&v) && v.valid; }
         if(!ok) {
             fprintf(stderr,"AC operating_point: the DC operating point needed to linearise nonlinear devices did not solve%s%s\n",
