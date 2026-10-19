@@ -79,7 +79,7 @@ class Usage(Base):
                ['simulate','transient',rc,'--steps','10'],['simulate','transient',rc,'--dt','1e-4']]
         cases+=[['simulate','transient',rc,'--dt',dt,'--steps',steps] for dt,steps in
                 [('abc','10'),('-1','10'),('0','10'),('nan','10'),('inf','10'),('1001','10'),('1e-4','0'),('1e-4','1.5'),('1e-4','100001'),('1e-4','-3')]]
-        cases+=[['parts','search'],['parts','add','--catalogue','c.parts','--id','x','--kind','Q'],
+        cases+=[['parts','search'],['parts','add','--catalogue','c.parts','--id','x','--kind','X'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','-1'],['parts','add','--id','x','--kind','R'],
                 ['parts','add','--catalogue','c.parts','--id','x','--kind','R','--power','0'],['parts','remove','--id','x'],
                 ['simulate','ac',rc],['simulate','ac',rc,'--start','1','--stop','10'],
@@ -185,6 +185,9 @@ class ExitCodes(Base):
         self.assertEqual(r.returncode,2);self.assertEqual(cat.read_bytes(),saved)  # rejected addition leaves the file untouched
         hit=envelope(self,run('parts','search','d1','--catalogue',cat,'--json'))['result']['data']['parts'][0]
         self.assertEqual((hit['model'],hit['pinmap'],hit['provenance'],hit['catalogue']),('shockley.diode',{'cathode':'1','anode':'2'},'synthetic test entry','user:mine.parts'))
+        q=['parts','add','--catalogue',cat,'--id','q1','--kind','Q','--symbol','Transistor_BJT:BC547','--footprint','Package_TO_SOT_THT:TO-92_Inline']
+        r=run(*q);self.assertEqual(r.returncode,2);self.assertIn('explicit (model',r.stderr)  # NPN/PNP is never inferred
+        self.assertEqual(run(*q,'--model','ebers_moll.npn','--pinmap','collector=1,base=2,emitter=3').returncode,0)
         self.assertEqual(run('parts','remove','--catalogue',cat,'--id','d1').returncode,0)
         self.assertEqual(run('parts','remove','--catalogue',cat,'--id','d1').returncode,2)
     def fake_backend(self,body):

@@ -20,7 +20,7 @@ pin maps as DC and transient. No DC value is reused as an "AC magnitude".
    declares `(ac MAGNITUDE PHASE_DEG)`, which is valid only on V and I sources. A sweep with
    no non-zero excitation is rejected as `no_excitation` (INVALID_INPUT), because every
    response would be zero.
-3. **Operating point.** If any model sets `needs_operating_point` (today only the diode), the
+3. **Operating point.** If any model sets `needs_operating_point` (the diode and the transistors), the
    DC operating point is solved first. Failure gives `operating_point` (FAIL). Linear
    circuits skip it, so a node that only capacitors join (singular at DC) still has a
    well-defined response at f > 0.
@@ -49,6 +49,7 @@ pin maps as DC and transient. No DC value is reused as an "AC magnitude".
 | Voltage source | Branch row `V(+) − V(−) = E`, with E = `MAG∠PHASE` |
 | Current source | Phasor current leaves terminal p, passes through the source, enters n; right-hand side −I at p, +I at n (DC device convention) |
 | Diode | `g = dI/dV` of the same Shockley equation DC uses, at the solved operating point. The model stores no charge, so there is **no capacitive term** |
+| BJT, MOSFET | The 3×3 conductance matrix d(I)/d(V) at the operating point (`mna_bjt_evaluate`, `mna_mosfet_evaluate`); quasi-static, no capacitances (see NONLINEAR_MODELS.md) |
 
 For a general nonlinear DAE `F(x) + dq(x)/dt = 0` the small-signal matrix is
 `J_F + jω J_q`. Each model contributes its own `J_q` through `stamp_ac`; a capacitive term is

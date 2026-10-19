@@ -171,6 +171,86 @@ static int current_ac(MnaAcSystem *s, const size_t *n, const double *p, const De
     return 1;
 }
 
+/* ---- transistors (src/mna.c holds the equations; docs/engineering/NONLINEAR_MODELS.md) ---- */
+static const double ROOM_K = 300.0;
+
+/* Terminals 0 = collector, 1 = base, 2 = emitter; params is_a, beta_f, beta_r, nf, nr. */
+static MnaBjt bjt_params(const size_t *n, const double *p, int polarity)
+{
+    MnaBjt b = {n[0], n[1], n[2], polarity, p[0], p[1], p[2], p[3], p[4], ROOM_K};
+    return b;
+}
+
+/* Terminals 0 = drain, 1 = gate, 2 = source; params vto, kp, w, l, lambda. */
+static MnaMosfet mos_params(const size_t *n, const double *p, int polarity)
+{
+    MnaMosfet m = {n[0], n[1], n[2], polarity, p[0], p[1], p[2], p[3], p[4]};
+    return m;
+}
+
+static int npn_stamp(MnaCircuit *m, const size_t *n, const double *p, const DeviceStampContext *c)
+{
+    (void)c;
+    MnaBjt b = bjt_params(n, p, 1);
+    return mna_add_bjt(m, &b);
+}
+
+static int pnp_stamp(MnaCircuit *m, const size_t *n, const double *p, const DeviceStampContext *c)
+{
+    (void)c;
+    MnaBjt b = bjt_params(n, p, -1);
+    return mna_add_bjt(m, &b);
+}
+
+static int nmos_stamp(MnaCircuit *m, const size_t *n, const double *p, const DeviceStampContext *c)
+{
+    (void)c;
+    MnaMosfet t = mos_params(n, p, 1);
+    return mna_add_mosfet(m, &t);
+}
+
+static int pmos_stamp(MnaCircuit *m, const size_t *n, const double *p, const DeviceStampContext *c)
+{
+    (void)c;
+    MnaMosfet t = mos_params(n, p, -1);
+    return mna_add_mosfet(m, &t);
+}
+
+/* Quasi-static small-signal: the 3x3 conductance matrix d(I)/d(V) at the DC operating point. */
+static void stamp_conductance_matrix(MnaAcSystem *s, const size_t *n, double d[3][3])
+{
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) mna_ac_stamp_node_entry(s, n[i], n[j], cplx(d[i][j], 0.0));
+}
+
+static double op_voltage(const DeviceAcContext *c, size_t node) { return mna_node_voltage(c->operating_point, node); }
+
+static int bjt_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c, int polarity)
+{
+    if (!c->operating_point) return 0;
+    MnaBjt b = bjt_params(n, p, polarity);
+    MnaBjtEval e;
+    mna_bjt_evaluate(&b, op_voltage(c, n[0]), op_voltage(c, n[1]), op_voltage(c, n[2]), &e);
+    stamp_conductance_matrix(s, n, e.d);
+    return 1;
+}
+
+static int mos_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c, int polarity)
+{
+    if (!c->operating_point) return 0;
+    MnaMosfet t = mos_params(n, p, polarity);
+    MnaMosfetEval e;
+    mna_mosfet_evaluate(&t, op_voltage(c, n[0]), op_voltage(c, n[1]), op_voltage(c, n[2]), &e);
+    double d[3][3] = {{e.d_vd, e.d_vg, e.d_vs}, {0, 0, 0}, {-e.d_vd, -e.d_vg, -e.d_vs}};
+    stamp_conductance_matrix(s, n, d);
+    return 1;
+}
+
+static int npn_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c) { return bjt_ac(s, n, p, c, 1); }
+static int pnp_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c) { return bjt_ac(s, n, p, c, -1); }
+static int nmos_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c) { return mos_ac(s, n, p, c, 1); }
+static int pmos_ac(MnaAcSystem *s, const size_t *n, const double *p, const DeviceAcContext *c) { return mos_ac(s, n, p, c, -1); }
+
 /* ---- specs ---- */
 static const DeviceTerminal PASSIVE[] = {{"p", "passive terminal 1 (KiCad pin 1)", NULL},
                                          {"n", "passive terminal 2 (KiCad pin 2)", NULL}};
@@ -181,6 +261,27 @@ static const DeviceTerminal CURRENT[] = {{"p", "current leaves the network here 
 static const DeviceTerminal DIODE[] = {{"cathode", "cathode", "K|C|CATHODE|KATHODE"},
                                        {"anode", "anode", "A|ANODE"}};
 
+static const DeviceTerminal BJT[] = {{"collector", "collector", "C|COLLECTOR"},
+                                     {"base", "base", "B|BASE"},
+                                     {"emitter", "emitter", "E|EMITTER"}};
+static const DeviceTerminal MOS[] = {{"drain", "drain", "D|DRAIN"},
+                                     {"gate", "gate (no DC current)", "G|GATE"},
+                                     {"source", "source; the body is tied to it", "S|SOURCE"}};
+/* Defaults are the generic SPICE defaults, not datasheet values. Vto has no default: it defines the device. */
+static const DeviceParam EBERS_MOLL[] = {
+    {"is_a", DEVICE_UNIT_AMPERE, 1e-30, 1.0, 0, 1, 1e-16, "transport saturation current (SPICE default)"},
+    {"beta_f", DEVICE_UNIT_DIMENSIONLESS, 0.01, 1e5, 0, 1, 100.0, "forward common-emitter current gain (SPICE default)"},
+    {"beta_r", DEVICE_UNIT_DIMENSIONLESS, 0.001, 1e5, 0, 1, 1.0, "reverse common-emitter current gain (SPICE default)"},
+    {"nf", DEVICE_UNIT_DIMENSIONLESS, 0.1, 10.0, 0, 1, 1.0, "forward emission coefficient"},
+    {"nr", DEVICE_UNIT_DIMENSIONLESS, 0.1, 10.0, 0, 1, 1.0, "reverse emission coefficient"},
+};
+static const DeviceParam LEVEL1[] = {
+    {"vto", DEVICE_UNIT_VOLT, -100.0, 100.0, 0, 0, 0.0, "threshold voltage (negative for an enhancement PMOS); required"},
+    {"kp", DEVICE_UNIT_AMPERE_PER_VOLT2, 0.0, 1e3, 1, 1, 2e-5, "transconductance parameter (SPICE default)"},
+    {"w", DEVICE_UNIT_METRE, 0.0, 1.0, 1, 1, 1e-4, "channel width (SPICE default)"},
+    {"l", DEVICE_UNIT_METRE, 0.0, 1.0, 1, 1, 1e-4, "channel length (SPICE default)"},
+    {"lambda", DEVICE_UNIT_PER_VOLT, 0.0, 10.0, 0, 1, 0.0, "channel-length modulation"},
+};
 static const DeviceParam RESISTANCE[] = {{"resistance", DEVICE_UNIT_OHM, 0.0, 1e12, 1, 0, 0.0, "resistance"}};
 static const DeviceParam CAPACITANCE[] = {{"capacitance", DEVICE_UNIT_FARAD, 0.0, 1e12, 1, 0, 0.0, "capacitance"}};
 static const DeviceParam INDUCTANCE[] = {{"inductance", DEVICE_UNIT_HENRY, 0.0, 1e12, 1, 0, 0.0, "inductance"}};
@@ -194,6 +295,8 @@ static const DeviceParam SHOCKLEY[] = {
 
 #define COUNT(a) (sizeof a / sizeof a[0])
 #define ALL (DEVICE_CAP_DC | DEVICE_CAP_TRANSIENT | DEVICE_CAP_AC)
+#define BJT_ASSUMPTIONS                                                                                                 "First-order Ebers-Moll (transport form) at 300 K: no junction or diffusion charge (memoryless in transient; "      "AC is the quasi-static conductance matrix only), no Early effect, high injection, base/emitter/collector "         "resistance or breakdown. A learning/reference model, not Gummel-Poon."
+#define MOS_ASSUMPTIONS                                                                                               "Level-1 Shichman-Hodges with the body tied to the source: no body effect, subthreshold conduction, "              "gate/junction capacitance (memoryless in transient; AC is gm/gds only), mobility degradation or breakdown. "      "Symmetric channel: drain and source swap when Vds changes sign."
 
 static const DeviceModelSpec BUILTIN[] = {
     {"ideal.resistor", 2, "resistor", "Ideal linear resistor, V = I*R",
@@ -220,6 +323,15 @@ static const DeviceModelSpec BUILTIN[] = {
      "Infinite output impedance and unlimited compliance voltage; switched on at t=0+ in transient.",
      CURRENT, COUNT(CURRENT), CURRENT_PARAM, COUNT(CURRENT_PARAM), 0, ALL, 0, current_stamp, current_stamp, NULL,
      current_ac, 0, 1, 0},
+    {"ebers_moll.npn", 1, "bjt", "NPN bipolar transistor, first-order Ebers-Moll", BJT_ASSUMPTIONS,
+     BJT, COUNT(BJT), EBERS_MOLL, COUNT(EBERS_MOLL), -1, ALL, 0, npn_stamp, npn_stamp, NULL, npn_ac, 0, 0, 1},
+    {"ebers_moll.pnp", 1, "bjt", "PNP bipolar transistor, first-order Ebers-Moll (polarity transform of NPN)",
+     BJT_ASSUMPTIONS, BJT, COUNT(BJT), EBERS_MOLL, COUNT(EBERS_MOLL), -1, ALL, 0, pnp_stamp, pnp_stamp, NULL, pnp_ac, 0,
+     0, 1},
+    {"level1.nmos", 1, "mosfet", "N-channel MOSFET, Level-1 Shichman-Hodges", MOS_ASSUMPTIONS,
+     MOS, COUNT(MOS), LEVEL1, COUNT(LEVEL1), -1, ALL, 0, nmos_stamp, nmos_stamp, NULL, nmos_ac, 0, 0, 1},
+    {"level1.pmos", 1, "mosfet", "P-channel MOSFET, Level-1 Shichman-Hodges (polarity transform of NMOS)",
+     MOS_ASSUMPTIONS, MOS, COUNT(MOS), LEVEL1, COUNT(LEVEL1), -1, ALL, 0, pmos_stamp, pmos_stamp, NULL, pmos_ac, 0, 0, 1},
 };
 
 int model_registry_register_builtin_devices(ModelRegistry *registry, char *err, size_t cap)

@@ -59,7 +59,10 @@ typedef enum {
   DEVICE_UNIT_HENRY,
   DEVICE_UNIT_VOLT,
   DEVICE_UNIT_AMPERE,
-  DEVICE_UNIT_KELVIN
+  DEVICE_UNIT_KELVIN,
+  DEVICE_UNIT_METRE,
+  DEVICE_UNIT_AMPERE_PER_VOLT2, /* MOSFET transconductance parameter */
+  DEVICE_UNIT_PER_VOLT          /* channel-length modulation */
 } DeviceUnit;
 
 typedef enum {

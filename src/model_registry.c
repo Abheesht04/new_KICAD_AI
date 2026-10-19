@@ -251,13 +251,16 @@ const char *device_unit_symbol(DeviceUnit unit)
         case DEVICE_UNIT_VOLT:          return "V";
         case DEVICE_UNIT_AMPERE:        return "A";
         case DEVICE_UNIT_KELVIN:        return "K";
+        case DEVICE_UNIT_METRE:         return "m";
+        case DEVICE_UNIT_AMPERE_PER_VOLT2: return "A/V^2";
+        case DEVICE_UNIT_PER_VOLT:      return "1/V";
         default:                        return NULL;
     }
 }
 
 DeviceUnit device_unit_parse(const char *text)
 {
-    for (int u = DEVICE_UNIT_DIMENSIONLESS; u <= DEVICE_UNIT_KELVIN; ++u) {
+    for (int u = DEVICE_UNIT_DIMENSIONLESS; u <= DEVICE_UNIT_PER_VOLT; ++u) {
         const char *symbol = device_unit_symbol((DeviceUnit)u);
         if (text && symbol && strcmp(text, symbol) == 0) {
             return (DeviceUnit)u;

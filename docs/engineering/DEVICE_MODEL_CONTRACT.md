@@ -93,6 +93,10 @@ behaviour must come from the model's own charge or capacitance, never from a DC 
 | `shockley.diode` | D | cathode (1), anode (2) | is_a A [1e-30, 1] default 1e-14; ideality [0.1, 10] default 1 |
 | `ideal.voltage_source` | V | positive, negative | voltage V, [-1e12, 1e12], from `value` |
 | `ideal.current_source` | I | p, n | current A, [-1e12, 1e12], from `value` |
+| `ebers_moll.npn` / `.pnp` (v1) | Q | collector, base, emitter (explicit pin map) | is_a, beta_f, beta_r, nf, nr (SPICE defaults) |
+| `level1.nmos` / `.pmos` (v1) | M | drain, gate, source (explicit pin map) | vto (required), kp, w, l, lambda |
+
+Q and M parts must name their model; see [NONLINEAR_MODELS.md](NONLINEAR_MODELS.md).
 
 DC and transient equations are exactly those previously inlined in `project.c`; v2 added
 the AC stamps, so every built-in is now version 2:

@@ -49,9 +49,12 @@ void mna_ac_free(MnaAcSystem *sys);
 void mna_ac_clear(MnaAcSystem *sys);
 
 /* Stamp helpers. Nodes use the MNA numbering (0 = ground, skipped). branch is
- * 0-based among branch unknowns. Out-of-range indices are ignored and make
- * mna_ac_solve report MNA_AC_INVALID_ARGUMENT. */
+ * 0-based among branch unknowns. Out-of-range indices are not applied and make
+ * mna_ac_solve report MNA_AC_NON_FINITE. */
 void mna_ac_stamp_admittance(MnaAcSystem *sys, size_t node_a, size_t node_b, Cplx y);
+/* Adds v at (row node, column node); either being ground (0) is skipped. For multi-terminal
+ * linearisations such as transistor conductance matrices. */
+void mna_ac_stamp_node_entry(MnaAcSystem *sys, size_t row_node, size_t col_node, Cplx v);
 void mna_ac_stamp_branch(MnaAcSystem *sys, size_t node_a, size_t node_b, size_t branch);
 void mna_ac_add_branch_entry(MnaAcSystem *sys, size_t branch_row, size_t branch_col, Cplx v);
 void mna_ac_add_branch_rhs(MnaAcSystem *sys, size_t branch, Cplx v);

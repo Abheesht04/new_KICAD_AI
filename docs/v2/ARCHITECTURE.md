@@ -99,6 +99,8 @@ Supported model kinds:
 | V | Volts | Ideal source, pin 1 positive | Constant source applied at start |
 | I | Amperes | Current from pin 1 to pin 2 | Constant source applied at start |
 | J | Unused | Explicit connector boundary | Explicit connector boundary |
+| Q | Unused | Ebers-Moll NPN/PNP (explicit `model`) | Memoryless |
+| M | Unused | Level-1 NMOS/PMOS (explicit `model`) | Memoryless |
 | U | Unused | Unsupported; block solve | Unsupported; block solve |
 
 Each modelled kind binds a versioned device model (`copper-core models` lists them; see

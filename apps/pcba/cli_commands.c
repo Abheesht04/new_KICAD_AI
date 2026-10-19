@@ -210,8 +210,8 @@ static int run_parts_add(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArg
                                          {"--datasheet", "--datasheet"}, {"--model", "--model"},
                                          {"--pinmap", "--pinmap"}, {"--provenance", "--provenance"}};
     const char *kind = pcba_opt(cmd, a, "--kind");
-    if (strlen(kind) != 1 || !strchr("RCLDVIJU", kind[0]))
-        return pcba_usage_error(ctx, cmd, "--kind must be one of R C L D V I J U (got '%s')", kind);
+    if (strlen(kind) != 1 || !strchr("RCLDVIJUQM", kind[0]))
+        return pcba_usage_error(ctx, cmd, "--kind must be one of R C L D V I J U Q M (got '%s')", kind);
     int rc = check_numbers(ctx, cmd, a, ratings, POSITIVE);
     if (rc < 0) rc = check_numbers(ctx, cmd, a, fractions, NON_NEGATIVE);
     if (rc >= 0) return rc;
@@ -300,7 +300,7 @@ static const PcbaOption SEARCH_OPTIONS[] = {
 static const PcbaOption ADD_OPTIONS[] = {
     {"--catalogue", "FILE", 1, "Catalogue file to create or extend"},
     {"--id", "ID", 1, "Part identifier (letters, digits, _ . -)"},
-    {"--kind", "K", 1, "Model kind: R C L D V I J U"},
+    {"--kind", "K", 1, "Model kind: R C L D V I J U, Q (BJT) or M (MOSFET); Q/M need --model"},
     {"--symbol", "LIB:NAME", 0, "KiCad symbol, e.g. Device:R"},
     {"--footprint", "LIB:NAME", 0, "KiCad footprint, e.g. Resistor_SMD:R_0603_1608Metric"},
     {"--power", "W", 0, "Power rating from the datasheet; omit when unknown"},

@@ -91,7 +91,7 @@ static void test_registry(void)
     char err[256];
     model_registry_init(&reg);
     assert(model_registry_register_builtin_devices(&reg, err, sizeof err));
-    assert(model_registry_device_count(&reg) == 6);
+    assert(model_registry_device_count(&reg) == 10); /* 6 passives/sources/diode + NPN, PNP, NMOS, PMOS */
 
     /* Duplicate ids fail, whether built-in or user-supplied. */
     assert(!model_registry_register_builtin_devices(&reg, err, sizeof err));
@@ -105,15 +105,17 @@ static void test_registry(void)
     assert(model_registry_find_device(&reg, "no.such.model") == NULL);
 
     /* Every built-in declares DC, transient and (contract v2) AC; only the sources take AC excitation,
-     * only the diode needs an operating point, and V/L each need one branch unknown. */
-    for (size_t i = 0; i < 6; ++i) {
+     * the nonlinear diode and transistors need an operating point, and V/L each need one branch unknown. */
+    for (size_t i = 0; i < 10; ++i) {
         const DeviceModelSpec *m = model_registry_device_at(&reg, i);
         assert(device_model_validate_spec(m, err, sizeof err));
         assert(device_model_supports(m, DEVICE_ANALYSIS_DC));
         assert(device_model_supports(m, DEVICE_ANALYSIS_TRANSIENT));
-        assert(device_model_supports(m, DEVICE_ANALYSIS_AC) && m->stamp_ac && m->version == 2);
+        int transistor = !strcmp(m->family, "bjt") || !strcmp(m->family, "mosfet");
+        assert(device_model_supports(m, DEVICE_ANALYSIS_AC) && m->stamp_ac && m->version == (transistor ? 1u : 2u));
         assert(m->ac_excitation == (!strcmp(m->family, "voltage_source") || !strcmp(m->family, "current_source")));
-        assert(m->needs_operating_point == !strcmp(m->family, "diode"));
+        assert(m->needs_operating_point == (!strcmp(m->family, "diode") || transistor));
+        assert(m->terminal_count == (transistor ? 3u : 2u) && m->primary_param == (transistor || !strcmp(m->family, "diode") ? -1 : 0));
         assert(m->ac_branch_count == (size_t)(!strcmp(m->family, "voltage_source") || !strcmp(m->family, "inductor")));
     }
     assert(!device_model_supports(NULL, DEVICE_ANALYSIS_DC));

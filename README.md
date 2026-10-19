@@ -48,6 +48,9 @@ this is a source distribution, not a relocatable installer.
 - Inherited symbol resolution; explicit pin-to-pad matching; selected library snapshots in exports.
 - DC MNA: resistors, ideal voltage/current sources, Shockley diodes, capacitor open circuits,
   inductor shorts, and explicit connector boundaries. Unsupported active devices block analysis.
+- Reference transistor models: first-order Ebers-Moll NPN/PNP and Level-1 NMOS/PMOS (no charge
+  storage; see [NONLINEAR_MODELS.md](docs/engineering/NONLINEAR_MODELS.md)), with explicit models
+  and pin maps; never a claim of manufacturer-model fidelity.
 - R/C/L/diode/source transients using backward Euler, with zero initial stored energy.
 - Explicit current/power calculations, KCL/residual validation, rating derating and voltage targets.
 - Exhaustive corners for up to eight uncertain resistors; nonlinear corner results are sampled

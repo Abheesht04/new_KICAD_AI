@@ -165,10 +165,14 @@ class ModelContract(Base):
  def test_models_are_queryable(self):
   r=subprocess.run([CORE,'models'],capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);d=json.loads(r.stdout)
   self.assertEqual(d['contract_version'],2);models={m['id']:m for m in d['models']}
-  self.assertEqual(set(models),{'ideal.resistor','ideal.capacitor','ideal.inductor','shockley.diode','ideal.voltage_source','ideal.current_source'})
-  for m in models.values():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':True});self.assertEqual(m['version'],2);self.assertTrue(m['assumptions'])
+  self.assertEqual(set(models),{'ideal.resistor','ideal.capacitor','ideal.inductor','shockley.diode','ideal.voltage_source','ideal.current_source',
+                                'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos'})
+  transistors={'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos'}
+  for i,m in models.items():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':True});self.assertEqual(m['version'],1 if i in transistors else 2);self.assertTrue(m['assumptions'])
   self.assertEqual({i for i,m in models.items() if m['ac_excitation']},{'ideal.voltage_source','ideal.current_source'})
-  self.assertEqual({i for i,m in models.items() if m['needs_operating_point']},{'shockley.diode'})
+  self.assertEqual({i for i,m in models.items() if m['needs_operating_point']},{'shockley.diode'}|transistors)
+  self.assertEqual({p['name']:p['unit'] for p in models['level1.nmos']['params']},{'vto':'V','kp':'A/V^2','w':'m','l':'m','lambda':'1/V'})
+  self.assertIsNone(models['level1.nmos']['params'][0]['default'])  # Vto must be stated
   self.assertEqual([t['name'] for t in models['shockley.diode']['terminals']],['cathode','anode'])
   self.assertEqual(models['ideal.resistor']['params'][0],{'name':'resistance','unit':'ohm','minimum':0,'maximum':1e12,'min_exclusive':True,'default':None,'bound_to_value':True,'meaning':'resistance'})
  def test_report_binds_every_component(self):
@@ -330,6 +334,71 @@ class AcAnalysis(Base):
   self.assertEqual(header[2:],[f'{q}_{p}' for q in ('V(VIN)','V(OUT)','I(V1)') for p in ('re','im','mag','phase_deg')])
   freqs=[float(l.split(',')[0]) for l in r1.stdout.splitlines()[1:]];self.assertEqual(freqs,sorted(freqs));self.assertEqual((freqs[0],freqs[-1]),(1,1e5))
   self.assertNotIn('nan',r1.stdout.lower());self.assertNotIn('inf',r1.stdout.lower())
+VT=1.380649e-23*300/1.602176634e-19
+def ebers_moll(vc,vb,ve,Is=1e-16,bf=100.0,br=1.0):
+ """Independent NPN Ebers-Moll (transport form): currents into collector and base."""
+ i_f=Is*(math.exp((vb-ve)/VT)-1);i_r=Is*(math.exp((vb-vc)/VT)-1)
+ return i_f-i_r*(1+1/br),i_f/bf+i_r/br
+def level1(vgs,vds,vto,beta,lam):
+ """Independent NMOS Level-1 drain current for vds >= 0."""
+ vov=vgs-vto
+ if vov<=0:return 0.0
+ return beta*(vov*vds-vds*vds/2)*(1+lam*vds) if vds<vov else beta/2*vov*vov*(1+lam*vds)
+class Transistors(Base):
+ """Prompt 4: BJT/MOSFET on the project path, checked against equations re-implemented here."""
+ def project(self,nets,parts,components):
+  t=self.tree();t.remove(one(t,'targets'));one(t,'nets')[1:]=[A(n) for n in nets]
+  one(t,'parts').extend(parse_sexpr(p) for p in parts);one(t,'components')[1:]=[parse_sexpr(c) for c in components];return t
+ NPN='(part npn (kind Q) (model ebers_moll.npn) (symbol "Transistor_BJT:BC547") (footprint "Package_TO_SOT_THT:TO-92_Inline") (pinmap (collector 1) (base 2) (emitter 3)))'
+ def common_emitter(self,ac=''):
+  return self.project(['GND','VCC','VBB','B','C'],[self.NPN],['(component V1 (part voltage) (value 5) (pins (1 VCC) (2 GND)))',
+   f'(component V2 (part voltage) (value 5) {ac} (pins (1 VBB) (2 GND)))','(component RB (part resistor) (value 470000) (pins (1 VBB) (2 B)))',
+   '(component RC (part resistor) (value 1000) (pins (1 VCC) (2 C)))','(component Q1 (part npn) (pins (1 C) (2 B) (3 GND)))'])
+ def test_polarity_is_never_inferred(self):
+  t=self.common_emitter();p=part_named(t,'npn');p.remove(one(p,'model'))
+  self.assertIn('explicit (model',self.run_core(t).stderr)
+  t=self.common_emitter();one(part_named(t,'npn'),'model')[1]=A('level1.nmos');self.assertIn('is a mosfet',self.run_core(t).stderr)
+ def test_npn_common_emitter_dc(self):
+  rc,r=self.analyze(self.common_emitter());self.assertTrue(r['dc_solved'],r['issues'])
+  v={n['name']:n['voltage_v'] for n in r['nodes']};ic,ib=ebers_moll(v['C'],v['B'],0)
+  self.assertAlmostEqual((5-v['B'])/470000/ib,1,places=8);self.assertAlmostEqual((5-v['C'])/1000/ic,1,places=8)
+  self.assertGreater(v['C'],v['B']);self.assertAlmostEqual(ic/ib,100,places=4)  # forward active
+  q=next(c for c in r['components'] if c['ref']=='Q1');self.assertEqual(q['terminals'],{'collector':'1','base':'2','emitter':'3'})
+  self.assertEqual(q['params'],{'is_a':1e-16,'beta_f':100,'beta_r':1,'nf':1,'nr':1})  # documented SPICE defaults
+ def test_npn_small_signal_gain(self):
+  t=self.common_emitter('(ac 0.001 0)');rc,r=self.analyze(t);v={n['name']:n['voltage_v'] for n in r['nodes']}
+  def d(i,k,h=1e-7):  # central differences of the independent model
+   up=[v['C'],v['B']];dn=list(up);up[k]+=h;dn[k]-=h;return (ebers_moll(up[0],up[1],0)[i]-ebers_moll(dn[0],dn[1],0)[i])/(2*h)
+  # KCL with Vcc AC-grounded: B: (vb - vin)/Rb + Ib_b vb + Ib_c vc = 0 ; C: vc/Rc + Ic_b vb + Ic_c vc = 0
+  a11,a12,a21,a22=1/470000+d(1,1),d(1,0),d(0,1),1/1000+d(0,0);vin=1e-3
+  det=a11*a22-a12*a21;vb=(vin/470000*a22)/det;vc=(-a21*vin/470000)/det
+  p=self.dir/'ce.copper';copper.write_tree(p,t);out=subprocess.run([CORE,'ac',str(p),'1000','1000','1'],capture_output=True,text=True)
+  self.assertEqual(out.returncode,0,out.stderr);row=next(csv.DictReader(io.StringIO(out.stdout)))
+  self.assertAlmostEqual(float(row['V(C)_re'])/vc,1,places=5);self.assertAlmostEqual(float(row['V(B)_re'])/vb,1,places=5)
+  # Inverting; from the base the gain is -gm*Rc with gm = Ic/Vt (no Early effect in this model).
+  ic,_=ebers_moll(v['C'],v['B'],0);self.assertAlmostEqual(float(row['V(C)_re'])/float(row['V(B)_re'])/(-ic/VT*1000),1,places=3)
+ def test_nmos_and_pmos_dc(self):
+  mos='(part {n} (kind M) (model level1.{n}) (symbol "Transistor_FET:2N7002") (footprint "Package_TO_SOT_SMD:SOT-23") (pinmap (gate 1) (source 2) (drain 3)) (vto {vto}) (kp 1e-3) (w 1e-6) (l 1e-6) (lambda 0.02))'
+  t=self.project(['GND','VDD','G','D'],[mos.format(n='nmos',vto=1)],['(component V1 (part voltage) (value 5) (pins (1 VDD) (2 GND)))',
+   '(component V2 (part voltage) (value 3) (pins (1 G) (2 GND)))','(component RD (part resistor) (value 1000) (pins (1 VDD) (2 D)))',
+   '(component M1 (part nmos) (pins (1 G) (2 GND) (3 D)))'])
+  rc,r=self.analyze(t);v={n['name']:n['voltage_v'] for n in r['nodes']};self.assertTrue(r['dc_solved'])
+  self.assertAlmostEqual(v['D'],3/1.04,places=9);self.assertAlmostEqual((5-v['D'])/1000,level1(3,v['D'],1,1e-3,0.02),places=12)
+  t=self.project(['GND','VDD','G','D'],[mos.format(n='pmos',vto=-1)],['(component V1 (part voltage) (value 5) (pins (1 VDD) (2 GND)))',
+   '(component V2 (part voltage) (value 2) (pins (1 G) (2 GND)))','(component RD (part resistor) (value 1000) (pins (1 D) (2 GND)))',
+   '(component M1 (part pmos) (pins (1 G) (2 VDD) (3 D)))'])
+  rc,r=self.analyze(t);v={n['name']:n['voltage_v'] for n in r['nodes']};self.assertTrue(r['dc_solved'])
+  self.assertAlmostEqual(v['D']/1000,level1(3,5-v['D'],1,1e-3,0.02),places=12)  # PMOS = NMOS on negated voltages
+  t=self.project(['GND','VDD','G','D'],[mos.format(n='nmos',vto=1).replace(' (vto 1)','')],['(component V1 (part voltage) (value 5) (pins (1 VDD) (2 GND)))',
+   '(component M1 (part nmos) (pins (1 VDD) (2 GND) (3 D)))'])
+  self.assertIn("requires parameter 'vto'",self.run_core(t).stderr)  # threshold has no default
+ def test_bjt_pin_swap_is_caught(self):
+  specs=copper.model_specs(CORE);pins=[parse_sexpr(f'(pin passive line (at 0 0 0) (length 2) (name "{n}") (number "{i}"))') for i,n in [('1','C'),('2','B'),('3','E')]]
+  good={'model':{'id':'ebers_moll.npn'},'terminals':{'collector':'1','base':'2','emitter':'3'}}
+  copper.check_terminal_pin_names('Q1',good,specs['ebers_moll.npn'],pins)
+  swapped={'model':{'id':'ebers_moll.npn'},'terminals':{'collector':'2','base':'1','emitter':'3'}}
+  with self.assertRaises(copper.InvalidInput) as caught:copper.check_terminal_pin_names('Q1',swapped,specs['ebers_moll.npn'],pins)
+  self.assertIn('swapped',str(caught.exception))
 class V2Native(Base):
  """Needs installed KiCad libraries (KICAD_SYMBOL_DIR/KICAD_FOOTPRINT_DIR); gates also need KiCad 9.x CLI."""
  def libraries(self):

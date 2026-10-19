@@ -59,8 +59,10 @@ static const char *keep(CpProject *p,const char *s) {
 /* Device family per part kind. J (ideal boundary) and U (unmodelled) never bind a device model. */
 static const char *kind_family(char kind) {
     switch(kind) { case 'R': return "resistor"; case 'C': return "capacitor"; case 'L': return "inductor";
-    case 'D': return "diode"; case 'V': return "voltage_source"; case 'I': return "current_source"; default: return NULL; }
+    case 'D': return "diode"; case 'V': return "voltage_source"; case 'I': return "current_source";
+    case 'Q': return "bjt"; case 'M': return "mosfet"; default: return NULL; }
 }
+/* Q and M have no default: NPN/PNP and N/P channel are never inferred. */
 static const char *kind_default_model(char kind) {
     switch(kind) { case 'R': return "ideal.resistor"; case 'C': return "ideal.capacitor"; case 'L': return "ideal.inductor";
     case 'D': return "shockley.diode"; case 'V': return "ideal.voltage_source"; case 'I': return "ideal.current_source"; default: return NULL; }
@@ -93,7 +95,7 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     memset(out,0,sizeof *out);
     if(strcmp(txt(part,0),"part") || !id_ok(id)) return errorf(e,cap,"Invalid part definition %s",id);
     const char *kind=field(part,"kind");
-    if(strlen(kind)!=1 || !strchr("RCLDVIJU",*kind)) return errorf(e,cap,"part %s: unknown kind '%s'",id,kind);
+    if(strlen(kind)!=1 || !strchr("RCLDVIJUQM",*kind)) return errorf(e,cap,"part %s: unknown kind '%s'",id,kind);
     out->kind=*kind;
     const IRNode *model=ir_list_find(part,"model");
     if(model) {
@@ -104,6 +106,8 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     } else if(kind_default_model(out->kind)) {
         out->model=model_registry_find_device(&p->models,kind_default_model(out->kind)); out->model_source="kind_default";
         if(!out->model) return errorf(e,cap,"built-in device model %s is not registered",kind_default_model(out->kind));
+    } else if(kind_family(out->kind)) {
+        return errorf(e,cap,"part %s: kind %c needs an explicit (model ...); polarity is never inferred",id,out->kind);
     } else out->model_source="none";
     /* Identity and data fields, plus the bound model's non-primary parameters; anything else is rejected. */
     char allowed[640]="|kind||symbol||footprint||power_w||voltage_v||tolerance||height_mm||manufacturer||mpn||datasheet||model||pinmap||provenance||catalogue|";
@@ -529,7 +533,12 @@ int cp_analyze(const CpProject *p,FILE *f) {
     if(solved) {
         for(size_t i=0;i<p->component_count;i++) {
             const CpComponent *c=&p->components[i]; if(!c->model||c->kind=='V'||c->kind=='I') continue;
+            /* Two-terminal: the branch voltage. More terminals: the largest terminal-to-terminal voltage. */
             double v=terminal_voltage(c,&result);
+            for(size_t a=0;a<c->model->terminal_count;a++) for(size_t b=a+1;b<c->model->terminal_count;b++) {
+                double d=mna_node_voltage(&result,c->nodes[c->terminal_pin[a]])-mna_node_voltage(&result,c->nodes[c->terminal_pin[b]]);
+                if(c->model->terminal_count>2 && fabs(d)>fabs(v)) v=d;
+            }
             if(!c->voltage_v.known) issue(&r,1,"rating_unknown",c->ref,0,0,"Voltage rating not supplied by catalogue; not verified.");
             else if(fabs(v)>c->voltage_v.value*p->voltage_derating) issue(&r,2,"voltage_derating",c->ref,fabs(v),c->voltage_v.value*p->voltage_derating,"Operating voltage exceeds derated rating.");
             if(c->kind=='R') {

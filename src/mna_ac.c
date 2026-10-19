@@ -67,6 +67,11 @@ void mna_ac_stamp_admittance(MnaAcSystem *sys, size_t node_a, size_t node_b, Cpl
     }
 }
 
+void mna_ac_stamp_node_entry(MnaAcSystem *sys, size_t row_node, size_t col_node, Cplx v)
+{
+    if (row_node && col_node) add(sys, row_node - 1, col_node - 1, v);
+}
+
 void mna_ac_stamp_branch(MnaAcSystem *sys, size_t node_a, size_t node_b, size_t branch)
 {
     size_t k = sys->node_count + branch;
