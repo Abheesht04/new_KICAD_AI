@@ -5,7 +5,7 @@ places/routes candidate geometry, emits native KiCad files, and runs native gate
 No shell execution, network requests, or LLM engineering decisions.
 """
 from __future__ import annotations
-import argparse, contextlib, copy, csv, hashlib, heapq, io, json, math, os, re, shutil, subprocess, sys, uuid
+import argparse, contextlib, copy, csv, hashlib, io, json, math, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path
 from hwc_kicad import (Atom as A, Quoted as Q, parse_sexpr, dump_sexpr, direct, one,
                       head, text_at, discover_symbol_dir, discover_footprint_dir, discover_cli)
@@ -291,70 +291,22 @@ def footprint_geometry(c,fpdir,netids,stem,ncnets=None):
     return fp,pads,geo,keepouts
 
 def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6,keepouts=()):
-    """Deterministic 2-layer Manhattan A* candidate router, with bounded search.
-    Conservative obstacle envelopes; C exact geometry and KiCad DRC judge result.
-    """
-    grid=.25;nx=round(width/grid);ny=round(height/grid);traces=[];vias=[];occupied=[{},{}]
-    radius=trace_width/2+clearance
-    def node(p):return (round(p['x']/grid),round(p['y']/grid),0)
-    def blocked(x,y,z,net,via=False):
-        xx,yy=x*grid,y*grid;r=(via_diameter/2+clearance) if via else radius
-        if min(xx,yy,width-xx,height-yy)<edge+r:return True
-        for k in keepouts:  # footprint rule areas: tracks (and vias) stay out, with clearance
-            if k['flags']&(2 if via else 1) and (k['layers']&(3 if via else 1<<z)) and k['x1']-r<xx<k['x2']+r and k['y1']-r<yy<k['y2']+r:return True
-        for p in pads:
-            # A via never lands on a drilled pad, even of its own net: the holes would overlap.
-            if via and p['through'] and abs(xx-p['x'])<=p['w']/2+r and abs(yy-p['y'])<=p['h']/2+r:return True
-            if p['net']==net or (z==1 and not p['through']):continue
-            if abs(xx-p['x'])<=p['w']/2+r and abs(yy-p['y'])<=p['h']/2+r:return True
-        reach=math.ceil((r+trace_width/2)/grid)
-        for a in range(x-reach,x+reach+1):
-            for b in range(y-reach,y+reach+1):
-                other=occupied[z].get((a,b))
-                if other and other!=net and math.hypot(a-x,b-y)*grid<r+trace_width/2:return True
-        for vx,vy,vnet in vias:
-            if vnet!=net and math.hypot(xx-vx,yy-vy)<r+via_diameter/2:return True
-        return False
-    nets=sorted({p['net'] for p in pads}-{'~'})  # '~': no-connect pads are obstacles, never routed
-    for net in nets:
-        # Stacked pads of one pin (e.g. a thermal pad's copies) are joined by the footprint; route one of them.
-        targets=list({(p['ref'],p['pin']):p for p in reversed([p for p in pads if p['net']==net])}.values())[::-1]
-        if len(targets)<2:continue
-        joined=[targets.pop(0)]
-        while targets:
-            _,i,j=min((abs(a['x']-b['x'])+abs(a['y']-b['y']),i,j) for i,a in enumerate(joined) for j,b in enumerate(targets))
-            a,b=joined[i],targets.pop(j);start,goal=node(a),node(b)
-            if blocked(*start,net) or blocked(*goal,net):raise Failed(f'Cannot escape pad on net {net}; edit placement or constraints')
-            heap=[(0,0,start)];cost={start:0};prev={};found=False
-            while heap:
-                _,g,u=heapq.heappop(heap)
-                if g!=cost[u]:continue
-                if u==goal:found=True;break
-                if len(cost)>250000:break
-                x,y,z=u
-                for v,extra in [((x+1,y,z),1),((x-1,y,z),1),((x,y+1,z),1),((x,y-1,z),1),((x,y,1-z),20)]:
-                    xx,yy,zz=v
-                    if not (0<=xx<=nx and 0<=yy<=ny) or blocked(xx,yy,zz,net):continue
-                    if zz!=z and (blocked(x,y,z,net,True) or blocked(x,y,zz,net,True)):continue
-                    ng=g+extra
-                    if ng<cost.get(v,1e30):cost[v]=ng;prev[v]=u;h=abs(xx-goal[0])+abs(yy-goal[1])+(20 if zz!=goal[2] else 0);heapq.heappush(heap,(ng+h,ng,v))
-            if not found:raise Failed(f'Router could not connect {net}; no route is claimed')
-            path=[goal]
-            while path[-1]!=start:path.append(prev[path[-1]])
-            path.reverse()
-            for x,y,z in path:occupied[z][x,y]=net
-            # Compress collinear grid runs to avoid thousands of segments.
-            points=[path[0]]
-            for k in range(1,len(path)-1):
-                d1=tuple(path[k][q]-path[k-1][q] for q in range(3));d2=tuple(path[k+1][q]-path[k][q] for q in range(3))
-                if d1!=d2:points.append(path[k])
-            if len(path)>1:points.append(path[-1])
-            traces.append((net,a['x'],a['y'],start[0]*grid,start[1]*grid,trace_width,0))
-            for u,v in zip(points,points[1:]):
-                if u[2]!=v[2]:vias.append((u[0]*grid,u[1]*grid,net))
-                else:traces.append((net,u[0]*grid,u[1]*grid,v[0]*grid,v[1]*grid,trace_width,0 if u[2]==0 else 2))
-            traces.append((net,goal[0]*grid,goal[1]*grid,b['x'],b['y'],trace_width,0));joined.append(b)
-    return [t for t in traces if math.hypot(t[1]-t[3],t[2]-t[4])>1e-9],sorted(set(vias))
+    """The build's router (tools/layout.py): deterministic 2-layer Manhattan A* with rip-up/reroute.
+    Conservative obstacle envelopes; C exact geometry and KiCad DRC judge the result. A connection that
+    cannot be routed fails the build: no partial route is claimed."""
+    import layout
+    traces,vias,stats=layout.route_with_ripup(pads,width,height,trace_width,clearance,edge,via_diameter,keepouts)
+    if stats['unrouted']:
+        u=stats['unrouted'][0]
+        if u['reason']=='pad_escape':raise Failed(f"Cannot escape pad on net {u['net']}; edit placement or constraints")
+        raise Failed(f"Router could not connect {u['net']} ({u['connection']}, {u['reason']}); no route is claimed")
+    return traces,vias
+def core_check(tree,core=None):
+    """copper-core analysis of an in-memory project (written to a private temporary file)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path=Path(d)/'candidate.copper';write_tree(path,tree);report,_=core_run(path,core)
+    return report
 
 def rule(tree,key,default):return float(text_at(one(tree,'rules'),key,default=str(default)))
 def export_project(args):
@@ -780,6 +732,56 @@ def part_import(args):
         print(f'Status: {status}'+(f'; merged into {args.into}' if written else '; nothing written' if target else ''))
     elif args.format=='json':print(json.dumps(args.outcome['data'],indent=2))
     return 0 if status=='PASS' else 2
+def layout_command(args):
+    """place: staged placement search; route: route the project's own placement. Both re-check every candidate
+    with copper-core; only a candidate with no hard violation and no unrouted connection is written."""
+    import layout
+    project=Path(existing(args.project)).resolve();tree=load(project)
+    try:fpdir=discover_footprint_dir(args.footprint_dir)
+    except FileNotFoundError as exc:raise ToolUnavailable(str(exc).splitlines()[0]) from exc
+    if args.command=='place':
+        seeds=tuple(int(s) for s in args.seeds.split(','))
+        if not seeds or args.iterations<0 or args.iterations>100000:raise InvalidInput('--seeds needs integers and --iterations 0..100000')
+        best,candidates,problem=layout.optimize(tree,fpdir,args.core,seeds,args.iterations)
+    else:
+        problem=layout.problem_from(tree,fpdir)
+        missing=[c['ref'] for c in problem['components'] if c['ref'] not in problem['given']]
+        if missing:raise InvalidInput(f'route needs an (at ...) placement for every part; missing: {", ".join(missing)} (run place first)')
+        best=layout.evaluate(tree,problem,dict(problem['given']),fpdir,args.core,0,'given placement');candidates=[best]
+    feasible=bool(best and best['feasible'])
+    status='PASS' if feasible else 'UNVERIFIED' if best and not best['judged'] else 'FAIL'
+    data={'project':str(project),'feasible':feasible,'chosen':layout.brief(best),'candidates':[layout.brief(c) for c in candidates],
+          'placement_failures':problem.get('placement_failures',[]),'weights':layout.WEIGHTS,'written':None}
+    if feasible:
+        out=Path(args.out)
+        if args.command=='place':
+            placed=copy.deepcopy(best['resolved']);placed[:]=[v for v in placed if not (isinstance(v,list) and head(v)=='geometry')]
+            width=best['width_rounds'][-1]['trace_width_mm']
+            if width!=problem['trace_width']:  # the widened copper becomes the project's (stricter) trace width
+                rules=one(placed,'rules')
+                if not rules:rules=sx('rules');placed.append(rules)
+                rules[:]=[v for v in rules if not (isinstance(v,list) and head(v)=='trace_width_mm')]+[sx('trace_width_mm',number(width))]
+            if out.exists() and not args.force:raise InvalidInput(f'{out} exists; use --force to replace it')
+            write_tree(out,placed);data['written']=str(out.resolve())
+        else:
+            out.mkdir(parents=True,exist_ok=True);write_tree(out/'routed.copper',best['resolved']);data['written']=str((out/'routed.copper').resolve())
+    if args.command=='route' or args.report:
+        report=Path(args.report) if args.report else Path(args.out)/'layout.json'
+        report.parent.mkdir(parents=True,exist_ok=True);report.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8');data['report']=str(report.resolve())
+    c=data['chosen']
+    message='' if feasible else ('no feasible board was found' if args.command=='place' else 'the given placement is not feasible')+(
+        f": best candidate '{c['label']}' has {c['hard_violations']} hard violation(s) {c['hard_by_rule']} and {c['unrouted']} unrouted connection(s); no board was written" if c else
+        ': no legal placement: '+'; '.join(data['placement_failures']))
+    args.outcome.update(status=status,message=message,data=data)
+    if args.format=='human':
+        for cand in data['candidates']:
+            mark='*' if c and cand['label']==c['label'] else ' '
+            print(f"{mark} {cand['label']:<38} {'feasible' if cand['feasible'] else 'INFEASIBLE':<10} hard={cand['hard_violations']:<3} unrouted={cand['unrouted']:<3} "
+                  f"length={cand['length_mm']:.2f} mm vias={cand['vias']} bends={cand['bends']} width={cand['trace_width_mm']:.2f} mm soft={cand['soft_score']:.2f}")
+        for f in data['placement_failures']:print(f'  PLACEMENT {f}')
+        print(f'Status: {status}'+(f" -> {data['written']}" if data['written'] else '')+(f'; {message}' if message else ''))
+    elif args.format=='json':print(json.dumps(data,indent=2))
+    return 0 if feasible else 2
 def spec_outcome(args,spec,parse_errors=()):
     """Validate an EngineeringSpec (tools/spec_ir.py) and record status: errors INVALID_INPUT, open questions UNVERIFIED."""
     import spec_ir
@@ -831,6 +833,7 @@ def run_command(args):
     o=args.outcome;fmt=args.format
     if args.command.startswith('spec-'):return spec_command(args)
     if args.command=='part-import':return part_import(args)
+    if args.command in ('place','route'):return layout_command(args)
     if args.command=='new':rc=new_project(args);o['data']={'path':str(Path(args.out).resolve())};return rc
     if args.command=='check':
         report,rc=core_run(existing(args.project),args.core);scopes=report_scopes(report)
@@ -924,6 +927,8 @@ def main(argv=None):
     p=sub.add_parser('part-add',help='Unknown ratings are omitted, never written as 0');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJUQM'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float);p.add_argument('--voltage',type=float);p.add_argument('--tolerance',type=float);p.add_argument('--height',type=float);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
     p.add_argument('--model',help='device model id (copper-core models); default: the kind default');p.add_argument('--pinmap',help='terminal=symbol_pin,... e.g. cathode=1,anode=2');p.add_argument('--provenance',default='',help='where the ratings come from');p.add_argument('--core')
     p=sub.add_parser('part-remove');p.add_argument('--file',required=True);p.add_argument('--id',required=True)
+    p=sub.add_parser('place',help='staged placement search with exact re-check (docs/engineering/LAYOUT.md)');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--seeds',default='1,2,3');p.add_argument('--iterations',type=int,default=1500);p.add_argument('--report');p.add_argument('--footprint-dir');p.add_argument('--force',action='store_true');p.add_argument('--core')
+    p=sub.add_parser('route',help='route the project placement with rip-up/reroute and exact re-check');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--report');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('part-import',help='validate a catalogue against copper-core and the native KiCad libraries; --into merges it');p.add_argument('file');p.add_argument('--into');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')

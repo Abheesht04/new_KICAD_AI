@@ -312,7 +312,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     if(!p->root) return errorf(e,cap,"Parse at %zu:%zu: %s",ie.line,ie.column,ie.message?ie.message:"I/O failure");
     const IRNode *root=p->root;
     if(strcmp(txt(root,0),"copper_project") || strcmp(field(root,"version"),"2")) return errorf(e,cap,"Expected (copper_project (version 2) ...)");
-    if(!fields(root,1,"|version||name||nets||parts||components||board||rules||geometry||targets|",e,cap)) return 0;
+    if(!fields(root,1,"|version||name||nets||parts||components||board||rules||geometry||targets||keepouts|",e,cap)) return 0;
     p->name=field(root,"name");
     const IRNode *nets=ir_list_find(root,"nets");
     if(ir_list_length(nets)<2 || strcmp(txt(nets,1),"GND")) return errorf(e,cap,"nets must begin with GND");
@@ -337,7 +337,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     for(size_t i=1;i<ir_list_length(cs);i++) {
         const IRNode *n=ir_child_at(cs,i); PartInfo info; char why[256];
         if(p->component_count==CP_MAX_COMPONENTS || strcmp(txt(n,0),"component") || !id_ok(txt(n,1)) || comp_index(p,txt(n,1))!=SIZE_MAX) return errorf(e,cap,"Invalid/duplicate component %s",txt(n,1));
-        if(!fields(n,2,"|part||value||pins||at||override||ac||nc||drive|",e,cap)) return 0;
+        if(!fields(n,2,"|part||value||pins||at||override||ac||nc||drive||fixed|",e,cap)) return 0;
         const IRNode *part=ir_list_find_named(parts,"part",field(n,"part"));
         if(!part) return errorf(e,cap,"%s: part '%s' is not in catalogue",txt(n,1),field(n,"part"));
         if(!read_part(p,part,&info,e,cap)) return 0;
@@ -403,6 +403,20 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     for(size_t i=1;i<ir_list_length(targets);i++) {
         const IRNode *n=ir_child_at(targets,i); double lo,hi;
         if(strcmp(txt(n,0),"voltage") || ir_list_length(n)!=4 || net_index(p,txt(n,1))==SIZE_MAX || !num(n,2,&lo) || !num(n,3,&hi) || lo>hi) return errorf(e,cap,"Invalid voltage target");
+    }
+    /* Board-level keepout areas: (keepouts (area X1 Y1 X2 Y2 LAYERS FLAGS) ...); they have no owner component. */
+    const IRNode *areas=ir_list_find(root,"keepouts");
+    for(size_t i=1;i<ir_list_length(areas);i++) {
+        const IRNode *a=ir_child_at(areas,i); double v[6];
+        for(size_t k=0;k<6;k++) if(ir_list_length(a)!=7 || !num(a,k+1,&v[k]) || fabs(v[k])>500) return errorf(e,cap,"keepouts entries are (area X1 Y1 X2 Y2 LAYERS FLAGS)");
+        if(strcmp(txt(a,0),"area") || p->keepout_count==CP_MAX_KEEPOUTS || v[0]>=v[2] || v[1]>=v[3] || v[4]!=(int)v[4] || v[4]<1 || v[4]>3 || v[5]!=(int)v[5] || v[5]<1 || v[5]>15)
+            return errorf(e,cap,"Invalid board keepout: (area X1 Y1 X2 Y2 LAYERS FLAGS) with X1<X2, Y1<Y2, LAYERS 1..3, FLAGS 1..15");
+        p->keepouts[p->keepout_count++]=(CpKeepout){SIZE_MAX,v[0],v[1],v[2],v[3],(unsigned)v[4],(unsigned)v[5]};
+    }
+    for(size_t i=0;i<p->component_count;i++) {
+        const IRNode *fixed=ir_list_find(ir_list_find_named(cs,"component",p->components[i].ref),"fixed");
+        if(fixed && (ir_list_length(fixed)!=1 || !ir_list_find(ir_list_find_named(cs,"component",p->components[i].ref),"at")))
+            return errorf(e,cap,"%s: (fixed) takes no arguments and needs an (at ...) placement",p->components[i].ref);
     }
     const IRNode *geo=ir_list_find(root,"geometry"); p->has_geometry=geo!=NULL;
     for(size_t i=1;i<ir_list_length(geo);i++) {
@@ -595,7 +609,8 @@ static void keepout_checks(const CpProject *p,Report *r) {
         issue(r,2,"dfm_engine","keepout",0,0,"Keepout layer mapping failed."); return;
     }
     for(size_t k=0;k<p->keepout_count;k++) {
-        const CpKeepout *ko=&p->keepouts[k]; const char *owner=p->components[ko->component].ref;
+        const CpKeepout *ko=&p->keepouts[k]; const char *owner=ko->component==SIZE_MAX?"board":p->components[ko->component].ref; char area[96];
+        snprintf(area,sizeof area,ko->component==SIZE_MAX?"a board keepout area":"the keepout area of %s's footprint",owner);
         CopperLayerMask layers=(ko->layers&1?front:0)|(ko->layers&2?back:0);
         CopperItem zone=rect_item(ko->x1,ko->y1,ko->x2,ko->y2,layers,COPPER_NET_NONE);
         snprintf(object,sizeof object,"keepout:%s",owner);
@@ -608,7 +623,7 @@ static void keepout_checks(const CpProject *p,Report *r) {
             if(pcb_copper_item(b,groups[g].kind,i,&item)!=PCB_COPPER_OK) { issue(r,2,"keepout_unverified",object,0,0,"A copper object could not be compared with the keepout."); continue; }
             CopperResult v=copper_pair_check(&zone,&item,0);
             if(v==COPPER_RESULT_SHORT) {
-                snprintf(msg,sizeof msg,"A %s enters the keepout area of %s's footprint.",groups[g].what,owner);
+                snprintf(msg,sizeof msg,"A %s enters %s.",groups[g].what,area);
                 issue(r,2,"keepout_violation",object,(double)i,0,msg);
             } else if(v==COPPER_RESULT_UNVERIFIED || v==COPPER_RESULT_INVALID_INPUT) issue(r,2,"keepout_unverified",object,(double)i,0,"A copper object could not be compared with the keepout.");
         }
@@ -617,7 +632,7 @@ static void keepout_checks(const CpProject *p,Report *r) {
             if(a->component_id==ko->component) continue;
             CopperItem body=rect_item(a->x_mm-a->width_mm/2,a->y_mm-a->height_mm/2,a->x_mm+a->width_mm/2,a->y_mm+a->height_mm/2,front|back,COPPER_NET_NONE);
             if(copper_pair_check(&zone,&body,0)==COPPER_RESULT_SHORT) {
-                snprintf(msg,sizeof msg,"%s's assembly envelope enters the keepout area of %s's footprint.",p->components[a->component_id].ref,owner);
+                snprintf(msg,sizeof msg,"%s's assembly envelope enters %s.",p->components[a->component_id].ref,area);
                 issue(r,2,"keepout_violation",object,(double)i,0,msg);
             }
         }

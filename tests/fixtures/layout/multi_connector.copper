@@ -1,0 +1,91 @@
+; Layout fixture: three connectors whose nets cross (A and B swap ends), so routing needs both layers.
+; The given placement is a plausible hand placement; it is the baseline.
+(copper_project
+  (version 2)
+  (name "multi_connector")
+  (nets GND A B C D)
+  (board 40 30 1.6 0.035 2)
+  (parts
+    (part
+      resistor
+      (kind R)
+      (symbol "Device:R")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      voltage
+      (kind V)
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      header3
+      (kind J)
+      (symbol "Connector_Generic:Conn_01x03")
+      (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
+      (catalogue "bundled:default.parts")
+    )
+  )
+  (components
+    (component
+      V1
+      (part voltage)
+      (value 3.3)
+      (pins
+        (1 C)
+        (2 GND)
+      )
+      (at 0 0 0)
+    )
+    (component
+      R1
+      (part resistor)
+      (value 1000)
+      (pins
+        (1 C)
+        (2 D)
+      )
+      (at 20 22 0)
+    )
+    (component
+      R2
+      (part resistor)
+      (value 1000)
+      (pins
+        (1 D)
+        (2 GND)
+      )
+      (at 28 22 0)
+    )
+    (component
+      J1
+      (part header3)
+      (pins
+        (1 A)
+        (2 C)
+        (3 B)
+      )
+      (at 6 8 0)
+    )
+    (component
+      J2
+      (part header3)
+      (pins
+        (1 B)
+        (2 GND)
+        (3 A)
+      )
+      (at 34 8 0)
+    )
+    (component
+      J3
+      (part header3)
+      (pins
+        (1 D)
+        (2 GND)
+        (3 C)
+      )
+      (at 20 8 0)
+    )
+  )
+)

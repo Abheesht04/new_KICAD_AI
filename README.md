@@ -96,6 +96,12 @@ directions, thresholds, current limits, strapping, reset and programming pins, c
 silicon are not simulated. See [PART_REGISTRY.md](docs/engineering/PART_REGISTRY.md) and
 `examples/v2/esp32_io.copper`.
 
+`pcba place FILE --out placed.copper` searches placements deterministically (constructive placement, seeded
+annealing, rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core
+finds no hard violation; otherwise it reports why no feasible board exists. `pcba route FILE --out DIR` routes a
+given placement with the same exact re-check. See [LAYOUT.md](docs/engineering/LAYOUT.md) and the measured
+[LAYOUT_BENCHMARK.md](docs/engineering/LAYOUT_BENCHMARK.md).
+
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 
 ```sh

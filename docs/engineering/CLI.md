@@ -40,11 +40,11 @@ reach the child unchanged.
 | `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
 | `pcba spec lower <file.espec> --out F.copper` | stable | `copper.py spec-lower` → loaded by `copper-core analyze` before publishing |
 | `pcba parts import <catalogue-file> [--into FILE]` | stable | `copper.py part-import` (copper-core schema + KiCad library parity; docs/engineering/PART_REGISTRY.md) |
-| `pcba place <file.copper>` | NOT_IMPLEMENTED (Prompt 8) | — |
-| `pcba route <file.copper>` | NOT_IMPLEMENTED (Prompt 8; routing runs inside `project build`) | — |
+| `pcba place <file.copper> --out FILE` | stable | `copper.py place` → `tools/layout.py` (docs/engineering/LAYOUT.md) |
+| `pcba route <file.copper> --out DIR` | stable | `copper.py route` → `tools/layout.py` |
 
-Planned commands are listed separately in `pcba --help`, validate their arguments, and exit 4
-without doing anything.
+Every command is implemented. The NOT_IMPLEMENTED mechanism remains: a planned command is listed
+separately in `pcba --help`, validates its arguments, and exits 4 without doing anything.
 
 ## Mapping from earlier entry points
 

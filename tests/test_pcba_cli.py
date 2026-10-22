@@ -16,8 +16,8 @@ FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
         'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library scan','dfm check',
-        'spec parse','spec check','spec lower','parts import'}
-PLANNED={'place','route'}
+        'spec parse','spec check','spec lower','parts import','place','route'}
+PLANNED=set()  # every command is implemented; the NOT_IMPLEMENTED mechanism stays for future stages
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
 
 def clean_env(**extra):
@@ -54,7 +54,8 @@ class Help(Base):
         self.assertEqual({c['command'] for c in commands if c['stability']=='NOT_IMPLEMENTED'},PLANNED)
         for c in commands:self.assertIn(c['usage'],r.stdout);self.assertIn(c['summary'],r.stdout)
         for status,code in EXIT.items():self.assertRegex(r.stdout,rf'\b{code}\s+{status}\b')
-        self.assertIn('Planned, NOT_IMPLEMENTED',r.stdout)
+        if PLANNED:self.assertIn('Planned, NOT_IMPLEMENTED',r.stdout)
+        else:self.assertNotIn('Planned, NOT_IMPLEMENTED',r.stdout)
     def test_every_command_has_help_with_examples(self):
         for command in STABLE|PLANNED:
             words=command.split();r=run('help',*words);self.assertEqual(r.returncode,0,command)
@@ -102,12 +103,17 @@ class Usage(Base):
                      ['spec','check','nope.espec'],['spec','lower','nope.espec','--out','o.copper'],['spec','parse','--file','nope.txt'],['parts','import','nope.parts']]:
             r=run(*argv,cwd=self.dir);self.assertEqual(r.returncode,2,argv);self.assertIn('not found',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json',cwd=self.dir))['status'],'INVALID_INPUT')
-    def test_planned_commands_are_not_implemented(self):
-        f=ROOT/'examples/v2/rc.copper'
-        for argv in [['place',f],['route',f]]:
-            r=run(*argv);self.assertEqual(r.returncode,4,argv);self.assertIn('NOT_IMPLEMENTED',r.stdout)
-            self.assertEqual(envelope(self,run(*argv,'--json'))['status'],'NOT_IMPLEMENTED')
-        self.assertEqual(run('place').returncode,64)  # interface is still validated
+    def test_layout_commands(self):
+        f=ROOT/'tests/fixtures/layout/high_current.copper';fp=ROOT/'examples/generated/divider/libraries/footprints';out=self.dir/'placed.copper'
+        doc=envelope(self,run('place',f,'--out',out,'--footprints',fp,'--iterations','50','--seeds','1','--json'))
+        self.assertEqual(doc['status'],'PASS');self.assertTrue(out.is_file());self.assertTrue(doc['result']['data']['chosen']['feasible'])
+        doc=envelope(self,run('route',out,'--out',self.dir/'r','--footprints',fp,'--json'))
+        self.assertEqual(doc['status'],'PASS');self.assertTrue((self.dir/'r/routed.copper').is_file());self.assertTrue((self.dir/'r/layout.json').is_file())
+        doc=envelope(self,run('route',ROOT/'tests/fixtures/layout/unroutable.copper','--out',self.dir/'u','--footprints',fp,'--json'))
+        self.assertEqual(doc['status'],'FAIL');self.assertIn('unrouted',doc['message']);self.assertFalse((self.dir/'u/routed.copper').exists())
+        self.assertEqual(run('place').returncode,64)
+        for bad in (['--iterations','-1'],['--iterations','x'],['--seeds','1,,2'],['--seeds','a']):
+            self.assertEqual(run('place',f,'--out',out,*bad).returncode,64,bad)
 
 class Spec(Base):
     DIVIDER='A 5 V supply on VIN. A 10k resistor from VIN to OUT and a 20k resistor from OUT to GND. OUT must be 3.333 V +/- 2%.'

@@ -56,14 +56,6 @@ static int check_numbers(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArg
     return -1;
 }
 
-static int run_planned(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
-    char message[256], path[64];
-    (void)a;
-    pcba_command_path(cmd, path, sizeof path);
-    snprintf(message, sizeof message, "'pcba %s' is planned (%s); nothing was run", path, cmd->planned);
-    return pcba_finish(ctx, path, "NOT_IMPLEMENTED", message, NULL);
-}
-
 static int run_help(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     (void)cmd;
     return pcba_help(ctx, (int)a->positional_count, (char **)a->positional);
@@ -277,6 +269,31 @@ static int run_parts_import(PcbaContext *ctx, const PcbaCommand *cmd, const Pcba
     return backend(ctx, cmd, &b);
 }
 
+/* place | route: tools/layout.py through copper.py; copper-core judges every candidate. */
+static int run_layout(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const place_map[][2] = {{"--out", "--out"}, {"--seeds", "--seeds"}, {"--iterations", "--iterations"},
+                                               {"--report", "--report"}, {"--footprints", "--footprint-dir"}, {"--force", "--force"}};
+    static const char *const route_map[][2] = {{"--out", "--out"}, {"--report", "--report"}, {"--footprints", "--footprint-dir"}};
+    int place = !strcmp(cmd->name, "place"), rc = missing_file(ctx, cmd, a->positional[0], 0);
+    if (rc >= 0) return rc;
+    if (place) {
+        const char *seeds = pcba_opt(cmd, a, "--seeds"), *iterations = pcba_opt(cmd, a, "--iterations");
+        long n;
+        if (iterations && !pcba_parse_count(iterations, 0, 100000, &n))
+            return pcba_usage_error(ctx, cmd, "--iterations must be an integer from 0 to 100000 (got '%s')", iterations);
+        for (const char *s = seeds; s && *s; ++s)
+            if (!strchr("0123456789,", *s) || (*s == ',' && (s == seeds || s[1] == ',' || !s[1])))
+                return pcba_usage_error(ctx, cmd, "--seeds must be comma-separated integers (got '%s')", seeds);
+        if (seeds && !*seeds) return pcba_usage_error(ctx, cmd, "--seeds must not be empty");
+    }
+    Bargs b = {{0}, 0};
+    push(&b, cmd->name);
+    push(&b, a->positional[0]);
+    if (place) pass(&b, cmd, a, place_map, sizeof place_map / sizeof place_map[0]);
+    else pass(&b, cmd, a, route_map, sizeof route_map / sizeof route_map[0]);
+    return backend(ctx, cmd, &b);
+}
+
 static int run_library_scan(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     static const char *const map[][2] = {{"--symbols", "--symbol-dir"}, {"--footprints", "--footprint-dir"},
                                          {"--out", "--out"}};
@@ -364,6 +381,19 @@ static const PcbaOption ADD_OPTIONS[] = {
 static const PcbaOption REMOVE_OPTIONS[] = {
     {"--catalogue", "FILE", 1, "Catalogue file to edit (the bundled default is read-only)"},
     {"--id", "ID", 1, "Part identifier to remove"},
+};
+static const PcbaOption PLACE_OPTIONS[] = {
+    {"--out", "FILE", 1, "The placed .copper project to write (only when a feasible board is found)"},
+    {"--seeds", "LIST", 0, "Comma-separated annealing seeds (default 1,2,3)"},
+    {"--iterations", "N", 0, "Annealing iterations per seed, 0..100000 (default 1500)"},
+    {"--report", "FILE", 0, "Write every candidate's hard and soft terms as JSON"},
+    {"--footprints", "DIR", 0, "KiCad footprint library directory (default: KICAD_FOOTPRINT_DIR or installed KiCad)"},
+    {"--force", NULL, 0, "Replace an existing --out file"},
+};
+static const PcbaOption ROUTE_OPTIONS[] = {
+    {"--out", "DIR", 1, "Directory for layout.json and, when feasible, routed.copper"},
+    {"--report", "FILE", 0, "Write the layout report here instead of DIR/layout.json"},
+    {"--footprints", "DIR", 0, "KiCad footprint library directory (default: KICAD_FOOTPRINT_DIR or installed KiCad)"},
 };
 static const PcbaOption IMPORT_OPTIONS[] = {
     {"--into", "FILE", 0, "User catalogue to merge into (created if missing; the bundled default is read-only)"},
@@ -502,13 +532,23 @@ static const PcbaCommand COMMANDS[] = {
      "Writes JSON and CSV inventories of every symbol and footprint in the selected KiCad libraries.",
      "pcba library scan\npcba library scan --symbols /usr/share/kicad/symbols --footprints /usr/share/kicad/footprints",
      OPTS(SCAN_OPTIONS), NULL, run_library_scan},
-    {NULL, "place", "<file.copper>", 1, 1, "Automatic component placement",
-     "There is no placement optimizer yet; placements come from (at x y rotation) in the project.",
-     "pcba place board.copper", NONE, "Prompt 8: placement and routing optimization", run_planned},
-    {NULL, "route", "<file.copper>", 1, 1, "Standalone routing",
-     "Routing currently runs inside 'pcba project build' (deterministic two-layer A* candidate). A standalone, "
-     "optimizing router does not exist yet.",
-     "pcba route board.copper", NONE, "Prompt 8: placement and routing optimization", run_planned},
+    {NULL, "place", "<file.copper>", 1, 1, "Search placements; write the best feasible one",
+     "Deterministic staged search: the project's own placement (when complete), a constructive placement that "
+     "respects the outline, edge clearance, courtyard gap and keepouts, and one seeded simulated-annealing "
+     "result per seed. Every candidate is routed (rip-up/reroute, traces widened for explicit current budgets) "
+     "and re-checked by copper-core. The best is chosen by hard violations, then unrouted connections, then the "
+     "soft score; a soft gain never outweighs a hard violation. Parts marked (fixed) do not move. Exit 1 (FAIL) "
+     "when no feasible board was found; nothing is written then. Not a claim of global optimality.",
+     "pcba place board.copper --out placed.copper\npcba place board.copper --out placed.copper --seeds 1,2,3,4 "
+     "--iterations 3000 --report place.json",
+     OPTS(PLACE_OPTIONS), NULL, run_layout},
+    {NULL, "route", "<file.copper>", 1, 1, "Route the project's placement and re-check it exactly",
+     "Routes every net with the deterministic two-layer A* router and rip-up/reroute, widens traces for "
+     "explicit current budgets, and re-checks the board with copper-core. Writes DIR/layout.json (per-net "
+     "effort, length, bends, vias, unrouted connections, congestion, DFM findings) and, only when the board is "
+     "feasible, DIR/routed.copper. An unroutable board is FAIL with its unrouted connections, never a partial "
+     "pass.",
+     "pcba route placed.copper --out out/route", OPTS(ROUTE_OPTIONS), NULL, run_layout},
     {"dfm", "check", "<file-or-build-dir>", 1, 1, "Run physical DFM checks on a board",
      "Runs the exact-geometry DFM rules on a .copper file with board geometry or on a build directory "
      "(resolved.copper). Without geometry the result is UNVERIFIED, never PASS.",

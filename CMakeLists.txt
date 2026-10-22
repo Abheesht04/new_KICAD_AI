@@ -205,6 +205,10 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # ESP32 module and MOSFET variant through PCB generation and KiCad 9.x gates. Exit 77 = skipped (UNVERIFIED).
   add_test(NAME parts_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_parts.py $<TARGET_FILE:copper-core> Native)
   set_tests_properties(parts_native PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME layout_optimizer COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_layout.py $<TARGET_FILE:copper-core> Router Selection Fixtures)
+  # Fixtures needing footprints outside the committed snapshot. Exit 77 = skipped (UNVERIFIED).
+  add_test(NAME layout_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_layout.py $<TARGET_FILE:copper-core> Libraries)
+  set_tests_properties(layout_native PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME pcba_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_pcba_cli.py
            $<TARGET_FILE:pcba> $<TARGET_FILE:hwc> $<TARGET_FILE:copper-core>)
   set_tests_properties(pcba_cli PROPERTIES SKIP_RETURN_CODE 77)
