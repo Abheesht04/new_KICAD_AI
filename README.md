@@ -80,7 +80,14 @@ pcba project check examples/v2/divider.copper
 pcba project build examples/v2/divider.copper --out out/divider
 pcba project verify --out out/divider        # KiCad 9.x ERC/DRC/parity; PASS only if everything ran
 pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv
+pcba spec parse "a 5 V supply on VIN, a 10k resistor from VIN to OUT, a 20k resistor from OUT to GND" --out d.espec
+pcba spec lower d.espec --out d.copper      # only a complete spec (no errors, no open questions)
 ```
+
+`pcba spec` is the V2 requirements frontend: constrained English or a hand-written `.espec`
+file becomes an EngineeringSpec with units and provenance, missing decisions become
+clarification questions, and a complete spec is handed to the compiler as a `.copper`
+project. See [ENGINEERING_SPEC.md](docs/engineering/ENGINEERING_SPEC.md).
 
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 

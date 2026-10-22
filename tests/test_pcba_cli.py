@@ -15,7 +15,8 @@ FIX_SYM=ROOT/'examples/generated/divider/libraries/symbols'
 FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
-        'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library scan','dfm check'}
+        'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library scan','dfm check',
+        'spec parse','spec check','spec lower'}
 PLANNED={'parts import','place','route'}
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
 
@@ -88,7 +89,8 @@ class Usage(Base):
                 ['simulate','ac',rc,'--start','1','--stop','10','--points','0'],['simulate','ac',rc,'--start','1','--stop','10','--points','1'],
                 ['simulate','ac',rc,'--start','nan','--stop','10','--points','3','--sweep','lin'],['simulate','ac',rc,'--start','1','--stop','10','--points','3','--sweep','cubic'],
                 ['dfm','check'],['library','scan','extra'],['doctor','extra'],['test','--quick','--full'],['test','--bogus'],
-                ['version','extra'],['help','no-such-command']]
+                ['version','extra'],['help','no-such-command'],['spec','parse'],['spec','parse','a 1k resistor','--file','f.txt'],
+                ['spec','check'],['spec','lower','x.espec']]
         for argv in cases:
             r=run(*argv,cwd=self.dir);self.assertEqual(r.returncode,64,f'{argv}: {r.stdout}{r.stderr}')
             self.assertEqual(r.stdout,'',argv);self.assertIn('error',r.stderr,argv)
@@ -96,7 +98,8 @@ class Usage(Base):
         self.assertEqual(list(self.dir.iterdir()),[],'usage errors must not create files')
     def test_missing_inputs_are_invalid_input(self):
         for argv in [['project','check','nope.copper'],['simulate','dc','nope.copper'],['dfm','check','nope'],['project','verify','--out','no_build_dir'],
-                     ['project','build','nope.copper','--out','o'],['parts','search','r','--catalogue','nope.parts'],['parts','remove','--catalogue','nope.parts','--id','x']]:
+                     ['project','build','nope.copper','--out','o'],['parts','search','r','--catalogue','nope.parts'],['parts','remove','--catalogue','nope.parts','--id','x'],
+                     ['spec','check','nope.espec'],['spec','lower','nope.espec','--out','o.copper'],['spec','parse','--file','nope.txt']]:
             r=run(*argv,cwd=self.dir);self.assertEqual(r.returncode,2,argv);self.assertIn('not found',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json',cwd=self.dir))['status'],'INVALID_INPUT')
     def test_planned_commands_are_not_implemented(self):
@@ -105,6 +108,31 @@ class Usage(Base):
             r=run(*argv);self.assertEqual(r.returncode,4,argv);self.assertIn('NOT_IMPLEMENTED',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json'))['status'],'NOT_IMPLEMENTED')
         self.assertEqual(run('place').returncode,64)  # interface is still validated
+
+class Spec(Base):
+    DIVIDER='A 5 V supply on VIN. A 10k resistor from VIN to OUT and a 20k resistor from OUT to GND. OUT must be 3.333 V +/- 2%.'
+    def test_parse_check_lower_statuses(self):
+        espec=self.dir/'d.espec';copper_file=self.dir/'d.copper'
+        doc=envelope(self,run('spec','parse',self.DIVIDER,'--out',espec,'--json'));self.assertEqual(doc['status'],'PASS',doc)
+        self.assertEqual(len(doc['result']['data']['fingerprint']),64);self.assertTrue(espec.is_file())
+        self.assertEqual(envelope(self,run('spec','check',espec,'--json'))['result']['data']['fingerprint'],doc['result']['data']['fingerprint'])
+        r=run('spec','lower',espec,'--out',copper_file);self.assertEqual(r.returncode,0,r.stdout+r.stderr);self.assertIn('accepted by copper-core',r.stdout)
+        self.assertEqual(run('simulate','dc',copper_file).returncode,0)
+        self.assertEqual(run('spec','lower',espec,'--out',copper_file).returncode,2,'an existing --out needs --force')
+    def test_questions_are_unverified_and_unknown_text_invalid(self):
+        doc=envelope(self,run('spec','parse','use an ESP32 module. GPIO2 drives the LED. a red LED from OUT to GND','--json'))
+        self.assertEqual(doc['status'],'UNVERIFIED');self.assertIn('U1.variant',[q['field'] for q in doc['result']['data']['questions']])
+        doc=envelope(self,run('spec','parse','a 10k resistor from VIN to GND, make it sparkle','--json'))
+        self.assertEqual(doc['status'],'INVALID_INPUT');self.assertIn('make it sparkle',doc['message'])
+        self.assertEqual(run('spec','parse','a 0 ohm resistor from VIN to GND').returncode,2)
+    def test_incomplete_spec_is_never_lowered(self):
+        espec=self.dir/'q.espec';out=self.dir/'q.copper'
+        self.assertEqual(run('spec','parse','a 5 V supply on VIN. a capacitor from VIN to GND','--out',espec).returncode,3)
+        self.assertEqual(run('spec','lower',espec,'--out',out).returncode,3);self.assertFalse(out.exists())
+        led=self.dir/'led.espec'
+        self.assertEqual(run('spec','parse','a 5 V supply on VIN. a 1k resistor from VIN to SIG. a red LED from SIG to GND','--out',led).returncode,0)
+        doc=envelope(self,run('spec','lower',led,'--out',out,'--json'));self.assertEqual(doc['status'],'UNVERIFIED')
+        self.assertIn('no bundled catalogue part',doc['message']);self.assertFalse(out.exists())
 
 class Output(Base):
     def test_colour_policy(self):

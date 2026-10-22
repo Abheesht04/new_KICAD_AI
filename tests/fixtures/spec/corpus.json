@@ -1,0 +1,177 @@
+{
+ "_comment": "Constrained-English corpus for tests/test_spec.py. status: PASS (complete), UNVERIFIED (open questions listed by field), INVALID_INPUT (error substrings). same_as: a hand-written .espec with the same fingerprint.",
+ "cases": [
+  {
+   "name": "divider",
+   "text": "Name: divider. A 5 V supply V1 on VIN. R1 is a 10k 1% 0603 resistor from VIN to OUT. R2 is a 20k resistor in 0603 package from OUT to GND. OUT must be between 3.2 V and 3.4 V. The board is 40 x 30 mm with 2 layers. Run a DC analysis. Run an AC sweep from 10 Hz to 100 kHz with 50 points.",
+   "status": "PASS",
+   "same_as": "divider.espec"
+  },
+  {
+   "name": "divider reordered with aliases",
+   "text": "Run an AC sweep from 10Hz to 0.1MHz with 50 points; simulate dc. Board: 40 mm x 30 mm, two layers. The voltage at OUT should stay within 3.2 V and 3.4V. R2 is a 20 kohm 0603 resistor between OUT and ground. R1 is a 10000 ohm 1% resistor in 0603 package from VIN to OUT. V1 is a 5V supply on VIN. Name: divider",
+   "status": "PASS",
+   "same_as": "divider.espec"
+  },
+  {
+   "name": "rc filter with unicode units",
+   "text": "A 3V3 supply on VDD. A 4k7 resistor R1 from VDD to OUT. A 100 nF capacitor C1 between OUT and GND. Transient with step 1 µs for 1 ms using trapezoidal.",
+   "status": "PASS"
+  },
+  {
+   "name": "micro sign and ohm sign",
+   "text": "a 2.2 μF capacitor between VIN and GND, a 1 kΩ resistor between VIN and GND, a 1.5 V supply on VIN",
+   "status": "PASS"
+  },
+  {
+   "name": "missing capacitor value",
+   "text": "a 5 V supply on VIN. a capacitor C1 between VIN and GND",
+   "status": "UNVERIFIED",
+   "questions": [
+    "C1.value"
+   ]
+  },
+  {
+   "name": "esp32 family only",
+   "text": "Use an ESP32 module. GPIO2 drives the LED. A red LED from OUT to GND.",
+   "status": "UNVERIFIED",
+   "questions": [
+    "U1.variant"
+   ]
+  },
+  {
+   "name": "esp32 exact module",
+   "text": "U1 is an ESP32-WROOM-32E module. U1 GPIO2 drives D1. D1 is a green LED from IO2 to GND.",
+   "status": "PASS"
+  },
+  {
+   "name": "two mcus, gpio without owner",
+   "text": "an ESP32-WROOM-32E module U1. an RP2040 chip U2. GPIO5 drives the LED. a red LED from SIG to GND",
+   "status": "UNVERIFIED",
+   "questions": [
+    "gpio.GPIO5"
+   ]
+  },
+  {
+   "name": "usb power is ambiguous",
+   "text": "a USB power input. a 1k resistor from VBUS to GND",
+   "status": "UNVERIFIED",
+   "questions": [
+    "power.input"
+   ]
+  },
+  {
+   "name": "powered by without a voltage",
+   "text": "The board is powered by a battery. a 1k resistor from VBAT to GND",
+   "status": "UNVERIFIED",
+   "questions": [
+    "power.input"
+   ]
+  },
+  {
+   "name": "diode polarity",
+   "text": "a 5 V supply on VIN. a diode D1 between VIN and OUT. a 1k resistor from OUT to GND",
+   "status": "UNVERIFIED",
+   "questions": [
+    "D1.polarity"
+   ]
+  },
+  {
+   "name": "missing ground",
+   "text": "a 5 V supply V1 between VIN and VNEG. a 1k resistor from VIN to VNEG",
+   "status": "UNVERIFIED",
+   "questions": [
+    "nets.GND"
+   ]
+  },
+  {
+   "name": "zero ohm resistor",
+   "text": "a 0 ohm resistor between VIN and GND",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "must be greater than zero"
+   ]
+  },
+  {
+   "name": "nan and inf",
+   "text": "a NaN ohm resistor between VIN and GND. an inf F capacitor between VIN and GND",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "nan is not a finite number",
+    "inf is not a finite number"
+   ]
+  },
+  {
+   "name": "negative capacitance",
+   "text": "a -1uF capacitor between VIN and GND",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "must be greater than zero"
+   ]
+  },
+  {
+   "name": "unit mismatch",
+   "text": "a 10 V resistor between VIN and GND",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "unit V where ohm is required"
+   ]
+  },
+  {
+   "name": "invalid terminal",
+   "text": "a 1k resistor R1. R1 pin 3 to VIN",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "has no terminal '3'"
+   ]
+  },
+  {
+   "name": "contradictory connection",
+   "text": "a 1k resistor R1 from VIN to GND. R1 pin 1 to OUT",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "connected to both"
+   ]
+  },
+  {
+   "name": "undeclared reference",
+   "text": "R7 pin 1 to VIN",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "R7 is not declared"
+   ]
+  },
+  {
+   "name": "wrong reference prefix",
+   "text": "C1 is a 10k resistor between VIN and GND",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "reference starts with R"
+   ]
+  },
+  {
+   "name": "unrecognized text",
+   "text": "a 1k resistor between VIN and GND. make it blink nicely",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "make it blink nicely"
+   ]
+  },
+  {
+   "name": "requirement on an unknown net",
+   "text": "a 5 V supply on VIN. a 1k resistor between VIN and GND. OUT must be at least 1 V",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "unknown net OUT"
+   ]
+  },
+  {
+   "name": "empty",
+   "text": "   ",
+   "status": "INVALID_INPUT",
+   "errors": [
+    "empty"
+   ]
+  }
+ ]
+}

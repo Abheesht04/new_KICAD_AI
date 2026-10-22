@@ -192,6 +192,36 @@ static int run_ac(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     return backend(ctx, cmd, &b);
 }
 
+/* spec parse | check | lower: EngineeringSpec frontend and compiler handoff (docs/engineering/ENGINEERING_SPEC.md). */
+static int run_spec(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const parse_map[][2] = {{"--file", "--file"}, {"--out", "--out"}, {"--force", "--force"}};
+    static const char *const lower_map[][2] = {{"--out", "--out"}, {"--catalogue", "--catalogue"}, {"--force", "--force"}};
+    int rc;
+    Bargs b = {{0}, 0};
+    if (!strcmp(cmd->name, "parse")) {
+        const char *file = pcba_opt(cmd, a, "--file");
+        if ((a->positional_count == 1) == (file != NULL))
+            return pcba_usage_error(ctx, cmd, "give the description as one quoted argument or with --file, not both");
+        if (file && (rc = missing_file(ctx, cmd, file, 0)) >= 0) return rc;
+        push(&b, "spec-parse");
+        if (a->positional_count) push(&b, a->positional[0]);
+        pass(&b, cmd, a, parse_map, sizeof parse_map / sizeof parse_map[0]);
+        return backend(ctx, cmd, &b);
+    }
+    if ((rc = missing_file(ctx, cmd, a->positional[0], 0)) >= 0) return rc;
+    if (!strcmp(cmd->name, "check")) {
+        push(&b, "spec-check");
+        push(&b, a->positional[0]);
+        return backend(ctx, cmd, &b);
+    }
+    const char *catalogue = pcba_opt(cmd, a, "--catalogue");
+    if (catalogue && (rc = missing_file(ctx, cmd, catalogue, 0)) >= 0) return rc;
+    push(&b, "spec-lower");
+    push(&b, a->positional[0]);
+    pass(&b, cmd, a, lower_map, sizeof lower_map / sizeof lower_map[0]);
+    return backend(ctx, cmd, &b);
+}
+
 static int run_parts_search(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     const char *catalogue = pcba_opt(cmd, a, "--catalogue");
     int rc;
@@ -329,6 +359,16 @@ static const PcbaOption SCAN_OPTIONS[] = {
     {"--footprints", "DIR", 0, "KiCad footprint library directory"},
     {"--out", "DIR", 0, "Where to write the inventories (default out/library)"},
 };
+static const PcbaOption SPEC_PARSE_OPTIONS[] = {
+    {"--file", "FILE", 0, "Read the description from a UTF-8 text file instead of the argument"},
+    {"--out", "FILE", 0, "Write the EngineeringSpec (.espec); open questions are recorded in it"},
+    {"--force", NULL, 0, "Replace an existing --out file"},
+};
+static const PcbaOption SPEC_LOWER_OPTIONS[] = {
+    {"--out", "FILE", 1, "The .copper project to write"},
+    {"--catalogue", "FILE", 0, "Part catalogue overlay (default: the spec's catalogue profile, then the bundled one)"},
+    {"--force", NULL, 0, "Replace an existing --out file"},
+};
 static const PcbaOption TEST_OPTIONS[] = {
     {"--quick", NULL, 0, "C unit tests only (default)"},
     {"--full", NULL, 0, "Every registered test, including Python, KiCad-library and CLI suites"},
@@ -400,6 +440,24 @@ static const PcbaCommand COMMANDS[] = {
      "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv\n"
      "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --method trap", OPTS(TRANSIENT_OPTIONS),
      NULL, run_transient},
+    {"spec", "parse", "[\"text\"]", 0, 1, "Turn a constrained-English description into an EngineeringSpec",
+     "Deterministic frontend (no model, no network): reads components, values with SI prefixes and units, "
+     "connections, GPIO intent, requirements, board size and analyses. Unknown text is INVALID_INPUT; a missing "
+     "decision (a value, a terminal, an exact MCU variant, the supply) is a clarification question and the result is "
+     "UNVERIFIED. Every value not read verbatim is marked inferred or defaulted.",
+     "pcba spec parse \"a 5 V supply on VIN, a 10k resistor from VIN to OUT, a 20k resistor from OUT to GND\" "
+     "--out divider.espec\npcba spec parse --file request.txt --json",
+     OPTS(SPEC_PARSE_OPTIONS), NULL, run_spec},
+    {"spec", "check", "<file.espec>", 1, 1, "Validate an EngineeringSpec and print its fingerprint and questions",
+     "Checks a hand-written or generated .espec against schema version 1: roles, units, values, terminals, nets, "
+     "requirements and analyses. Reports the order-independent semantic fingerprint, open questions and every "
+     "inferred or defaulted value.",
+     "pcba spec check divider.espec", NONE, NULL, run_spec},
+    {"spec", "lower", "<file.espec>", 1, 1, "Hand a complete EngineeringSpec to the compiler as a .copper project",
+     "Only a spec with no errors and no open questions is lowered. Each component binds a catalogue part (its "
+     "(part ID), or the bundled generic part for its role); a role with no part is UNVERIFIED. The written project "
+     "is loaded by copper-core before it is published. No placement is invented.",
+     "pcba spec lower divider.espec --out divider.copper", OPTS(SPEC_LOWER_OPTIONS), NULL, run_spec},
     {"parts", "search", "<query>", 1, 1, "Search a part catalogue",
      "Case-insensitive substring search over catalogue entries (IDs, kinds, symbols, footprints, ratings).",
      "pcba parts search resistor\npcba parts search 0603 --catalogue custom.parts", OPTS(SEARCH_OPTIONS), NULL,

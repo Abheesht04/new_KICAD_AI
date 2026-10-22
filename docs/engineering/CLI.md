@@ -36,6 +36,9 @@ reach the child unchanged.
 | `pcba parts remove --catalogue FILE --id ID` | stable | `copper.py part-remove` |
 | `pcba library scan` | stable | `copper.py library-scan` (reuses `hwc_kicad.py` indexers) |
 | `pcba dfm check <file-or-build-dir>` | stable | `copper.py dfm` |
+| `pcba spec parse ["text"] [--file F] [--out F.espec]` | stable | `copper.py spec-parse` (`tools/spec_nlp.py`) |
+| `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
+| `pcba spec lower <file.espec> --out F.copper` | stable | `copper.py spec-lower` → loaded by `copper-core analyze` before publishing |
 | `pcba parts import <catalogue-file>` | NOT_IMPLEMENTED (Prompt 7) | — |
 | `pcba place <file.copper>` | NOT_IMPLEMENTED (Prompt 8) | — |
 | `pcba route <file.copper>` | NOT_IMPLEMENTED (Prompt 8; routing runs inside `project build`) | — |
@@ -51,7 +54,7 @@ without doing anything.
 | `copper.py transient … --out` | `pcba simulate transient` | `--out` is now optional in both (CSV on stdout) |
 | `copper.py catalogue --search` | `pcba parts search` | |
 | `copper.py part-add` | `pcba parts add` | `--file` is `--catalogue` in pcba |
-| `copper.py classify` | not exposed | old language classifier; the charter forbids building V2 NLP on it. Still in `copper-core classify` |
+| `copper.py classify` | not exposed | old language classifier; the charter forbids building V2 NLP on it. Still in `copper-core classify`. The V2 frontend is `pcba spec parse` (docs/engineering/ENGINEERING_SPEC.md), a new implementation |
 | `hwc_kicad.py catalog` + `footprints` | `pcba library scan` | same JSON/CSV format |
 | `hwc_kicad.py doctor` | `pcba doctor` | |
 | `hwc_kicad.py search/search-footprint/generate/validate/custom-symbol/name` | not exposed | V1 helpers; still runnable directly |

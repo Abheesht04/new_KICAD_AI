@@ -10,6 +10,8 @@ from pathlib import Path
 from hwc_kicad import (Atom as A, Quoted as Q, parse_sexpr, dump_sexpr, direct, one,
                       head, text_at, discover_symbol_dir, discover_footprint_dir, discover_cli)
 ROOT=Path(__file__).resolve().parents[1]
+# One module identity when run as a script, so spec_ir's `import copper` shares these exception classes.
+sys.modules.setdefault('copper',sys.modules[__name__])
 NS=uuid.UUID('aa7c164c-f2ec-5244-b7eb-6726f0ee52d8')
 # Build statuses. Any analysis warning means required data was missing (unknown rating,
 # height or geometry), so the build is UNVERIFIED rather than PASS.
@@ -624,8 +626,56 @@ def ac_sweep(args):
     elif args.format=='json':sys.stdout.write(result.stdout)
     if rule:raise AC_RULE_OUTCOME[rule](message[3:])
     return 0
+def spec_outcome(args,spec,parse_errors=()):
+    """Validate an EngineeringSpec (tools/spec_ir.py) and record status: errors INVALID_INPUT, open questions UNVERIFIED."""
+    import spec_ir
+    errors,questions=spec_ir.validate(spec);errors=list(parse_errors)+errors
+    status='INVALID_INPUT' if errors else 'UNVERIFIED' if questions else 'PASS'
+    message='; '.join(errors) if errors else f'{len(questions)} open question(s): the spec is not complete' if questions else ''
+    args.outcome.update(status=status,message=message,data={'fingerprint':spec_ir.fingerprint(spec),'errors':errors,
+        'questions':[vars(q) for q in questions],'provenance':spec_ir.provenance_report(spec),'spec':spec_ir.to_json(spec)})
+    if args.format=='human':
+        print(f"Spec: {spec.name.value}   {len(spec.components)} component(s), {len(spec.nets())} net(s)   fingerprint {args.outcome['data']['fingerprint'][:16]}")
+        for e in errors:print(f'  ERROR    {e}')
+        for q in questions:print(f'  QUESTION {q.field}: {q.text}'+(f" (options: {', '.join(q.options)})" if q.options else ''))
+        for p in args.outcome['data']['provenance']:print(f"  {p['provenance'].upper():<9} {p['field']}"+(f" = {p['value']}" if 'value' in p else ''))
+        print(f'Status: {status}')
+    elif args.format=='json':print(json.dumps(args.outcome['data'],indent=2))
+    return errors,questions
+def spec_command(args):
+    import spec_ir,spec_nlp
+    if args.command=='spec-parse':
+        if args.file and args.text:raise InvalidInput('give the description as text or with --file, not both')
+        text=Path(existing(args.file,'Description file')).read_text(encoding='utf-8') if args.file else args.text
+        spec,parse_errors=spec_nlp.parse(text or '');errors,questions=spec_outcome(args,spec,parse_errors)
+        if args.out and not errors:
+            if Path(args.out).exists() and not args.force:raise InvalidInput(f'{args.out} exists; use --force to replace it')
+            spec.unresolved=questions;path=Path(args.out);path.parent.mkdir(parents=True,exist_ok=True)
+            tmp=path.with_name(path.name+'.tmp');tmp.write_text(spec_ir.dumps(spec),encoding='utf-8');tmp.replace(path)
+            args.outcome['data']['path']=str(path.resolve())
+            if args.format=='human':print(f'Wrote {args.out}'+(' with the open questions recorded under (unresolved ...)' if questions else ''))
+        return 0 if args.outcome['status']=='PASS' else 2
+    try:spec=spec_ir.load(existing(args.spec,'Spec file'))
+    except spec_ir.SpecFormatError as exc:raise InvalidInput(f'{args.spec}: {exc}') from None
+    if args.command=='spec-check':spec_outcome(args,spec);return 0 if args.outcome['status']=='PASS' else 2
+    if Path(args.out).exists() and not args.force:raise InvalidInput(f'{args.out} exists; use --force to replace it')
+    tree,notes=spec_ir.lower(spec,args.catalogue,args.core,base=Path(args.spec).resolve().parent)
+    # The compiler's own parser is the authority: write to a probe, load it with copper-core, then publish.
+    out=Path(args.out);probe=out.with_name(out.name+'.check.copper')
+    try:write_tree(probe,tree);report,_=core_run(probe,args.core)
+    finally:probe.unlink(missing_ok=True)
+    write_tree(out,tree)
+    args.outcome.update(status='PASS',data={'path':str(out.resolve()),'fingerprint':spec_ir.fingerprint(spec),'notes':notes,
+        'dc_solved':report['dc_solved'],'provenance':spec_ir.provenance_report(spec)})
+    if args.format=='human':
+        print(f'Lowered {args.spec} -> {args.out} (accepted by copper-core; DC {"solved" if report["dc_solved"] else "NOT solved"})')
+        for n in notes:print(f'  NOTE {n}')
+        print("Next: pcba project check "+args.out)
+    elif args.format=='json':print(json.dumps(args.outcome['data'],indent=2))
+    return 0
 def run_command(args):
     o=args.outcome;fmt=args.format
+    if args.command.startswith('spec-'):return spec_command(args)
     if args.command=='new':rc=new_project(args);o['data']={'path':str(Path(args.out).resolve())};return rc
     if args.command=='check':
         report,rc=core_run(existing(args.project),args.core);scopes=report_scopes(report)
@@ -723,6 +773,9 @@ def main(argv=None):
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
     p=sub.add_parser('library-scan');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
+    p=sub.add_parser('spec-parse',help='constrained English -> EngineeringSpec (docs/engineering/ENGINEERING_SPEC.md)');p.add_argument('text',nargs='?');p.add_argument('--file',help='read the description from a UTF-8 text file');p.add_argument('--out',help='.espec path to write');p.add_argument('--force',action='store_true')
+    p=sub.add_parser('spec-check');p.add_argument('spec')
+    p=sub.add_parser('spec-lower',help='complete EngineeringSpec -> .copper project');p.add_argument('spec');p.add_argument('--out',required=True);p.add_argument('--catalogue');p.add_argument('--force',action='store_true');p.add_argument('--core')
 
     args=parser.parse_args(argv);args.outcome={'status':None,'message':'','data':None};rc=2
     try:
