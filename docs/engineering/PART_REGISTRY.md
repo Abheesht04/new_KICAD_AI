@@ -72,6 +72,8 @@ symbol/footprint pins and the datasheet named in its provenance.
   (straps (25 "IO0 selects the boot mode: ...") ...)               ; strapping pins and what they select
   (reset 3 active_low)                                             ; reset / enable pin
   (program 35 34 25 3)                                             ; in-circuit programming pins
+  (reference (decouple 2 10e-6 100e-9) (pull_up 3 10000)            ; support circuit from the datasheet:
+             (cap_to_ground 3 1e-6) (provenance "..."))             ; the design compiler adds exactly this
   (provenance "..."))
 ```
 

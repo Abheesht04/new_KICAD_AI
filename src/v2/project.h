@@ -43,6 +43,10 @@ typedef struct {
     int reset_active_low;
     const char *program[CP_MCU_MAX_RAILS];
     size_t program_count;
+    /* Reference circuit from the module's source documentation: what a design must add around it. */
+    struct { const char *kind, *pin; double value; } reference[CP_MCU_MAX_PINS];
+    size_t reference_count;
+    const char *reference_provenance;
 } CpMcu;
 /* Project-side state of an MCU GPIO pin, from the component's (drive ...). */
 enum { CP_DRIVE_NONE, CP_DRIVE_HIGH, CP_DRIVE_LOW, CP_DRIVE_INPUT, CP_DRIVE_PULL_UP, CP_DRIVE_PULL_DOWN };

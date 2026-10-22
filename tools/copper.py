@@ -782,6 +782,26 @@ def layout_command(args):
         print(f'Status: {status}'+(f" -> {data['written']}" if data['written'] else '')+(f'; {message}' if message else ''))
     elif args.format=='json':print(json.dumps(data,indent=2))
     return 0 if feasible else 2
+def design_command(args):
+    """Request text -> verified KiCad project, through the EngineeringSpec and the shared pipeline (tools/design.py)."""
+    import design
+    out=Path(args.out)
+    if out.exists() and any(out.iterdir()) and not args.force:raise InvalidInput(f'{out} is not empty; use --force to reuse it')
+    r=design.run(args.text,out,args.profile,args.answers,args.symbol_dir,args.footprint_dir,args.kicad_cli,args.core)
+    args.outcome.update(status=r['status'],message=r.get('message',''),data=r)
+    if args.format=='human':
+        print(f"Request: {r['request']}")
+        if r.get('profile'):print(f"Design profile: {r['profile']}")
+        if r['decisions']:print('Decisions:')
+        for x in r['decisions']:print(f"  {x['source'].upper():<9} {x['field']:<22} {x['value']}   ({x['reason']})")
+        for q in r['questions']:print(f"  QUESTION  {q['field']}: {q['text']}"+(f" Options: {', '.join(q['options'])}." if q['options'] else '')+f" Answer with {q['answer_with']}.")
+        for n,gate in sorted(((v['gate'],k) for k,v in r['gates'].items())):
+            g=r['gates'][gate];detail=g['detail'] if isinstance(g['detail'],str) else json.dumps(g['detail'])
+            print(f"  GATE {n:<2} {g['status']:<10} {gate:<14} {detail[:160]}")
+        for n in r['notes']:print(f'  NOTE {n}')
+        print(f"Status: {r['status']}"+(f"; {r['message']}" if r.get('message') else '')+f"   (report: {Path(args.out)/'design.json'})")
+    elif args.format=='json':print(json.dumps(r,indent=2,default=str))
+    return 0 if r['status']=='PASS' else 2
 def spec_outcome(args,spec,parse_errors=()):
     """Validate an EngineeringSpec (tools/spec_ir.py) and record status: errors INVALID_INPUT, open questions UNVERIFIED."""
     import spec_ir
@@ -834,6 +854,7 @@ def run_command(args):
     if args.command.startswith('spec-'):return spec_command(args)
     if args.command=='part-import':return part_import(args)
     if args.command in ('place','route'):return layout_command(args)
+    if args.command=='design':return design_command(args)
     if args.command=='new':rc=new_project(args);o['data']={'path':str(Path(args.out).resolve())};return rc
     if args.command=='check':
         report,rc=core_run(existing(args.project),args.core);scopes=report_scopes(report)
@@ -927,6 +948,7 @@ def main(argv=None):
     p=sub.add_parser('part-add',help='Unknown ratings are omitted, never written as 0');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJUQM'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float);p.add_argument('--voltage',type=float);p.add_argument('--tolerance',type=float);p.add_argument('--height',type=float);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
     p.add_argument('--model',help='device model id (copper-core models); default: the kind default');p.add_argument('--pinmap',help='terminal=symbol_pin,... e.g. cathode=1,anode=2');p.add_argument('--provenance',default='',help='where the ratings come from');p.add_argument('--core')
     p=sub.add_parser('part-remove');p.add_argument('--file',required=True);p.add_argument('--id',required=True)
+    p=sub.add_parser('design',help='request text -> verified KiCad project (docs/engineering/DESIGN.md)');p.add_argument('text');p.add_argument('--out',required=True);p.add_argument('--profile');p.add_argument('--answers');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--kicad-cli');p.add_argument('--force',action='store_true');p.add_argument('--core')
     p=sub.add_parser('place',help='staged placement search with exact re-check (docs/engineering/LAYOUT.md)');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--seeds',default='1,2,3');p.add_argument('--iterations',type=int,default=1500);p.add_argument('--report');p.add_argument('--footprint-dir');p.add_argument('--force',action='store_true');p.add_argument('--core')
     p=sub.add_parser('route',help='route the project placement with rip-up/reroute and exact re-check');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--report');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('part-import',help='validate a catalogue against copper-core and the native KiCad libraries; --into merges it');p.add_argument('file');p.add_argument('--into');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--core')

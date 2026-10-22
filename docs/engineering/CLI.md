@@ -40,6 +40,7 @@ reach the child unchanged.
 | `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
 | `pcba spec lower <file.espec> --out F.copper` | stable | `copper.py spec-lower` → loaded by `copper-core analyze` before publishing |
 | `pcba parts import <catalogue-file> [--into FILE]` | stable | `copper.py part-import` (copper-core schema + KiCad library parity; docs/engineering/PART_REGISTRY.md) |
+| `pcba design "request" --out DIR [--profile F] [--answers K=V,...]` | stable | `copper.py design` → `tools/design.py` (docs/engineering/DESIGN.md) |
 | `pcba place <file.copper> --out FILE` | stable | `copper.py place` → `tools/layout.py` (docs/engineering/LAYOUT.md) |
 | `pcba route <file.copper> --out DIR` | stable | `copper.py route` → `tools/layout.py` |
 

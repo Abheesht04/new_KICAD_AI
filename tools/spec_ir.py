@@ -47,6 +47,7 @@ ROLES = {
     'bjt':            dict(prefix='Q', unit=None, required=False, positive=False, terminals=None, part=None),
 }
 ATTRIBUTES = ('package', 'color', 'family', 'variant', 'part')
+OUTPUTS = ('kicad',)   # kicad: .kicad_sch, .kicad_pcb, .kicad_pro, BOM and reports
 TWO_TERMINAL = {r for r, c in ROLES.items() if c['terminals'] in (TWO_PIN, POLARIZED, SOURCE_PINS)}
 IDENT = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_+./-]{0,63}$')
 REF = re.compile(r'^[A-Z][A-Z0-9_]{0,15}$')
@@ -127,6 +128,8 @@ class Spec:
     analyses: list = field(default_factory=list)
     profiles: dict = field(default_factory=dict)     # catalogue, dfm -> Attr
     unresolved: list = field(default_factory=list)
+    no_connect: dict = field(default_factory=dict)   # ref -> sorted pins deliberately left unconnected
+    outputs: list = field(default_factory=list)      # requested artifacts, e.g. 'kicad'; not engineering content
 
     def component(self, ref):
         return next((c for c in self.components if c.ref == ref), None)
@@ -169,7 +172,7 @@ def validate(spec):
             errors.extend(check_quantity(f'{c.ref} tolerance', c.tolerance, '1', False))
             if c.tolerance.unit == '1' and math.isfinite(c.tolerance.value) and not 0 <= c.tolerance.value < 1:
                 errors.append(f'{c.ref}: tolerance must be in [0, 1) as a fraction')
-        if c.role == 'mcu' and 'variant' not in c.attrs:
+        if c.role == 'mcu' and 'variant' not in c.attrs and 'part' not in c.attrs:  # an explicit part identifies it
             family = c.attrs['family'].value if 'family' in c.attrs else 'MCU'
             ask(f'{c.ref}.variant', f'Which exact {family} module or board is {c.ref}? A family name does not identify '
                 'a part, its pins or its footprint.', MCU_VARIANTS.get(family.lower(), []))
@@ -258,6 +261,17 @@ def validate(spec):
     for name in spec.profiles:
         if name not in ('catalogue', 'dfm'):
             errors.append(f'unknown profile {name!r}')
+    for ref, pins in spec.no_connect.items():
+        if ref not in refs:
+            errors.append(f'no_connect on unknown component {ref}')
+        for pin in pins:
+            if not IDENT.match(pin):
+                errors.append(f'{ref}: invalid no-connect pin {pin!r}')
+            elif (ref, pin) in seen:
+                errors.append(f'{ref} pin {pin} is both connected and no-connect')
+    for o in spec.outputs:
+        if o not in OUTPUTS:
+            errors.append(f'unknown output {o!r} (known: {", ".join(OUTPUTS)})')
     for q in carried:
         if not any(x.field == q.field for x in questions):
             questions.append(q)
@@ -340,6 +354,7 @@ def semantic(spec):
         'analyses': sorted([a.kind, sorted((k, v.value if k == 'method' else qv(v)) for k, v in a.params.items())]
                            for a in spec.analyses),
         'profiles': sorted([k, a.value] for k, a in spec.profiles.items()),
+        'no_connect': sorted([r, list(p)] for r, p in spec.no_connect.items()),
     }
 
 
@@ -459,6 +474,10 @@ def dumps(spec):
         root.append(node)
     if spec.profiles:
         root.append([A('profiles')] + [_attr(k, spec.profiles[k]) for k in sorted(spec.profiles)])
+    if spec.no_connect:
+        root.append([A('no_connect')] + [[A('pins'), A(r)] + [A(p) for p in spec.no_connect[r]] for r in sorted(spec.no_connect)])
+    if spec.outputs:
+        root.append([A('outputs')] + [A(o) for o in spec.outputs])
     if spec.unresolved:
         root.append([A('unresolved')] + [[A('question'), A(q.id), Q(q.field), Q(q.text), [Q(o) for o in q.options]]
                                          for q in spec.unresolved])
@@ -528,7 +547,7 @@ def loads(text, origin='handwritten'):
     body = root[1:]
     _fields(body, {'version': 'one', 'name': 'one', 'source': 'one', 'components': 'one', 'connections': 'one',
                    'requirements': 'one', 'gpio': 'one', 'board': 'one', 'analyses': 'one', 'profiles': 'one',
-                   'unresolved': 'one'}, 'engineering_spec')
+                   'unresolved': 'one', 'no_connect': 'one', 'outputs': 'one'}, 'engineering_spec')
     get = {head(n): n for n in body}
     if 'version' not in get or [str(x) for x in get['version'][1:]] != [str(SCHEMA_VERSION)]:
         raise SpecFormatError(f'unsupported schema version (this reader understands {SCHEMA_VERSION})')
@@ -594,6 +613,11 @@ def loads(text, origin='handwritten'):
         _fields(get['profiles'][1:], {'catalogue': 'one', 'dfm': 'one'}, 'profiles')
         for node in get['profiles'][1:]:
             spec.profiles[head(node)] = _attribute(node, f'profile {head(node)}')
+    for node in (get.get('no_connect') or [None])[1:]:
+        if head(node) != 'pins' or len(node) < 3:
+            raise SpecFormatError('no_connect: expected (pins REF PIN ...)')
+        spec.no_connect[str(node[1])] = sorted({str(x) for x in node[2:]}, key=_natural)
+    spec.outputs = [str(x) for x in (get.get('outputs') or [None])[1:]]
     for node in (get.get('unresolved') or [None])[1:]:
         if head(node) != 'question' or len(node) != 5:
             raise SpecFormatError('unresolved: expected (question ID "FIELD" "TEXT" ("OPTION" ...))')
@@ -606,6 +630,25 @@ def load(path):
 
 
 # --------------------------------------------------------------------------- compiler handoff
+def _natural(pin):
+    return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', pin)]
+
+
+def gpio_pin(part, name):
+    """Pin number of GPIO `name` (IO4, GPIO4 or 4) in a catalogue part's (mcu (gpio ...)) table, or None."""
+    def key(text):
+        m = re.fullmatch(r'(?:GPIO|IO)?(\d+)', str(text).upper())
+        return m.group(1) if m else str(text).upper()
+    for node in part:
+        if isinstance(node, list) and head(node) == 'mcu':
+            for g in node[1:]:
+                if isinstance(g, list) and head(g) == 'gpio':
+                    for p in g[1:]:
+                        if key(p[2]) == key(name):
+                            return str(p[1])
+    return None
+
+
 def lower(spec, catalogue_path=None, core=None, base=None):
     """Deterministic handoff to the engineering compiler: a complete, valid spec becomes a `.copper`
     project tree. Every component binds a catalogue part (explicit (part ID), or the bundled generic
@@ -641,6 +684,20 @@ def lower(spec, catalogue_path=None, core=None, base=None):
             node.append(sx('value', _num(c.value.value)))
         pins = sorted((k.terminal, k.net) for k in spec.connections if k.ref == c.ref)
         node.append(sx('pins', *[sx(t, A(n)) for t, n in pins]))
+        if spec.no_connect.get(c.ref):
+            node.append(sx('nc', *[A(p) for p in spec.no_connect[c.ref]]))
+        # GPIO intent sets the DC scenario: the MCU drives each intended load's pin high (the load on).
+        drives = []
+        for g in spec.gpio:
+            if g.mcu != c.ref:
+                continue
+            pin = gpio_pin(parts[part_id], g.pin)
+            if pin is None:
+                raise copper.InvalidInput(f'{c.ref}: {g.pin} is not a GPIO of part {part_id}')
+            drives.append(sx(pin, A('high')))
+            notes.append(f'DC scenario: {c.ref} drives {g.pin} (pin {pin}) high, so {g.load} is on')
+        if drives:
+            node.append(sx('drive', *drives))
         if c.tolerance is not None:
             notes.append(f'{c.ref}: tolerance {c.tolerance.value:g} comes from the catalogue part in .copper, '
                          'not from the spec')
@@ -674,8 +731,6 @@ def lower(spec, catalogue_path=None, core=None, base=None):
             raise copper.Unverified(f'a {r.kind} requirement on {r.subject} cannot be checked by the compiler yet')
     if targets:
         tree.append(sx('targets', *targets))
-    for g in spec.gpio:
-        notes.append(f'GPIO intent {g.mcu}.{g.pin} -> {g.load} is recorded in the spec only')
     for a in spec.analyses:
         notes.append(f'{a.kind} analysis requested: run pcba simulate {a.kind}')
     notes.append('placement is not part of the spec: components have no (at ...) yet')

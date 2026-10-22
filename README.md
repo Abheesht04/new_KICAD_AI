@@ -74,6 +74,7 @@ See [docs/engineering/CLI.md](docs/engineering/CLI.md) for the full command map,
 and JSON output.
 
 ```sh
+pcba design "Build me an ESP32 LED PCB. Generate the KiCad PCB." --out out/esp32_led --profile profiles/esp32_led.design
 pcba --help
 pcba doctor
 pcba project check examples/v2/divider.copper
@@ -95,6 +96,10 @@ and the installed KiCad 9.x libraries (symbol pins = footprint pads, pin maps, M
 directions, thresholds, current limits, strapping, reset and programming pins, checked in DC. Firmware and
 silicon are not simulated. See [PART_REGISTRY.md](docs/engineering/PART_REGISTRY.md) and
 `examples/v2/esp32_io.copper`.
+
+`pcba design "REQUEST" --out DIR` compiles a request end to end: it lists every decision with its source
+(request, answers, design profile, catalogue or design rule), asks when a decision is open, builds the KiCad
+project and reports 11 quality gates. See [DESIGN.md](docs/engineering/DESIGN.md).
 
 `pcba place FILE --out placed.copper` searches placements deterministically (constructive placement, seeded
 annealing, rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core

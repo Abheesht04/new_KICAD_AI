@@ -1,15 +1,25 @@
 #include "v2/project.h"
 #include "v2/transformer.h"
+#include "e_series.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"catalogue")) {
         char error[512];
         if(cp_check_catalogue(argv[2],stdout,error,sizeof error)) return 0;
         fprintf(stderr,"PROJECT ERROR: %s\n",error);return 2;
+    }
+    if(argc==4 && !strcmp(argv[1],"eseries")) {
+        /* Standard values around VALUE: the nearest, and the smallest not below it. */
+        ESeries series; char *end; double v=strtod(argv[3],&end);
+        if(!strcmp(argv[2],"E24")) series=E_SERIES_E24; else if(!strcmp(argv[2],"E96")) series=E_SERIES_E96;
+        else {fprintf(stderr,"ESERIES invalid_argument: series must be E24 or E96\n");return 2;}
+        if(*end || !(v>0) || v>1e12) {fprintf(stderr,"ESERIES invalid_argument: value must be a finite number > 0\n");return 2;}
+        printf("{\"series\":\"%s\",\"value\":%.12g,\"nearest\":%.12g,\"at_least\":%.12g}\n",argv[2],v,e_series_nearest(series,v),e_series_at_least(series,v));
+        return 0;
     }
     if(!strcmp(argv[1],"classify")) { CtResult r=ct_classify(argv[2]);printf("{\"category\":\"%s\",\"confidence\":%.6g,\"accepted\":%s,\"authority\":\"proposal_only\"}\n",ct_label(r.label),r.confidence,r.accepted?"true":"false"); return r.accepted?0:2; }
     CpProject *p=malloc(sizeof *p);if(!p)return 3;cp_init(p);char error[512];int rc=2;

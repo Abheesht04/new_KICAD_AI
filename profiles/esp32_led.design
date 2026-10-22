@@ -1,0 +1,24 @@
+; Design profile: project defaults for a simple ESP32 + GPIO indicator LED board (docs/engineering/DESIGN.md).
+; Every value used from here is reported as a "profile" decision. Edit it, or answer on the command line
+; (--answers key=value,...), to decide differently. Paths are relative to this file.
+(design_profile
+ (version 1)
+ (name "esp32-led-indicator")
+ (provenance "project defaults for the ESP32 LED acceptance target; review before use")
+ (catalogues "mcu_modules.parts" "indicator.parts")
+ (dfm "esp32_2layer.rules")
+ (answers
+  (mcu_part esp32_wroom_32e)
+  (led_function gpio_indicator)
+  (led_part led_red_0603)
+  (led_current 0.005)
+  (supply_kind header)
+  (supply_voltage 3.3)
+  (programming uart_header)
+  (programming_part conn_1x06)
+  (board_width_mm 50)
+  (board_height_mm 70)
+  (layers 2)
+  (resistor_series E24)
+  (seeds "1")
+  (iterations 300)))

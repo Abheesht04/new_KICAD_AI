@@ -116,7 +116,7 @@ static int mcu_has_pin(const CpMcu *m,const char *pin) {
 /* The (mcu ...) block of a kind-U part: typed constraints, never a silicon or firmware model. */
 static int read_mcu(CpProject *p,const IRNode *n,const char *id,const char *source,CpMcu **out,char *e,size_t cap) {
     char why[256];
-    if(!fields(n,1,"|behavior||supply||ground||operating_v||vih_ratio||vil_ratio||max_source_a||max_sink_a||output_ohm||pull_ohm||gpio||straps||reset||program||provenance|",why,sizeof why))
+    if(!fields(n,1,"|behavior||supply||ground||operating_v||vih_ratio||vil_ratio||max_source_a||max_sink_a||output_ohm||pull_ohm||gpio||straps||reset||program||provenance||reference|",why,sizeof why))
         return errorf(e,cap,"part %s: mcu: %s",id,why);
     CpMcu *m=arena_alloc(&p->arena,sizeof *m);
     if(!m) return errorf(e,cap,"out of memory");
@@ -170,6 +170,26 @@ static int read_mcu(CpProject *p,const IRNode *n,const char *id,const char *sour
         for(size_t i=0;i<m->program_count;i++)
             if(!mcu_has_pin(m,m->program[i])) return errorf(e,cap,"part %s: mcu program pin %s is not a declared pin",id,m->program[i]);
     }
+    /* (reference (decouple PIN F ...) (pull_up PIN OHM) (cap_to_ground PIN F) (provenance "...")): typed support
+     * circuitry from the module's documentation. Decoupling sits on supply pins; the rest on declared pins. */
+    const IRNode *ref=ir_list_find(n,"reference"); m->reference_provenance="";
+    for(size_t i=1;i<ir_list_length(ref);i++) {
+        const IRNode *r=ir_child_at(ref,i); const char *kind=txt(r,0), *pin=txt(r,1);
+        if(!strcmp(kind,"provenance")) { m->reference_provenance=txt(r,1); continue; }
+        int decouple=!strcmp(kind,"decouple");
+        if(!decouple && strcmp(kind,"pull_up") && strcmp(kind,"cap_to_ground"))
+            return errorf(e,cap,"part %s: mcu reference entries are decouple, pull_up, cap_to_ground or provenance, not '%s'",id,kind);
+        if(ir_list_length(r)<3 || (!decouple && ir_list_length(r)!=3)) return errorf(e,cap,"part %s: mcu reference (%s PIN VALUE%s)",id,kind,decouple?" ...":"");
+        if(decouple ? !pin_listed(m->supply,m->supply_count,pin) : (!mcu_has_pin(m,pin) || pin_listed(m->ground,m->ground_count,pin)))
+            return errorf(e,cap,"part %s: mcu reference %s pin %s is not a %s pin",id,kind,pin,decouple?"supply":"declared non-ground");
+        for(size_t k=2;k<ir_list_length(r);k++) {
+            double v;
+            if(m->reference_count==CP_MCU_MAX_PINS || !num(r,k,&v) || v<=0 || v>(strcmp(kind,"pull_up")?1.0:1e9))
+                return errorf(e,cap,"part %s: mcu reference %s value must be a positive SI value",id,kind);
+            m->reference[m->reference_count].kind=kind; m->reference[m->reference_count].pin=pin; m->reference[m->reference_count++].value=v;
+        }
+    }
+    if(ref && !*m->reference_provenance) return errorf(e,cap,"part %s: mcu reference needs (provenance \"...\") naming its source",id);
     *out=m; return 1;
 }
 static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_t cap) {
@@ -720,6 +740,10 @@ static void mcu_json(FILE *f,const CpMcu *u) {
     fputs("],\"reset\":",f);
     if(*u->reset) { fputs("{\"pin\":",f); js(f,u->reset); fprintf(f,",\"active_low\":%s}",u->reset_active_low?"true":"false"); } else fputs("null",f);
     fputs(",\"program\":",f); strings_json(f,u->program,u->program_count);
+    fputs(",\"reference\":[",f);
+    for(size_t r=0;r<u->reference_count;r++) { if(r) fputc(',',f); fputs("{\"kind\":",f); js(f,u->reference[r].kind);
+        fputs(",\"pin\":",f); js(f,u->reference[r].pin); fprintf(f,",\"value\":%.12g}",u->reference[r].value); }
+    fputs("],\"reference_provenance\":",f); js(f,u->reference_provenance);
     fputs(",\"simulated\":\"DC constraints only: undriven pins are high impedance; firmware execution and transistor-level silicon are not simulated\"}",f);
 }
 /* Per-component binding: model identity and capabilities, terminal -> pin map, parameters, ratings with

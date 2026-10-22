@@ -209,6 +209,10 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # Fixtures needing footprints outside the committed snapshot. Exit 77 = skipped (UNVERIFIED).
   add_test(NAME layout_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_layout.py $<TARGET_FILE:copper-core> Libraries)
   set_tests_properties(layout_native PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME design_compiler COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_design.py $<TARGET_FILE:copper-core> Intent Questions Contradictions Compiler)
+  # The ESP32 LED acceptance run with KiCad 9.x libraries and CLI. Exit 77 = skipped (UNVERIFIED).
+  add_test(NAME design_acceptance COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_design.py $<TARGET_FILE:copper-core> Native)
+  set_tests_properties(design_acceptance PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME pcba_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_pcba_cli.py
            $<TARGET_FILE:pcba> $<TARGET_FILE:hwc> $<TARGET_FILE:copper-core>)
   set_tests_properties(pcba_cli PROPERTIES SKIP_RETURN_CODE 77)

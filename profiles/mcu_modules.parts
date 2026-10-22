@@ -33,7 +33,10 @@
     (23 "IO15 (MTDO) controls boot-log output and SDIO timing at reset")
     (29 "IO5 sets SDIO slave timing at reset"))
    (reset 3 active_low)
-   (program 35 34 25 3)))
+   (program 35 34 25 3)
+   (reference
+    (decouple 2 10e-6 100e-9) (pull_up 3 10000) (cap_to_ground 3 1e-6)
+    (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, peripheral schematics: 10 uF + 0.1 uF on 3V3, EN RC delay 10 kOhm / 1 uF; transcribed, confirm against your datasheet revision"))))
  (part esp32_wroom_32ue
   (kind U) (family esp32) (role mcu_module)
   (symbol "RF_Module:ESP32-WROOM-32UE") (footprint "RF_Module:ESP32-WROOM-32UE")
@@ -60,4 +63,7 @@
     (23 "IO15 (MTDO) controls boot-log output and SDIO timing at reset")
     (29 "IO5 sets SDIO slave timing at reset"))
    (reset 3 active_low)
-   (program 35 34 25 3))))
+   (program 35 34 25 3)
+   (reference
+    (decouple 2 10e-6 100e-9) (pull_up 3 10000) (cap_to_ground 3 1e-6)
+    (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, peripheral schematics: 10 uF + 0.1 uF on 3V3, EN RC delay 10 kOhm / 1 uF; transcribed, confirm against your datasheet revision")))))

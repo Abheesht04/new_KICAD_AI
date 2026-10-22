@@ -269,6 +269,22 @@ static int run_parts_import(PcbaContext *ctx, const PcbaCommand *cmd, const Pcba
     return backend(ctx, cmd, &b);
 }
 
+/* design: request text -> verified KiCad project (tools/design.py). */
+static int run_design(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const map[][2] = {{"--out", "--out"}, {"--profile", "--profile"}, {"--answers", "--answers"},
+                                         {"--symbols", "--symbol-dir"}, {"--footprints", "--footprint-dir"},
+                                         {"--kicad-cli", "--kicad-cli"}, {"--force", "--force"}};
+    const char *profile = pcba_opt(cmd, a, "--profile");
+    int rc;
+    if (!*a->positional[0]) return pcba_usage_error(ctx, cmd, "the request text is empty");
+    if (profile && (rc = missing_file(ctx, cmd, profile, 0)) >= 0) return rc;
+    Bargs b = {{0}, 0};
+    push(&b, "design");
+    push(&b, a->positional[0]);
+    pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    return backend(ctx, cmd, &b);
+}
+
 /* place | route: tools/layout.py through copper.py; copper-core judges every candidate. */
 static int run_layout(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     static const char *const place_map[][2] = {{"--out", "--out"}, {"--seeds", "--seeds"}, {"--iterations", "--iterations"},
@@ -382,6 +398,15 @@ static const PcbaOption REMOVE_OPTIONS[] = {
     {"--catalogue", "FILE", 1, "Catalogue file to edit (the bundled default is read-only)"},
     {"--id", "ID", 1, "Part identifier to remove"},
 };
+static const PcbaOption DESIGN_OPTIONS[] = {
+    {"--out", "DIR", 1, "Output directory: specs, .copper stages, build/ (KiCad project) and design.json"},
+    {"--profile", "FILE", 0, "Design profile with documented project defaults (e.g. profiles/esp32_led.design)"},
+    {"--answers", "K=V,...", 0, "Answers to clarification questions, e.g. mcu_part=esp32_wroom_32e,led_current=0.005"},
+    {"--symbols", "DIR", 0, "KiCad 9.x symbol library directory"},
+    {"--footprints", "DIR", 0, "KiCad 9.x footprint library directory"},
+    {"--kicad-cli", "PATH", 0, "kicad-cli for ERC/DRC/netlist gates; KiCad 9.x only"},
+    {"--force", NULL, 0, "Reuse a non-empty output directory"},
+};
 static const PcbaOption PLACE_OPTIONS[] = {
     {"--out", "FILE", 1, "The placed .copper project to write (only when a feasible board is found)"},
     {"--seeds", "LIST", 0, "Comma-separated annealing seeds (default 1,2,3)"},
@@ -486,6 +511,15 @@ static const PcbaCommand COMMANDS[] = {
      "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv\n"
      "pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --method trap", OPTS(TRANSIENT_OPTIONS),
      NULL, run_transient},
+    {NULL, "design", "\"request\"", 1, 1, "Turn a request into a verified KiCad project, explaining each decision",
+     "Runs the whole pipeline from text: EngineeringSpec, decisions, complete spec, .copper, DC analysis, placement and "
+     "routing, KiCad project, verification. Each decision is reported with its source: the request, --answers, the "
+     "design profile, the catalogue or a named design rule. An unsettled decision stops the run with a question "
+     "(UNVERIFIED, exit 3); an unsupported design (NOT_IMPLEMENTED) or a contradiction (INVALID_INPUT) stops it too. "
+     "Reports 11 quality gates in design.json. The board is design.kicad_pcb, KiCad's native format; no legacy .pcb.",
+     "pcba design \"Build me an ESP32 LED PCB. Generate the KiCad PCB.\" --out out/esp32_led --profile profiles/esp32_led.design\n"
+     "pcba design \"a board with an ESP32 and a red LED\" --out out/led --answers mcu_part=esp32_wroom_32e,led_function=gpio_indicator",
+     OPTS(DESIGN_OPTIONS), NULL, run_design},
     {"spec", "parse", "[\"text\"]", 0, 1, "Turn a constrained-English description into an EngineeringSpec",
      "Deterministic frontend (no model, no network): reads components, values with SI prefixes and units, "
      "connections, GPIO intent, requirements, board size and analyses. Unknown text is INVALID_INPUT; a missing "

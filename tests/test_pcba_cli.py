@@ -16,7 +16,7 @@ FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
         'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library scan','dfm check',
-        'spec parse','spec check','spec lower','parts import','place','route'}
+        'spec parse','spec check','spec lower','parts import','place','route','design'}
 PLANNED=set()  # every command is implemented; the NOT_IMPLEMENTED mechanism stays for future stages
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
 
@@ -114,6 +114,19 @@ class Usage(Base):
         self.assertEqual(run('place').returncode,64)
         for bad in (['--iterations','-1'],['--iterations','x'],['--seeds','1,,2'],['--seeds','a']):
             self.assertEqual(run('place',f,'--out',out,*bad).returncode,64,bad)
+
+class Design(Base):
+    def test_questions_and_contradictions(self):
+        req='Build me an ESP32 LED PCB. Generate the KiCad PCB.'
+        doc=envelope(self,run('design',req,'--out',self.dir/'q','--json'))
+        self.assertEqual(doc['status'],'UNVERIFIED');fields={q['field'] for q in doc['result']['data']['questions']}
+        self.assertIn('mcu_part',fields);self.assertFalse((self.dir/'q/build').exists(),'nothing is built while questions are open')
+        doc=envelope(self,run('design',req,'--out',self.dir/'x','--profile',ROOT/'profiles/esp32_led.design','--answers','led_function=addressable','--json'))
+        self.assertEqual(doc['status'],'NOT_IMPLEMENTED')
+        doc=envelope(self,run('design',req,'--out',self.dir/'y','--profile',ROOT/'profiles/esp32_led.design','--answers','supply_voltage=5','--json'))
+        self.assertEqual(doc['status'],'INVALID_INPUT');self.assertIn('operating range',doc['message'])
+        self.assertEqual(run('design',req).returncode,64)
+        self.assertEqual(run('design',req,'--out',self.dir/'z','--profile',self.dir/'nope.design').returncode,2)
 
 class Spec(Base):
     DIVIDER='A 5 V supply on VIN. A 10k resistor from VIN to OUT and a 20k resistor from OUT to GND. OUT must be 3.333 V +/- 2%.'

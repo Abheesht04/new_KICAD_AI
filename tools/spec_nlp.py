@@ -164,6 +164,7 @@ class Frontend:
         self.errors = []
         self.declared = set()
         self.auto = {}
+        self.notes = []
 
     # ------------------------------------------------------------------ helpers
     def error(self, clause, message):
@@ -234,8 +235,8 @@ class Frontend:
             if self.raw_clause(clause):
                 continue
             shape, toks = scan(clause)
-            if not any(rule(shape, toks, clause) for rule in (self.board, self.layers, self.analysis, self.power,
-                                                               self.mcu, self.component)):
+            if not any(rule(shape, toks, clause) for rule in (self.output_request, self.intent, self.board, self.layers,
+                                                               self.analysis, self.power, self.mcu, self.component)):
                 rest.append((shape, toks, clause))
         for shape, toks, clause in rest:
             if not any(rule(shape, toks, clause) for rule in (self.requirement, self.gpio, self.placement, self.connection)):
@@ -254,6 +255,60 @@ class Frontend:
             self.spec.profiles[key] = ir.Attr(m.group('path'))
             return True
         return False
+
+    def output_request(self, shape, toks, clause):
+        """'generate the KiCad PCB', 'export the board files', 'give me a .pcb file': a requested artifact."""
+        m = re.match(r'^(?:and |then |also |please )*(?:generate|create|export|produce|output|write|give me|make)(?: me| us)?'
+                     r'(?: (?:the|a|an|its))?(?: kicad| native)? (?:\.?pcb|board|layout|kicad_pcb|project|design)'
+                     r'(?: files?| layout| design| project| outputs?)?$', shape)
+        if not m:
+            return False
+        if 'kicad' not in self.spec.outputs:
+            self.spec.outputs.append('kicad')
+        if re.search(r'\.pcb\b', clause, re.I):
+            self.notes.append('a ".pcb" file was requested: the board is written as .kicad_pcb, the native KiCad board '
+                              'format; no legacy .pcb/.brd file is produced')
+        return True
+
+    def intent(self, shape, toks, clause):
+        """'build me an ESP32 LED PCB', 'design a board with an ESP32 and a red LED': the parts the user names.
+        Only the parts are read; how they connect is decided later and every decision is listed."""
+        m = (re.match(r'^(?:please )?(?:build|make|design|create|draw|lay out)(?: me| us)?(?: (?:an?|one|the))?'
+                      r'(?: (?:pcb|board|circuit board|circuit) with)? (?P<items>.+?)(?: (?:pcb|board|circuit board|circuit)(?: design)?)?$', shape)
+             or re.match(r'^(?:an?|the) (?:pcb|board|circuit board|circuit) with (?P<items>.+)$', shape)
+             or re.match(r'^(?:an?|the) (?P<items>.+?) (?:pcb|board|circuit board)$', shape))
+        if not m:
+            return False
+        words = [w for w in m.group('items').split() if w not in ('a', 'an', 'one', 'and', 'with', 'plus')]
+        items, pre = [], []
+        i = 0
+        while i < len(words):
+            w = words[i]; two = ' '.join(words[i:i + 2])
+            family = next((f for f in FAMILIES if w == f or w.startswith(f + '-')), None)
+            if family:
+                items.append(('mcu', pre, w, family)); pre = []; i += 1
+                if i < len(words) and words[i] in ('module', 'board', 'chip', 'devkit'):
+                    i += 1  # "ESP32-WROOM-32E module": the kind word names no further part
+            elif two in ROLE_WORDS:
+                items.append((ROLE_WORDS[two], pre, two, None)); pre = []; i += 2
+            elif w in ROLE_WORDS:
+                items.append((ROLE_WORDS[w], pre, w, None)); pre = []; i += 1
+            elif w.startswith(('#', 'pkg_')) or w in ADJECTIVES:
+                pre.append(w); i += 1
+            else:
+                return False  # not a list of parts: let the other grammars (and the error) handle the clause
+        if not items or pre:
+            return False
+        for role, adjectives, word, family in items:
+            group = _Groups(pre=' '.join(adjectives) + (' ' if adjectives else ''))
+            if role == 'mcu':
+                attrs = {'family': ir.Attr(family.upper())}
+                if word != family:
+                    attrs['variant'] = ir.Attr(word.upper())
+                self.declare('mcu', group, toks, clause, attrs)
+            else:
+                self.declare(role, group, toks, clause, {})
+        return True
 
     def component(self, shape, toks, clause):
         m = re.match(LEAD + DECL + rf'(?P<role>{ROLE_ALT})(?: (?P<ref2>%\w+))?(?P<post>{POST})$', shape)
@@ -560,11 +615,22 @@ class Frontend:
         return False
 
 
+class _Groups:
+    """Match-like groups for declare() when a grammar assembles a declaration itself."""
+    def __init__(self, **groups):
+        self.groups = groups
+
+    def group(self, name):
+        return self.groups.get(name, '')
+
+
 def parse(text):
     """Text -> (Spec, parse errors). validate() adds schema errors and clarification questions."""
     if not isinstance(text, str) or not text.strip():
         return ir.Spec(source={'kind': 'nlp', 'text': text or ''}), ['the description is empty']
-    spec, errors = Frontend(text).parse()
+    frontend = Frontend(text); spec, errors = frontend.parse()
+    if frontend.notes:
+        spec.source['notes'] = frontend.notes  # frontend remarks for the user (not engineering content)
     for i, q in enumerate(spec.unresolved, 1):
         q.id = f'p{i}'
     return spec, errors
