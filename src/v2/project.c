@@ -89,7 +89,89 @@ typedef struct {
     int param_present[DEVICE_MODEL_MAX_PARAMS];
     double tolerance;
     CpQuantity power_w, voltage_v, height_mm;
+    const char *family, *role;
+    CpMcu *mcu;
 } PartInfo;
+static int pin_listed(const char *const *pins,size_t count,const char *pin) {
+    for(size_t i=0;i<count;i++) if(!strcmp(pins[i],pin)) return 1;
+    return 0;
+}
+/* (KEY PIN ...) -> distinct valid pins, at most max. */
+static int pin_list(const IRNode *n,const char **out,size_t max,size_t *count) {
+    *count=0;
+    if(ir_list_length(n)<2 || ir_list_length(n)-1>max) return 0;
+    for(size_t i=1;i<ir_list_length(n);i++) {
+        if(!id_ok(txt(n,i)) || pin_listed(out,*count,txt(n,i))) return 0;
+        out[(*count)++]=txt(n,i);
+    }
+    return 1;
+}
+const CpMcuPin *cp_mcu_gpio(const CpMcu *m,const char *pin) {
+    for(size_t i=0;m && i<m->gpio_count;i++) if(!strcmp(m->gpio[i].pin,pin)) return &m->gpio[i];
+    return NULL;
+}
+static int mcu_has_pin(const CpMcu *m,const char *pin) {
+    return pin_listed(m->supply,m->supply_count,pin) || pin_listed(m->ground,m->ground_count,pin) || !strcmp(m->reset,pin) || cp_mcu_gpio(m,pin);
+}
+/* The (mcu ...) block of a kind-U part: typed constraints, never a silicon or firmware model. */
+static int read_mcu(CpProject *p,const IRNode *n,const char *id,const char *source,CpMcu **out,char *e,size_t cap) {
+    char why[256];
+    if(!fields(n,1,"|behavior||supply||ground||operating_v||vih_ratio||vil_ratio||max_source_a||max_sink_a||output_ohm||pull_ohm||gpio||straps||reset||program||provenance|",why,sizeof why))
+        return errorf(e,cap,"part %s: mcu: %s",id,why);
+    CpMcu *m=arena_alloc(&p->arena,sizeof *m);
+    if(!m) return errorf(e,cap,"out of memory");
+    memset(m,0,sizeof *m); m->reset="";
+    m->behavior=field(n,"behavior"); m->provenance=field(n,"provenance");
+    if(!*m->behavior) return errorf(e,cap,"part %s: mcu needs (behavior \"...\") stating what is and is not simulated",id);
+    const IRNode *supply=ir_list_find(n,"supply"), *ground=ir_list_find(n,"ground"), *range=ir_list_find(n,"operating_v");
+    if(!supply || !pin_list(supply,m->supply,CP_MCU_MAX_RAILS,&m->supply_count)) return errorf(e,cap,"part %s: mcu needs (supply PIN ...) with distinct pins",id);
+    if(!ground || !pin_list(ground,m->ground,CP_MCU_MAX_RAILS,&m->ground_count)) return errorf(e,cap,"part %s: mcu needs (ground PIN ...) with distinct pins",id);
+    if(!range || ir_list_length(range)!=3 || !num(range,1,&m->vmin) || !num(range,2,&m->vmax) || m->vmin<=0 || m->vmin>m->vmax || m->vmax>100)
+        return errorf(e,cap,"part %s: mcu needs (operating_v MIN MAX) with 0 < MIN <= MAX",id);
+    m->vih_ratio=m->vil_ratio=m->max_source_a=m->max_sink_a=m->output_ohm=m->pull_ohm=(CpQuantity){0,0,source};
+    if(!quantity(n,"vih_ratio",1,source,&m->vih_ratio,id,e,cap) || !quantity(n,"vil_ratio",1,source,&m->vil_ratio,id,e,cap) ||
+       !quantity(n,"max_source_a",100,source,&m->max_source_a,id,e,cap) || !quantity(n,"max_sink_a",100,source,&m->max_sink_a,id,e,cap) ||
+       !quantity(n,"output_ohm",1e9,source,&m->output_ohm,id,e,cap) || !quantity(n,"pull_ohm",1e9,source,&m->pull_ohm,id,e,cap)) return 0;
+    if(m->vih_ratio.known && m->vil_ratio.known && m->vil_ratio.value>=m->vih_ratio.value)
+        return errorf(e,cap,"part %s: mcu vil_ratio must be below vih_ratio",id);
+    for(size_t i=0;i<m->supply_count;i++)
+        if(pin_listed(m->ground,m->ground_count,m->supply[i])) return errorf(e,cap,"part %s: pin %s is both supply and ground",id,m->supply[i]);
+    const IRNode *gpio=ir_list_find(n,"gpio");
+    for(size_t i=1;i<ir_list_length(gpio);i++) {
+        const IRNode *g=ir_child_at(gpio,i); CpMcuPin *pin=&m->gpio[m->gpio_count];
+        if(m->gpio_count==CP_MCU_MAX_PINS || strcmp(txt(g,0),"pin") || ir_list_length(g)<4 || !id_ok(txt(g,1)) || !id_ok(txt(g,2)))
+            return errorf(e,cap,"part %s: mcu gpio entries are (pin NUMBER NAME in|out ...)",id);
+        if(mcu_has_pin(m,txt(g,1))) return errorf(e,cap,"part %s: mcu pin %s is declared twice",id,txt(g,1));
+        pin->pin=txt(g,1); pin->name=txt(g,2); pin->strap_note=""; pin->flags=0;
+        for(size_t k=3;k<ir_list_length(g);k++) {
+            const char *capability=txt(g,k);
+            if(!strcmp(capability,"in")) pin->flags|=CP_GPIO_IN;
+            else if(!strcmp(capability,"out")) pin->flags|=CP_GPIO_OUT;
+            else return errorf(e,cap,"part %s: mcu pin %s: capability must be in or out, not '%s'",id,pin->pin,capability);
+        }
+        m->gpio_count++;
+    }
+    const IRNode *reset=ir_list_find(n,"reset");
+    if(reset) {
+        if(ir_list_length(reset)!=3 || !id_ok(txt(reset,1)) || (strcmp(txt(reset,2),"active_low") && strcmp(txt(reset,2),"active_high")))
+            return errorf(e,cap,"part %s: mcu reset is (reset PIN active_low|active_high)",id);
+        if(mcu_has_pin(m,txt(reset,1))) return errorf(e,cap,"part %s: mcu reset pin %s is declared twice",id,txt(reset,1));
+        m->reset=txt(reset,1); m->reset_active_low=!strcmp(txt(reset,2),"active_low");
+    }
+    const IRNode *straps=ir_list_find(n,"straps");
+    for(size_t i=1;i<ir_list_length(straps);i++) {
+        const IRNode *s=ir_child_at(straps,i); CpMcuPin *pin=(CpMcuPin *)cp_mcu_gpio(m,txt(s,0));
+        if(ir_list_length(s)!=2 || !pin || !*txt(s,1)) return errorf(e,cap,"part %s: mcu straps are (GPIO_PIN \"what its level at reset selects\")",id);
+        pin->flags|=CP_GPIO_STRAP; pin->strap_note=txt(s,1);
+    }
+    const IRNode *program=ir_list_find(n,"program");
+    if(program) {
+        if(!pin_list(program,m->program,CP_MCU_MAX_RAILS,&m->program_count)) return errorf(e,cap,"part %s: mcu program is (program PIN ...)",id);
+        for(size_t i=0;i<m->program_count;i++)
+            if(!mcu_has_pin(m,m->program[i])) return errorf(e,cap,"part %s: mcu program pin %s is not a declared pin",id,m->program[i]);
+    }
+    *out=m; return 1;
+}
 static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_t cap) {
     static const char *const default_pins[DEVICE_MODEL_MAX_TERMINALS]={"1","2","3","4","5","6","7","8"};
     const char *id=txt(part,1); char why[256];
@@ -111,7 +193,7 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
         return errorf(e,cap,"part %s: kind %c needs an explicit (model ...); polarity is never inferred",id,out->kind);
     } else out->model_source="none";
     /* Identity and data fields, plus the bound model's non-primary parameters; anything else is rejected. */
-    char allowed[640]="|kind||symbol||footprint||power_w||voltage_v||tolerance||height_mm||manufacturer||mpn||datasheet||model||pinmap||provenance||catalogue|";
+    char allowed[768]="|kind||symbol||footprint||power_w||voltage_v||tolerance||height_mm||manufacturer||mpn||datasheet||model||pinmap||provenance||catalogue||family||role||alternates||mcu|";
     for(size_t k=0;out->model && k<out->model->param_count;k++) if((int)k!=out->model->primary_param) {
         size_t used=strlen(allowed); snprintf(allowed+used,sizeof allowed-used,"|%s|",out->model->params[k].name);
     }
@@ -122,6 +204,21 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     if(!quantity(part,"power_w",1e9,source,&out->power_w,id,e,cap) || !quantity(part,"voltage_v",1e9,source,&out->voltage_v,id,e,cap) ||
        !quantity(part,"height_mm",100,source,&out->height_mm,id,e,cap)) return 0;
     if(!scalar(part,"tolerance",0,0,.99,&out->tolerance)) return errorf(e,cap,"part %s: invalid tolerance",id);
+    static const char *const labels[]={"family","role"};
+    for(size_t k=0;k<2;k++) {
+        const IRNode *v=ir_list_find(part,labels[k]);
+        if(v && (ir_list_length(v)!=2 || !id_ok(txt(v,1)))) return errorf(e,cap,"part %s: (%s NAME) takes one identifier",id,labels[k]);
+    }
+    out->family=field(part,"family"); out->role=field(part,"role");
+    const IRNode *alternates=ir_list_find(part,"alternates");
+    if(alternates && ir_list_length(alternates)<2) return errorf(e,cap,"part %s: (alternates ID ...) needs at least one part id",id);
+    for(size_t j=1;j<ir_list_length(alternates);j++) {
+        if(!id_ok(txt(alternates,j)) || !strcmp(txt(alternates,j),id)) return errorf(e,cap,"part %s: invalid alternate '%s'",id,txt(alternates,j));
+        for(size_t k=1;k<j;k++) if(!strcmp(txt(alternates,j),txt(alternates,k))) return errorf(e,cap,"part %s: alternate %s is listed twice",id,txt(alternates,j));
+    }
+    const IRNode *mcu=ir_list_find(part,"mcu");
+    if(mcu && out->kind!='U') return errorf(e,cap,"part %s: (mcu ...) is only valid on kind U",id);
+    if(mcu && !read_mcu(p,mcu,id,source,&out->mcu,e,cap)) return 0;
     for(size_t k=0;out->model && k<out->model->param_count;k++) {
         const IRNode *v=ir_list_find(part,out->model->params[k].name);
         if(!v || (int)k==out->model->primary_param) continue;
@@ -132,6 +229,8 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     const IRNode *map=ir_list_find(part,"pinmap");
     if(map && !out->model) return errorf(e,cap,"part %s: (pinmap ...) needs a device model",id);
     if(!out->model) return 1;
+    if(!map && out->model->terminal_count>2)
+        return errorf(e,cap,"part %s: model %s has %zu terminals and needs an explicit (pinmap ...); terminal order is never assumed",id,out->model->id,out->model->terminal_count);
     if(!map) { for(size_t t=0;t<out->model->terminal_count;t++) out->terminal_pin[t]=default_pins[t]; return 1; }
     if(ir_list_length(map)-1!=out->model->terminal_count)
         return errorf(e,cap,"part %s: pinmap must map each of the %zu terminals of %s exactly once",id,out->model->terminal_count,out->model->id);
@@ -173,6 +272,41 @@ static int load_rules(CpProject *p,const IRNode *n,char *e,size_t cap) {
 #undef RULE
     return 1;
 }
+static size_t pin_index(const CpComponent *c,const char *pin) {
+    for(size_t k=0;k<c->pin_count;k++) if(!strcmp(c->pins[k],pin)) return k;
+    return SIZE_MAX;
+}
+/* (nc PIN ...): pins deliberately left unconnected; (drive (PIN state) ...): MCU GPIO states. An MCU's
+ * supply and ground pins must be connected, its ground pins share one net, and nothing is assumed. */
+static int read_pin_states(CpProject *p,const IRNode *n,CpComponent *c,char *e,size_t cap) {
+    (void)p;
+    const IRNode *nc=ir_list_find(n,"nc"), *drive=ir_list_find(n,"drive");
+    if(nc && !pin_list(nc,c->nc,CP_MAX_PINS,&c->nc_count)) return errorf(e,cap,"%s: (nc PIN ...) lists distinct pins",c->ref);
+    for(size_t i=0;i<c->nc_count;i++) if(pin_index(c,c->nc[i])!=SIZE_MAX) return errorf(e,cap,"%s: pin %s is both connected and (nc ...)",c->ref,c->nc[i]);
+    if(drive && !c->mcu) return errorf(e,cap,"%s: (drive ...) needs a part with an (mcu ...) behavioral boundary",c->ref);
+    static const char *const states[]={"","high","low","input","pull_up","pull_down"};
+    for(size_t i=1;i<ir_list_length(drive);i++) {
+        const IRNode *d=ir_child_at(drive,i); const CpMcuPin *g=cp_mcu_gpio(c->mcu,txt(d,0)); size_t k=pin_index(c,txt(d,0)); int state=0;
+        for(int s=1;s<6;s++) if(!strcmp(txt(d,1),states[s])) state=s;
+        if(ir_list_length(d)!=2 || !state) return errorf(e,cap,"%s: drive entries are (PIN high|low|input|pull_up|pull_down)",c->ref);
+        if(!g) return errorf(e,cap,"%s: pin %s is not a GPIO of %s",c->ref,txt(d,0),c->part);
+        if(k==SIZE_MAX) return errorf(e,cap,"%s: driven pin %s is not connected in (pins ...)",c->ref,txt(d,0));
+        if(c->drive[k]) return errorf(e,cap,"%s: pin %s is driven twice",c->ref,txt(d,0));
+        if((state==CP_DRIVE_HIGH || state==CP_DRIVE_LOW) && !(g->flags&CP_GPIO_OUT)) return errorf(e,cap,"%s: %s (pin %s) cannot drive an output",c->ref,g->name,g->pin);
+        if(state>=CP_DRIVE_INPUT && !(g->flags&CP_GPIO_IN)) return errorf(e,cap,"%s: %s (pin %s) is not an input",c->ref,g->name,g->pin);
+        c->drive[k]=(unsigned char)state;
+    }
+    if(!c->mcu) return 1;
+    size_t ground_net=SIZE_MAX;
+    for(size_t i=0;i<c->mcu->supply_count+c->mcu->ground_count;i++) {
+        int is_ground=i>=c->mcu->supply_count; const char *pin=is_ground?c->mcu->ground[i-c->mcu->supply_count]:c->mcu->supply[i];
+        size_t k=pin_index(c,pin);
+        if(k==SIZE_MAX) return errorf(e,cap,"%s: %s pin %s of %s must be connected",c->ref,is_ground?"ground":"supply",pin,c->part);
+        if(is_ground && ground_net!=SIZE_MAX && c->nodes[k]!=ground_net) return errorf(e,cap,"%s: ground pins of %s are on different nets",c->ref,c->part);
+        if(is_ground) ground_net=c->nodes[k];
+    }
+    return 1;
+}
 int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     IRError ie; p->root=ir_parse_file(&p->arena,path,&ie);
     if(!p->root) return errorf(e,cap,"Parse at %zu:%zu: %s",ie.line,ie.column,ie.message?ie.message:"I/O failure");
@@ -203,7 +337,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     for(size_t i=1;i<ir_list_length(cs);i++) {
         const IRNode *n=ir_child_at(cs,i); PartInfo info; char why[256];
         if(p->component_count==CP_MAX_COMPONENTS || strcmp(txt(n,0),"component") || !id_ok(txt(n,1)) || comp_index(p,txt(n,1))!=SIZE_MAX) return errorf(e,cap,"Invalid/duplicate component %s",txt(n,1));
-        if(!fields(n,2,"|part||value||pins||at||override||ac|",e,cap)) return 0;
+        if(!fields(n,2,"|part||value||pins||at||override||ac||nc||drive|",e,cap)) return 0;
         const IRNode *part=ir_list_find_named(parts,"part",field(n,"part"));
         if(!part) return errorf(e,cap,"%s: part '%s' is not in catalogue",txt(n,1),field(n,"part"));
         if(!read_part(p,part,&info,e,cap)) return 0;
@@ -213,6 +347,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
         c->provenance=field(part,"provenance"); c->catalogue=field(part,"catalogue"); c->override_provenance="";
         c->kind=info.kind; c->model=info.model; c->model_source=info.model_source; c->tolerance=info.tolerance;
         c->power_w=info.power_w; c->voltage_v=info.voltage_v; c->height_mm=info.height_mm;
+        c->family=info.family; c->role=info.role; c->mcu=info.mcu;
         /* A model's primary parameter comes from (value ...); an omitted value is never defaulted. */
         int primary=c->model ? c->model->primary_param : -1;
         const IRNode *value=ir_list_find(n,"value");
@@ -230,6 +365,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
             c->pins[c->pin_count]=txt(pin,0); c->nodes[c->pin_count++]=ni;
         }
         if(c->pin_count==0) return errorf(e,cap,"%s: no pins",c->ref);
+        if(!read_pin_states(p,n,c,e,cap)) return 0;
         /* Bind every model terminal to exactly one connected pin through the part's pin map. */
         for(size_t t=0;c->model && t<c->model->terminal_count;t++) {
             size_t k=0; while(k<c->pin_count && strcmp(c->pins[k],info.terminal_pin[t])) k++;
@@ -272,8 +408,15 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     for(size_t i=1;i<ir_list_length(geo);i++) {
         const IRNode *g=ir_child_at(geo,i); const char *type=txt(g,0); double v[12]={0};
         size_t start=0,count=0,ci=0,ni=0;
+        int no_net=0;
         if(!strcmp(type,"trace")) { ni=net_index(p,txt(g,1)); start=2; count=6; }
-        else if(!strcmp(type,"pad")) { ci=comp_index(p,txt(g,1)); ni=net_index(p,txt(g,3)); start=4; count=9; }
+        else if(!strcmp(type,"pad")) {
+            ci=comp_index(p,txt(g,1)); start=4; count=9; no_net=!strcmp(txt(g,3),"~");
+            /* A pad of an (nc ...) pin has no net; it is still copper for every clearance rule. */
+            if(no_net && (ci==SIZE_MAX || !pin_listed(p->components[ci].nc,p->components[ci].nc_count,txt(g,2)))) return errorf(e,cap,"Pad %s:%s has no net but is not an (nc ...) pin",txt(g,1),txt(g,2));
+            ni=no_net?0:net_index(p,txt(g,3));
+        }
+        else if(!strcmp(type,"keepout")) { ci=comp_index(p,txt(g,1)); start=2; count=6; }
         else if(!strcmp(type,"via")) { ni=net_index(p,txt(g,1)); start=2; count=4; }
         else if(!strcmp(type,"body")) { ci=comp_index(p,txt(g,1)); start=2; count=5; }
         else return errorf(e,cap,"Unsupported geometry %s",type);
@@ -283,10 +426,15 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
         if(!strcmp(type,"trace")) {
             if(v[5]!=0 && v[5]!=2) return errorf(e,cap,"Invalid copper layer");
             rc=pcb_add_trace(&p->board,(PcbTrace){(uint32_t)ni+1,(uint8_t)v[5],v[0],v[1],v[2],v[3],v[4]});
+        } else if(!strcmp(type,"keepout")) {
+            if(p->keepout_count==CP_MAX_KEEPOUTS || v[0]>=v[2] || v[1]>=v[3] || v[4]!=(int)v[4] || v[4]<1 || v[4]>3 || v[5]!=(int)v[5] || v[5]<1 || v[5]>15)
+                return errorf(e,cap,"Invalid keepout for %s: (keepout REF X1 Y1 X2 Y2 LAYERS FLAGS) with X1<X2, Y1<Y2",txt(g,1));
+            p->keepouts[p->keepout_count++]=(CpKeepout){ci,v[0],v[1],v[2],v[3],(unsigned)v[4],(unsigned)v[5]};
+            rc=0;
         } else if(!strcmp(type,"pad")) {
-            size_t pi=SIZE_MAX; for(size_t k=0;k<p->components[ci].pin_count;k++) if(!strcmp(p->components[ci].pins[k],txt(g,2))) pi=k;
-            if(pi==SIZE_MAX || p->components[ci].nodes[pi]!=ni || (v[4]!=0&&v[4]!=2) || (v[7]!=0&&v[7]!=1) || v[2]<=0 || v[3]<0) return errorf(e,cap,"Pad disagrees with electrical IR");
-            PcbPad pad={.component_id=(uint32_t)ci,.pin_number=(uint16_t)(pi+1),.net_id=(uint32_t)ni+1,.x_mm=v[0],.y_mm=v[1],.pad_diameter_mm=v[2],.drill_mm=v[3],.layer=(uint8_t)v[4],.plated=v[3]>0,.width_mm=v[5],.height_mm=v[6],.rectangular=(int)v[7],.corner_radius_mm=v[8]};
+            size_t pi=no_net?SIZE_MAX-1:pin_index(&p->components[ci],txt(g,2));
+            if(pi==SIZE_MAX || (!no_net && p->components[ci].nodes[pi]!=ni) || (v[4]!=0&&v[4]!=2) || (v[7]!=0&&v[7]!=1) || v[2]<=0 || v[3]<0) return errorf(e,cap,"Pad disagrees with electrical IR");
+            PcbPad pad={.component_id=(uint32_t)ci,.pin_number=(uint16_t)(no_net?0:pi+1),.net_id=no_net?0:(uint32_t)ni+1,.x_mm=v[0],.y_mm=v[1],.pad_diameter_mm=v[2],.drill_mm=v[3],.layer=(uint8_t)v[4],.plated=v[3]>0,.width_mm=v[5],.height_mm=v[6],.rectangular=(int)v[7],.corner_radius_mm=v[8]};
             rc=pcb_add_pad(&p->board,pad);
         } else if(!strcmp(type,"via")) rc=pcb_add_via(&p->board,(PcbVia){(uint32_t)ni+1,v[0],v[1],v[2],v[3],0,2,true});
         else {
@@ -309,13 +457,49 @@ static double terminal_voltage(const CpComponent *c,const MnaResult *r) {
 /* Stamps every component's DC model. Returns 1, or 0 with the reporting rule and a reason:
  * unsupported_model (no model, kind U), unsupported_analysis (model lacks DC), model_stamp.
  * Transient analysis uses src/transient.c; AC uses cp_ac. */
-static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why,size_t cap) {
+/* What the DC assembly added beyond device models: driven MCU pins and boundary-only nets. */
+#define CP_MAX_DRIVES 256
+typedef struct {
+    struct { size_t component, pin, branch; int ideal; } drive[CP_MAX_DRIVES];
+    size_t drive_count;
+    unsigned char boundary[CP_MAX_NETS]; /* 1: only connectors, MCU pins or nothing touch this net */
+} DcExtra;
+static size_t branch_count(const MnaCircuit *m) {
+    size_t n=0, local;
+    for(size_t i=0;i<m->device_count;i++) {
+        const MnaDevice *d=mna_device_at(m,i);
+        if(d && d->ops && d->ops->branch_current && d->ops->branch_current(d->data,&local)) n++;
+    }
+    return n;
+}
+static size_t mcu_rail(const CpComponent *c,int ground) {
+    return c->nodes[pin_index(c,ground?c->mcu->ground[0]:c->mcu->supply[0])];
+}
+/* MCU behavioral boundary in DC: an output driven high (low) connects the pin to the first supply
+ * (ground) pin, ideally or through the sourced output resistance; a pull connects through the
+ * sourced pull resistance. Undriven pins are high impedance. Firmware and silicon are not modelled. */
+static int stamp_mcu(const CpComponent *c,size_t ci,MnaCircuit *m,DcExtra *x,unsigned char *touched) {
+    for(size_t k=0;k<c->pin_count;k++) {
+        int state=c->drive[k]; size_t rail, pin=c->nodes[k]; double ohm; int ideal=0;
+        if(state==CP_DRIVE_HIGH || state==CP_DRIVE_LOW) { rail=mcu_rail(c,state==CP_DRIVE_LOW); ideal=!c->mcu->output_ohm.known; ohm=c->mcu->output_ohm.value; }
+        else if((state==CP_DRIVE_PULL_UP || state==CP_DRIVE_PULL_DOWN) && c->mcu->pull_ohm.known) { rail=mcu_rail(c,state==CP_DRIVE_PULL_DOWN); ohm=c->mcu->pull_ohm.value; }
+        else continue;
+        size_t branch=branch_count(m);
+        if(!(ideal ? mna_add_voltage_source(m,rail,pin,0.0) : mna_add_resistor(m,rail,pin,ohm))) return 0;
+        touched[rail]=touched[pin]=1;
+        if(x && x->drive_count<CP_MAX_DRIVES) { x->drive[x->drive_count].component=ci; x->drive[x->drive_count].pin=k; x->drive[x->drive_count].branch=branch; x->drive[x->drive_count++].ideal=ideal; }
+    }
+    return 1;
+}
+static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why,size_t cap,DcExtra *x) {
     const DeviceAnalysis analysis=DEVICE_ANALYSIS_DC;
+    unsigned char touched[CP_MAX_NETS]={0};
+    if(x) memset(x,0,sizeof *x);
     mna_circuit_init(m,p->net_count-1);
     for(size_t i=0;i<p->component_count;i++) {
         const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
         if(!c->model) {
-            if(c->kind=='J') continue; /* Explicit ideal connector boundary; no device stamp. */
+            if(c->kind=='J' || c->mcu) continue; /* Ideal connector / MCU boundary: stamped below. */
             *rule="unsupported_model"; snprintf(why,cap,"%s: part %s (kind %c) has no device model; analysis is blocked.",c->ref,c->part,c->kind);
             return 0; /* Never silently omit an active unmodelled device. */
         }
@@ -330,6 +514,22 @@ static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why
             *rule="model_stamp"; snprintf(why,cap,"%s: model %s could not be stamped (allocation failure).",c->ref,c->model->id);
             return 0;
         }
+        for(size_t t=0;t<c->model->terminal_count;t++) touched[nodes[t]]=1;
+    }
+    /* After every device, so V/L branch indices keep component order. */
+    for(size_t i=0;i<p->component_count;i++) if(p->components[i].mcu && !stamp_mcu(&p->components[i],i,m,x,touched)) {
+        *rule="model_stamp"; snprintf(why,cap,"%s: MCU boundary could not be stamped (allocation failure).",p->components[i].ref);
+        return 0;
+    }
+    /* A net that only boundary pins (connectors, MCU pins) touch has no DC equation. It is tied to ground by an
+     * element no other node shares, which changes nothing else, and its voltage is reported as undefined.
+     * A net that nothing touches is not a boundary: it stays floating and the solve fails. */
+    unsigned char boundary_pin[CP_MAX_NETS]={0};
+    for(size_t i=0;i<p->component_count;i++) if(!p->components[i].model)
+        for(size_t k=0;k<p->components[i].pin_count;k++) boundary_pin[p->components[i].nodes[k]]=1;
+    for(size_t n=1;n<p->net_count;n++) if(!touched[n] && boundary_pin[n]) {
+        if(!mna_add_resistor(m,n,0,1.0)) { *rule="model_stamp"; snprintf(why,cap,"allocation failure"); return 0; }
+        if(x) x->boundary[n]=1;
     }
     return 1;
 }
@@ -364,7 +564,7 @@ static unsigned tolerance_corners(const CpProject *p,Report *report,double *lo,d
         for(size_t j=0;j<count;j++){size_t i=indices[j];CpComponent *c=&copy->components[i];
             c->value=p->components[i].value*(1+((mask&(1u<<j))?1:-1)*p->components[i].tolerance);c->params[c->model->primary_param]=c->value;}
         MnaCircuit m={0};MnaResult r={0};MnaOptions o;MnaValidation v={0};mna_options_default(&o);const char *rule;char why[256];
-        int ok=assemble(copy,&m,&rule,why,sizeof why);if(ok){mna_solve(&m,&o,&r);ok=r.status==MNA_STATUS_SUCCESS&&mna_validate(&m,&r,&o,&v)&&v.valid;}
+        int ok=assemble(copy,&m,&rule,why,sizeof why,NULL);if(ok){mna_solve(&m,&o,&r);ok=r.status==MNA_STATUS_SUCCESS&&mna_validate(&m,&r,&o,&v)&&v.valid;}
         if(!ok){issue(report,2,"corner_solve","circuit",mask,0,"Tolerance corner did not solve.");mna_result_free(&r);mna_circuit_free(&m);break;}
         done++;
         for(size_t i=0;i<p->net_count;i++){double value=mna_node_voltage(&r,i);lo[i]=fmin(lo[i],value);hi[i]=fmax(hi[i],value);}
@@ -384,6 +584,45 @@ static unsigned tolerance_corners(const CpProject *p,Report *report,double *lo,d
     }
     free(copy);return done;
 }
+static CopperItem rect_item(double x1,double y1,double x2,double y2,CopperLayerMask layers,CopperNet net) {
+    return (CopperItem){.shape=copper_shape_rect((Pt){nm_from_mm(x1),nm_from_mm(y1)},(Pt){nm_from_mm(x2),nm_from_mm(y2)},0),.layers=layers,.net=net};
+}
+/* Footprint rule areas: no track, via, other component's pad or other component's body may touch them.
+ * Exact copper shapes are compared with zero clearance; touching counts as a violation. */
+static void keepout_checks(const CpProject *p,Report *r) {
+    const PcbBoard *b=&p->board; CopperLayerMask front=0, back=0; char object[96], msg[256];
+    if(pcb_copper_mask_from_kicad_layer(0,2,&front)!=PCB_COPPER_OK || pcb_copper_mask_from_kicad_layer(2,2,&back)!=PCB_COPPER_OK) {
+        issue(r,2,"dfm_engine","keepout",0,0,"Keepout layer mapping failed."); return;
+    }
+    for(size_t k=0;k<p->keepout_count;k++) {
+        const CpKeepout *ko=&p->keepouts[k]; const char *owner=p->components[ko->component].ref;
+        CopperLayerMask layers=(ko->layers&1?front:0)|(ko->layers&2?back:0);
+        CopperItem zone=rect_item(ko->x1,ko->y1,ko->x2,ko->y2,layers,COPPER_NET_NONE);
+        snprintf(object,sizeof object,"keepout:%s",owner);
+        struct { unsigned flag; CopperItemKind kind; size_t count; const char *what; } groups[]={
+            {CP_KEEPOUT_TRACKS,COPPER_ITEM_TRACE,vec_len(b->traces),"track"},{CP_KEEPOUT_VIAS,COPPER_ITEM_VIA,vec_len(b->vias),"via"},
+            {CP_KEEPOUT_PADS,COPPER_ITEM_PAD,vec_len(b->pads),"pad"}};
+        for(size_t g=0;g<3;g++) if(ko->flags&groups[g].flag) for(size_t i=0;i<groups[g].count;i++) {
+            CopperItem item;
+            if(groups[g].kind==COPPER_ITEM_PAD && b->pads[i].component_id==ko->component) continue; /* the footprint's own pads */
+            if(pcb_copper_item(b,groups[g].kind,i,&item)!=PCB_COPPER_OK) { issue(r,2,"keepout_unverified",object,0,0,"A copper object could not be compared with the keepout."); continue; }
+            CopperResult v=copper_pair_check(&zone,&item,0);
+            if(v==COPPER_RESULT_SHORT) {
+                snprintf(msg,sizeof msg,"A %s enters the keepout area of %s's footprint.",groups[g].what,owner);
+                issue(r,2,"keepout_violation",object,(double)i,0,msg);
+            } else if(v==COPPER_RESULT_UNVERIFIED || v==COPPER_RESULT_INVALID_INPUT) issue(r,2,"keepout_unverified",object,(double)i,0,"A copper object could not be compared with the keepout.");
+        }
+        if(ko->flags&CP_KEEPOUT_FOOTPRINTS) for(size_t i=0;i<vec_len(b->placements);i++) {
+            const PcbPlacement *a=&b->placements[i];
+            if(a->component_id==ko->component) continue;
+            CopperItem body=rect_item(a->x_mm-a->width_mm/2,a->y_mm-a->height_mm/2,a->x_mm+a->width_mm/2,a->y_mm+a->height_mm/2,front|back,COPPER_NET_NONE);
+            if(copper_pair_check(&zone,&body,0)==COPPER_RESULT_SHORT) {
+                snprintf(msg,sizeof msg,"%s's assembly envelope enters the keepout area of %s's footprint.",p->components[a->component_id].ref,owner);
+                issue(r,2,"keepout_violation",object,(double)i,0,msg);
+            }
+        }
+    }
+}
 static void physical(const CpProject *p,Report *r) {
     if(!p->has_geometry) { issue(r,1,"geometry_missing","board",0,1,"Physical DFM not run; export/import real footprints first."); return; }
     const PcbBoard *b=&p->board; PcbDfmReport dr; pcb_dfm_report_init(&dr);
@@ -402,6 +641,9 @@ static void physical(const CpProject *p,Report *r) {
     }
     for(size_t i=0;i<vec_len(b->vias)+vec_len(b->pads);i++) {
         double drill=i<vec_len(b->vias)?b->vias[i].drill_mm:b->pads[i-vec_len(b->vias)].drill_mm;
+        /* The profile's minimum hole applies to every drilled hole, as KiCad's hole_size rule does. */
+        if(i>=vec_len(b->vias) && drill>0 && drill<p->fab.min_via_drill_mm)
+            issue(r,2,"pad_drill","hole",drill,p->fab.min_via_drill_mm,"Footprint pad drill is below the profile's minimum finished hole.");
         if(drill>0 && b->spec.board_thickness_mm/drill>p->max_aspect) issue(r,2,"drill_aspect","hole",b->spec.board_thickness_mm/drill,p->max_aspect,"Board thickness / finished drill exceeds profile.");
     }
     /* Drill-to-drill includes pad/via combinations; hole rules ignore nets. */
@@ -416,6 +658,8 @@ static void physical(const CpProject *p,Report *r) {
     }
     for(size_t i=0;i<vec_len(b->pads);i++) for(size_t j=i+1;j<vec_len(b->pads);j++) {
         CopperItem a,c; double gap;
+        /* Copies of one footprint pad (a stacked thermal pad) form one copper feature with one mask opening. */
+        if(b->pads[i].component_id==b->pads[j].component_id && b->pads[i].pin_number && b->pads[i].pin_number==b->pads[j].pin_number) continue;
         if(pcb_copper_item(b,COPPER_ITEM_PAD,i,&a)!=PCB_COPPER_OK || pcb_copper_item(b,COPPER_ITEM_PAD,j,&c)!=PCB_COPPER_OK) continue;
         if(!copper_pair_gap_nm(&a,&c,&gap)) continue;
         /* Exact comparator for web threshold; report floats only describe it. */
@@ -423,6 +667,7 @@ static void physical(const CpProject *p,Report *r) {
         a.net=1;c.net=2; CopperResult v=copper_pair_check(&a,&c,req);
         if(v==COPPER_RESULT_TOO_CLOSE || v==COPPER_RESULT_SHORT) issue(r,2,"mask_web","pad pair",gap/1e6-2*p->mask_expansion,p->min_mask_web,"Mask openings leave insufficient web (rectangular pad envelope). ");
     }
+    keepout_checks(p,r);
     for(size_t i=0;i<vec_len(b->placements);i++) for(size_t j=i+1;j<vec_len(b->placements);j++) {
         const PcbPlacement *a=&b->placements[i],*c=&b->placements[j];
         CopperItem x={.shape=copper_shape_rect((Pt){nm_from_mm(a->x_mm-a->width_mm/2),nm_from_mm(a->y_mm-a->height_mm/2)},(Pt){nm_from_mm(a->x_mm+a->width_mm/2),nm_from_mm(a->y_mm+a->height_mm/2)},0),.layers=1,.net=1};
@@ -439,6 +684,28 @@ static void quantity_json(FILE *f,const char *name,const CpQuantity *q) {
 static void capabilities_json(FILE *f,const DeviceModelSpec *m) {
     fprintf(f,"{\"dc\":%s,\"transient\":%s,\"ac\":%s}",device_model_supports(m,DEVICE_ANALYSIS_DC)?"true":"false",
             device_model_supports(m,DEVICE_ANALYSIS_TRANSIENT)?"true":"false",device_model_supports(m,DEVICE_ANALYSIS_AC)?"true":"false");
+}
+static void strings_json(FILE *f,const char *const *v,size_t n) {
+    fputc('[',f); for(size_t i=0;i<n;i++) { if(i) fputc(',',f); js(f,v[i]); } fputc(']',f);
+}
+/* The MCU boundary as data: what is constrained, what is declared unknown, and the stated behavior. */
+static void mcu_json(FILE *f,const CpMcu *u) {
+    if(!u) { fputs("null",f); return; }
+    fputs("{\"behavior\":",f); js(f,u->behavior); fputs(",\"provenance\":",f); js(f,u->provenance);
+    fputs(",\"supply\":",f); strings_json(f,u->supply,u->supply_count); fputs(",\"ground\":",f); strings_json(f,u->ground,u->ground_count);
+    fprintf(f,",\"operating_v\":[%.12g,%.12g],",u->vmin,u->vmax);
+    quantity_json(f,"vih_ratio",&u->vih_ratio); fputc(',',f); quantity_json(f,"vil_ratio",&u->vil_ratio); fputc(',',f);
+    quantity_json(f,"max_source_a",&u->max_source_a); fputc(',',f); quantity_json(f,"max_sink_a",&u->max_sink_a); fputc(',',f);
+    quantity_json(f,"output_ohm",&u->output_ohm); fputc(',',f); quantity_json(f,"pull_ohm",&u->pull_ohm);
+    fputs(",\"gpio\":[",f);
+    for(size_t g=0;g<u->gpio_count;g++) { const CpMcuPin *q=&u->gpio[g]; if(g) fputc(',',f);
+        fputs("{\"pin\":",f); js(f,q->pin); fputs(",\"name\":",f); js(f,q->name);
+        fprintf(f,",\"input\":%s,\"output\":%s,\"strap\":",q->flags&CP_GPIO_IN?"true":"false",q->flags&CP_GPIO_OUT?"true":"false");
+        if(q->flags&CP_GPIO_STRAP) js(f,q->strap_note); else fputs("null",f); fputc('}',f); }
+    fputs("],\"reset\":",f);
+    if(*u->reset) { fputs("{\"pin\":",f); js(f,u->reset); fprintf(f,",\"active_low\":%s}",u->reset_active_low?"true":"false"); } else fputs("null",f);
+    fputs(",\"program\":",f); strings_json(f,u->program,u->program_count);
+    fputs(",\"simulated\":\"DC constraints only: undriven pins are high impedance; firmware execution and transistor-level silicon are not simulated\"}",f);
 }
 /* Per-component binding: model identity and capabilities, terminal -> pin map, parameters, ratings with
  * provenance, and catalogue identity. Lets reports and tools trace every value to its source. */
@@ -461,7 +728,12 @@ static void components_json(const CpProject *p,FILE *f) {
         fputs(",\"footprint\":",f); js(f,c->footprint); fputs(",\"manufacturer\":",f); js(f,c->manufacturer);
         fputs(",\"mpn\":",f); js(f,c->mpn); fputs(",\"datasheet\":",f); js(f,c->datasheet);
         fputs("},\"provenance\":",f); js(f,c->provenance); fputs(",\"catalogue\":",f); js(f,c->catalogue);
-        fputs(",\"override_provenance\":",f); js(f,c->override_provenance); fputc('}',f);
+        fputs(",\"override_provenance\":",f); js(f,c->override_provenance);
+        fputs(",\"family\":",f); js(f,c->family); fputs(",\"role\":",f); js(f,c->role);
+        fputs(",\"nc\":",f); strings_json(f,c->nc,c->nc_count); fputs(",\"drive\":{",f);
+        static const char *const states[]={"","high","low","input","pull_up","pull_down"}; int first=1;
+        for(size_t k=0;k<c->pin_count;k++) if(c->drive[k]) { if(!first) fputc(',',f); first=0; js(f,c->pins[k]); fputc(':',f); js(f,states[c->drive[k]]); }
+        fputs("},\"mcu\":",f); mcu_json(f,c->mcu); fputc('}',f);
     }
     fputc(']',f);
 }
@@ -476,6 +748,13 @@ int cp_check_catalogue(const char *path,FILE *f,char *e,size_t cap) {
         if(!read_part(p,part,&info,e,cap)) goto done;
         for(size_t j=1;j<i;j++) if(!strcmp(txt(part,1),txt(ir_child_at(p->root,j),1))) { errorf(e,cap,"Duplicate part %s",txt(part,1)); goto done; }
     }
+    /* Alternates name parts of the same catalogue (procurement substitutes; nothing is swapped automatically). */
+    for(size_t i=1;i<ir_list_length(p->root);i++) {
+        const IRNode *part=ir_child_at(p->root,i), *alt=ir_list_find(part,"alternates");
+        for(size_t j=1;j<ir_list_length(alt);j++) if(!ir_list_find_named(p->root,"part",txt(alt,j))) {
+            errorf(e,cap,"part %s: alternate %s is not in this catalogue",txt(part,1),txt(alt,j)); goto done;
+        }
+    }
     fputs("{\"parts\":[",f);
     for(size_t i=1;i<ir_list_length(p->root);i++) {
         const IRNode *part=ir_child_at(p->root,i); PartInfo info; read_part(p,part,&info,e,cap);
@@ -486,7 +765,11 @@ int cp_check_catalogue(const char *path,FILE *f,char *e,size_t cap) {
         for(size_t t=0;info.model && t<info.model->terminal_count;t++) { if(t) fputc(',',f); js(f,info.model->terminals[t].name); fputc(':',f); js(f,info.terminal_pin[t]); }
         fputs("},\"ratings\":{",f);
         quantity_json(f,"power_w",&info.power_w); fputc(',',f); quantity_json(f,"voltage_v",&info.voltage_v); fputc(',',f); quantity_json(f,"height_mm",&info.height_mm);
-        fputs("}}",f);
+        fputs("},\"family\":",f); js(f,info.family); fputs(",\"role\":",f); js(f,info.role);
+        fputs(",\"capabilities\":",f); capabilities_json(f,info.model);
+        const IRNode *alt=ir_list_find(part,"alternates"); fputs(",\"alternates\":[",f);
+        for(size_t j=1;j<ir_list_length(alt);j++) { if(j>1) fputc(',',f); js(f,txt(alt,j)); }
+        fputs("],\"mcu\":",f); mcu_json(f,info.mcu); fputc('}',f);
     }
     fputs("]}\n",f); ok=!ferror(f);
  done:
@@ -520,10 +803,78 @@ int cp_models_json(FILE *f) {
     model_registry_free(&reg);
     return ferror(f)?3:0;
 }
+static int pin_connected(const CpComponent *c,const char *pin) { return pin_index(c,pin)!=SIZE_MAX; }
+/* Constraint checks of every MCU boundary against the solved DC point. */
+static void mcu_checks(const CpProject *p,const MnaCircuit *m,const MnaResult *r,const DcExtra *x,Report *rep) {
+    char object[96], msg[400];
+    for(size_t i=0;i<p->component_count;i++) {
+        const CpComponent *c=&p->components[i]; const CpMcu *u=c->mcu;
+        if(!u) continue;
+        size_t gnd=mcu_rail(c,1); double vdd=NAN;
+        issue(rep,1,"mcu_supply_current",c->ref,0,0,"MCU supply current is not modelled (behavioral boundary): rail drop, source load and trace current budgets exclude it.");
+        for(size_t s=0;s<u->supply_count;s++) {
+            size_t node=c->nodes[pin_index(c,u->supply[s])]; snprintf(object,sizeof object,"%s:%s",c->ref,u->supply[s]);
+            if(x->boundary[node]) { issue(rep,1,"mcu_supply_unknown",object,0,0,"Supply pin net has no DC source; the operating voltage is not verified."); continue; }
+            double v=mna_node_voltage(r,node)-mna_node_voltage(r,gnd);
+            if(s==0) vdd=v;
+            if(v<u->vmin || v>u->vmax) {
+                snprintf(msg,sizeof msg,"Supply pin is at %.6g V; %s operates from %.6g V to %.6g V.",v,c->part,u->vmin,u->vmax);
+                issue(rep,2,"mcu_supply_voltage",object,v,v<u->vmin?u->vmin:u->vmax,msg);
+            }
+        }
+        for(size_t d=0;d<x->drive_count;d++) if(x->drive[d].component==i) {
+            size_t k=x->drive[d].pin, rail=mcu_rail(c,c->drive[k]==CP_DRIVE_LOW||c->drive[k]==CP_DRIVE_PULL_DOWN), node=c->nodes[k];
+            if(c->drive[k]!=CP_DRIVE_HIGH && c->drive[k]!=CP_DRIVE_LOW) continue;
+            const CpMcuPin *g=cp_mcu_gpio(u,c->pins[k]); snprintf(object,sizeof object,"%s:%s(%s)",c->ref,g->pin,g->name);
+            /* Current out of the pin into the circuit (positive: sourcing). */
+            double out=x->drive[d].ideal ? mna_voltage_source_current(m,r,x->drive[d].branch)
+                                         : (mna_node_voltage(r,rail)-mna_node_voltage(r,node))/u->output_ohm.value;
+            const CpQuantity *limit=out>=0?&u->max_source_a:&u->max_sink_a; const char *what=out>=0?"source":"sink";
+            if(x->drive[d].ideal) issue(rep,1,"mcu_output_ideal",object,fabs(out),0,"No output resistance is sourced: the pin is an ideal connection to its rail, so the load sees the full rail and draws its own demand.");
+            if(!limit->known) { snprintf(msg,sizeof msg,"Maximum %s current of %s is not supplied; %.6g A is not verified.",what,c->part,fabs(out)); issue(rep,1,"rating_unknown",object,fabs(out),0,msg); }
+            else if(fabs(out)>limit->value) {
+                snprintf(msg,sizeof msg,"Pin %ss %.6g A; %s allows %.6g A per pin.",what,fabs(out),c->part,limit->value);
+                issue(rep,2,"mcu_pin_current",object,fabs(out),limit->value,msg);
+            }
+        }
+        for(size_t g=0;g<u->gpio_count;g++) {
+            const CpMcuPin *pin=&u->gpio[g]; size_t k=pin_index(c,pin->pin);
+            snprintf(object,sizeof object,"%s:%s(%s)",c->ref,pin->pin,pin->name);
+            if(pin->flags&CP_GPIO_STRAP && k!=SIZE_MAX) {
+                snprintf(msg,sizeof msg,"Strapping pin: %s. The level the circuit holds at reset is not verified.",pin->strap_note);
+                issue(rep,1,"mcu_strap_pin",object,0,0,msg);
+            }
+            if(k==SIZE_MAX) continue;
+            int state=c->drive[k];
+            if((state==CP_DRIVE_PULL_UP || state==CP_DRIVE_PULL_DOWN) && !u->pull_ohm.known)
+                issue(rep,1,"mcu_pull_unknown",object,0,0,"Internal pull resistance is not supplied; the pull is not modelled and the pin is high impedance.");
+            if(state==CP_DRIVE_HIGH || state==CP_DRIVE_LOW || x->boundary[c->nodes[k]] || !isfinite(vdd) || !u->vih_ratio.known || !u->vil_ratio.known) continue;
+            double v=mna_node_voltage(r,c->nodes[k])-mna_node_voltage(r,gnd);
+            if(v>u->vil_ratio.value*vdd && v<u->vih_ratio.value*vdd) {
+                snprintf(msg,sizeof msg,"Input at %.6g V is between VIL %.6g V and VIH %.6g V: the logic level is not defined.",v,u->vil_ratio.value*vdd,u->vih_ratio.value*vdd);
+                issue(rep,1,"mcu_input_undefined",object,v,u->vih_ratio.value*vdd,msg);
+            }
+        }
+        if(*u->reset) {
+            snprintf(object,sizeof object,"%s:%s(reset)",c->ref,u->reset);
+            size_t k=pin_index(c,u->reset);
+            if(k==SIZE_MAX || x->boundary[c->nodes[k]]) issue(rep,1,"mcu_reset",object,0,0,"Reset/enable pin has no defined DC level; the MCU may not leave reset.");
+            else if(isfinite(vdd) && u->vih_ratio.known && u->vil_ratio.known) {
+                double v=mna_node_voltage(r,c->nodes[k])-mna_node_voltage(r,gnd);
+                int asserted=u->reset_active_low ? v<u->vih_ratio.value*vdd : v>u->vil_ratio.value*vdd;
+                if(asserted) { snprintf(msg,sizeof msg,"Reset/enable pin at %.6g V is not at a defined run level.",v); issue(rep,1,"mcu_reset",object,v,0,msg); }
+            }
+        }
+        for(size_t s=0;s<u->program_count;s++) if(!pin_connected(c,u->program[s])) {
+            snprintf(object,sizeof object,"%s:%s",c->ref,u->program[s]);
+            issue(rep,1,"mcu_programming",object,0,0,"Programming interface pin is not connected; the part cannot be programmed in circuit.");
+        }
+    }
+}
 int cp_analyze(const CpProject *p,FILE *f) {
     MnaCircuit m={0}; MnaResult result={0}; MnaOptions opt; MnaValidation valid={0}; mna_options_default(&opt);
-    const char *rule="mna_failure"; char why[256];
-    int supported=assemble(p,&m,&rule,why,sizeof why); if(supported) { mna_solve(&m,&opt,&result); if(result.status==MNA_STATUS_SUCCESS) mna_validate(&m,&result,&opt,&valid); }
+    const char *rule="mna_failure"; char why[256]; DcExtra dx;
+    int supported=assemble(p,&m,&rule,why,sizeof why,&dx); if(supported) { mna_solve(&m,&opt,&result); if(result.status==MNA_STATUS_SUCCESS) mna_validate(&m,&result,&opt,&valid); }
     int solved=supported && result.status==MNA_STATUS_SUCCESS && valid.valid;
     fprintf(f,"{\"schema\":2,\"name\":"); js(f,p->name); fprintf(f,",\"dc_solved\":%s,\"physical_checked\":%s,\"issues\":[",solved?"true":"false",p->has_geometry?"true":"false");
     Report r={.f=f};
@@ -531,6 +882,9 @@ int cp_analyze(const CpProject *p,FILE *f) {
     size_t degree[CP_MAX_NETS]={0};
     for(size_t i=0;i<p->component_count;i++) for(size_t j=0;j<p->components[i].pin_count;j++) degree[p->components[i].nodes[j]]++;
     for(size_t i=0;i<p->net_count;i++) if(degree[i]<2) issue(&r,2,"open_node",p->nets[i],(double)degree[i],2,"Net has fewer than two terminals.");
+    if(solved) for(size_t i=1;i<p->net_count;i++) if(dx.boundary[i] && degree[i]>=2)
+        issue(&r,1,"boundary_net",p->nets[i],0,0,"Only connector, MCU or other boundary pins touch this net: its DC voltage is undefined (reported as null).");
+    if(solved) mcu_checks(p,&m,&result,&dx,&r);
     if(solved) {
         for(size_t i=0;i<p->component_count;i++) {
             const CpComponent *c=&p->components[i]; if(!c->model||c->kind=='V'||c->kind=='I') continue;
@@ -550,7 +904,8 @@ int cp_analyze(const CpProject *p,FILE *f) {
         }
         const IRNode *ts=ir_list_find(p->root,"targets");
         for(size_t i=1;i<ir_list_length(ts);i++) { const IRNode *t=ir_child_at(ts,i); double lo=0,hi=0; num(t,2,&lo);num(t,3,&hi);
-            double v=mna_node_voltage(&result,net_index(p,txt(t,1)));
+            size_t net=net_index(p,txt(t,1)); double v=mna_node_voltage(&result,net);
+            if(dx.boundary[net]) { issue(&r,2,"voltage_target",txt(t,1),0,lo,"Target net has no defined DC voltage (only boundary pins touch it)."); continue; }
             if(v<lo || v>hi) issue(&r,2,"voltage_target",txt(t,1),v,v<lo?lo:hi,"Solved node voltage is outside required interval.");
         }
     }
@@ -576,7 +931,7 @@ int cp_analyze(const CpProject *p,FILE *f) {
     unsigned corner_count=solved?tolerance_corners(p,&r,corner_lo,corner_hi):0;
     physical(p,&r);
     fputs("],\"nodes\":[",f);
-    for(size_t i=0;i<p->net_count;i++) { if(i) fputc(',',f); fputs("{\"name\":",f);js(f,p->nets[i]); if(solved) fprintf(f,",\"voltage_v\":%.12g}",mna_node_voltage(&result,i)); else fputs(",\"voltage_v\":null}",f); }
+    for(size_t i=0;i<p->net_count;i++) { if(i) fputc(',',f); fputs("{\"name\":",f);js(f,p->nets[i]); if(solved && !dx.boundary[i]) fprintf(f,",\"voltage_v\":%.12g}",mna_node_voltage(&result,i)); else fputs(",\"voltage_v\":null}",f); }
     fprintf(f,"],\"tolerance_corner_count\":%u,\"corner_nodes\":[",corner_count);
     if(corner_count)for(size_t i=0;i<p->net_count;i++){if(i)fputc(',',f);fputs("{\"name\":",f);js(f,p->nets[i]);fprintf(f,",\"min_v\":%.12g,\"max_v\":%.12g}",corner_lo[i],corner_hi[i]);}
     fputs("],\"calculations\":[",f); int count=0;
@@ -594,7 +949,7 @@ int cp_analyze(const CpProject *p,FILE *f) {
         fprintf(f,"{\"trace\":%zu,\"current_budget_a\":%.12g,\"resistance_ohm_20c\":%.12g,\"drop_budget_v\":%.12g,\"loss_budget_w\":%.12g}",i,budget,resistance,budget*resistance,budget*budget*resistance);
     }
     fputc(']',f); components_json(p,f);
-    fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I and ideal connectors; exact supported copper; rectangular assembly envelopes. AC and transient are separate analyses (simulate ac/transient). No thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
+    fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I/Q/M, ideal connectors and MCU behavioral boundaries (DC constraints only; firmware and silicon not simulated); exact supported copper; rectangular footprint keepouts; rectangular assembly envelopes. AC and transient are separate analyses (simulate ac/transient). No thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
     mna_result_free(&result);mna_circuit_free(&m);return ferror(f)?3:(r.errors?2:0);
 }
 /* Fixed-step transient through src/transient.c: transactional steps, zero initial stored energy,
@@ -610,7 +965,8 @@ int cp_transient(const CpProject *p,double dt,size_t steps,int method,FILE *f) {
         const CpComponent *c=&p->components[i];
         if(!c->model) {
             if(c->kind=='J') continue; /* ideal connector boundary: no equations */
-            fprintf(stderr,"TRANSIENT unsupported_model: %s: part %s (kind %c) has no device model; transient analysis is blocked.\n",c->ref,c->part,c->kind);
+            fprintf(stderr,"TRANSIENT unsupported_model: %s: part %s (kind %c) has no device model%s; transient analysis is blocked.\n",c->ref,c->part,c->kind,
+                    c->mcu?" (its MCU behavioral boundary covers DC constraint checks only)":"");
             free(devices); return 2;
         }
         devices[n].model=c->model; devices[n].label=c->ref;
@@ -655,7 +1011,8 @@ int cp_ac(const CpProject *p,double start,double stop,size_t points,int logarith
         const CpComponent *c=&p->components[i];
         if(!c->model) {
             if(c->kind=='J') continue;
-            fprintf(stderr,"AC unsupported_model: %s: part %s (kind %c) has no device model; AC analysis is blocked.\n",c->ref,c->part,c->kind);
+            fprintf(stderr,"AC unsupported_model: %s: part %s (kind %c) has no device model%s; AC analysis is blocked.\n",c->ref,c->part,c->kind,
+                    c->mcu?" (its MCU behavioral boundary covers DC constraint checks only)":"");
             free(freq); return 2;
         }
         if(!device_model_supports(c->model,DEVICE_ANALYSIS_AC)) {
@@ -674,7 +1031,7 @@ int cp_ac(const CpProject *p,double start,double stop,size_t points,int logarith
     MnaCircuit m={0}; MnaResult op={0}; MnaOptions o; MnaValidation v={0}; mna_options_default(&o);
     if(needs_op) {
         const char *rule; char why[256]="";
-        int ok=assemble(p,&m,&rule,why,sizeof why);
+        int ok=assemble(p,&m,&rule,why,sizeof why,NULL);
         if(ok) { mna_solve(&m,&o,&op); ok=op.status==MNA_STATUS_SUCCESS && mna_validate(&m,&op,&o,&v) && v.valid; }
         if(!ok) {
             fprintf(stderr,"AC operating_point: the DC operating point needed to linearise nonlinear devices did not solve%s%s\n",

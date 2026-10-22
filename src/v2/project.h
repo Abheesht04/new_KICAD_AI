@@ -19,9 +19,51 @@ typedef struct {
     const char *source;
 } CpQuantity;
 
+/* MCU behavioral boundary (docs/engineering/PART_REGISTRY.md): typed electrical constraints of a
+ * microcontroller part. It is not a silicon or firmware model. In DC every pin is high impedance
+ * except GPIOs the project drives; supply current is never modelled and is always reported. */
+#define CP_MCU_MAX_PINS 64
+#define CP_MCU_MAX_RAILS 8
+enum { CP_GPIO_IN = 1, CP_GPIO_OUT = 2, CP_GPIO_STRAP = 4 };
+typedef struct {
+    const char *pin, *name, *strap_note;
+    unsigned flags;
+} CpMcuPin;
+typedef struct {
+    const char *behavior, *provenance;
+    const char *supply[CP_MCU_MAX_RAILS], *ground[CP_MCU_MAX_RAILS];
+    size_t supply_count, ground_count;
+    double vmin, vmax;                       /* operating supply range, required */
+    CpQuantity vih_ratio, vil_ratio;         /* input thresholds as a fraction of the supply */
+    CpQuantity max_source_a, max_sink_a;     /* per-pin output current limits */
+    CpQuantity output_ohm, pull_ohm;         /* only when sourced; otherwise outputs are ideal */
+    CpMcuPin gpio[CP_MCU_MAX_PINS];
+    size_t gpio_count;
+    const char *reset;                       /* "" when the part has no reset pin */
+    int reset_active_low;
+    const char *program[CP_MCU_MAX_RAILS];
+    size_t program_count;
+} CpMcu;
+/* Project-side state of an MCU GPIO pin, from the component's (drive ...). */
+enum { CP_DRIVE_NONE, CP_DRIVE_HIGH, CP_DRIVE_LOW, CP_DRIVE_INPUT, CP_DRIVE_PULL_UP, CP_DRIVE_PULL_DOWN };
+/* An axis-aligned keepout taken from a footprint's own rule area. */
+#define CP_MAX_KEEPOUTS 64
+enum { CP_KEEPOUT_TRACKS = 1, CP_KEEPOUT_VIAS = 2, CP_KEEPOUT_PADS = 4, CP_KEEPOUT_FOOTPRINTS = 8 };
+typedef struct {
+    size_t component;
+    double x1, y1, x2, y2;
+    unsigned layers;   /* bit 0: F.Cu, bit 1: B.Cu */
+    unsigned flags;
+} CpKeepout;
+
 /* Immutable parsed IR owns all strings. No model/LLM ever owns geometry. */
 typedef struct {
     const char *ref, *part, *symbol, *footprint;
+    const char *family, *role;       /* logical family and role from the part, or "" */
+    const CpMcu *mcu;                /* MCU behavioral boundary, or NULL */
+    unsigned char drive[CP_MAX_PINS];/* CP_DRIVE_* per pin, MCU only */
+    const char *nc[CP_MAX_PINS];     /* pins deliberately left unconnected */
+    size_t nc_count;
     const char *manufacturer, *mpn, *datasheet;
     const char *provenance;          /* part-level data provenance, or "" */
     const char *catalogue;           /* catalogue the part definition came from, or "" */
@@ -55,6 +97,8 @@ typedef struct {
     double max_aspect, mask_expansion, min_mask_web, courtyard_gap;
     double max_drop, max_current_density, power_derating, voltage_derating;
     int has_geometry;
+    CpKeepout keepouts[CP_MAX_KEEPOUTS];
+    size_t keepout_count;
 } CpProject;
 void cp_init(CpProject *p);
 void cp_free(CpProject *p);

@@ -89,6 +89,13 @@ file becomes an EngineeringSpec with units and provenance, missing decisions bec
 clarification questions, and a complete spec is handed to the compiler as a `.copper`
 project. See [ENGINEERING_SPEC.md](docs/engineering/ENGINEERING_SPEC.md).
 
+Parts are data, not code: `pcba parts import FILE [--into my.parts]` checks a catalogue against copper-core
+and the installed KiCad 9.x libraries (symbol pins = footprint pads, pin maps, MCU pins). MCU modules such as
+`profiles/mcu_modules.parts` (ESP32-WROOM-32E) carry a typed *behavioral boundary*: supply range, GPIO
+directions, thresholds, current limits, strapping, reset and programming pins, checked in DC. Firmware and
+silicon are not simulated. See [PART_REGISTRY.md](docs/engineering/PART_REGISTRY.md) and
+`examples/v2/esp32_io.copper`.
+
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 
 ```sh

@@ -1,0 +1,10 @@
+; Test fixture: an N-channel MOSFET model variant. KiCad identity is real (Transistor_FET:2N7002 has
+; pin 1 G, 2 S, 3 D; Package_TO_SOT_SMD:SOT-23); the Level-1 parameters are SYNTHETIC test values,
+; not fitted to any datasheet, and no rating is given, so every check that needs one is UNVERIFIED.
+(catalogue
+ (part nmos_switch_test
+  (kind M) (model level1.nmos) (family mosfet) (role n_channel_switch)
+  (symbol "Transistor_FET:2N7002") (footprint "Package_TO_SOT_SMD:SOT-23")
+  (pinmap (drain 3) (gate 1) (source 2))
+  (vto 1.6) (kp 0.05) (lambda 0.01)
+  (provenance "synthetic Level-1 test parameters; not a fitted model of any purchasable part")))

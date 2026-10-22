@@ -14,7 +14,7 @@ what is deliberately not implemented yet.
 | Catalogue part: what you place and buy | `(part ...)` in a catalogue or a project's `(parts ...)` | part id, optional `manufacturer`/`mpn`/`datasheet` |
 | KiCad symbol | `symbol` field, resolved by `tools/copper.py` | `Library:Name` |
 | KiCad footprint | `footprint` field, resolved by `tools/copper.py` | `Library:Name` |
-| Logical terminal → symbol pin → pad | `(pinmap ...)` on the part (default: terminal *i* → pin *i+1*) | terminal names from the model |
+| Logical terminal → symbol pin → pad | `(pinmap ...)` on the part (default for two-terminal models only: terminal *i* → pin *i+1*; models with more terminals must map explicitly) | terminal names from the model |
 | Project-specific data | `(override ...)` on a component | component reference |
 
 A part binds to a model **by id** and maps the model's terminals to symbol pins

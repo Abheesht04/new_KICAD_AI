@@ -16,8 +16,8 @@ FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
         'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library scan','dfm check',
-        'spec parse','spec check','spec lower'}
-PLANNED={'parts import','place','route'}
+        'spec parse','spec check','spec lower','parts import'}
+PLANNED={'place','route'}
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
 
 def clean_env(**extra):
@@ -90,7 +90,7 @@ class Usage(Base):
                 ['simulate','ac',rc,'--start','nan','--stop','10','--points','3','--sweep','lin'],['simulate','ac',rc,'--start','1','--stop','10','--points','3','--sweep','cubic'],
                 ['dfm','check'],['library','scan','extra'],['doctor','extra'],['test','--quick','--full'],['test','--bogus'],
                 ['version','extra'],['help','no-such-command'],['spec','parse'],['spec','parse','a 1k resistor','--file','f.txt'],
-                ['spec','check'],['spec','lower','x.espec']]
+                ['spec','check'],['spec','lower','x.espec'],['parts','import'],['parts','import','a.parts','--bogus']]
         for argv in cases:
             r=run(*argv,cwd=self.dir);self.assertEqual(r.returncode,64,f'{argv}: {r.stdout}{r.stderr}')
             self.assertEqual(r.stdout,'',argv);self.assertIn('error',r.stderr,argv)
@@ -99,12 +99,12 @@ class Usage(Base):
     def test_missing_inputs_are_invalid_input(self):
         for argv in [['project','check','nope.copper'],['simulate','dc','nope.copper'],['dfm','check','nope'],['project','verify','--out','no_build_dir'],
                      ['project','build','nope.copper','--out','o'],['parts','search','r','--catalogue','nope.parts'],['parts','remove','--catalogue','nope.parts','--id','x'],
-                     ['spec','check','nope.espec'],['spec','lower','nope.espec','--out','o.copper'],['spec','parse','--file','nope.txt']]:
+                     ['spec','check','nope.espec'],['spec','lower','nope.espec','--out','o.copper'],['spec','parse','--file','nope.txt'],['parts','import','nope.parts']]:
             r=run(*argv,cwd=self.dir);self.assertEqual(r.returncode,2,argv);self.assertIn('not found',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json',cwd=self.dir))['status'],'INVALID_INPUT')
     def test_planned_commands_are_not_implemented(self):
         f=ROOT/'examples/v2/rc.copper'
-        for argv in [['place',f],['route',f],['parts','import',f]]:
+        for argv in [['place',f],['route',f]]:
             r=run(*argv);self.assertEqual(r.returncode,4,argv);self.assertIn('NOT_IMPLEMENTED',r.stdout)
             self.assertEqual(envelope(self,run(*argv,'--json'))['status'],'NOT_IMPLEMENTED')
         self.assertEqual(run('place').returncode,64)  # interface is still validated
@@ -133,6 +133,17 @@ class Spec(Base):
         self.assertEqual(run('spec','parse','a 5 V supply on VIN. a 1k resistor from VIN to SIG. a red LED from SIG to GND','--out',led).returncode,0)
         doc=envelope(self,run('spec','lower',led,'--out',out,'--json'));self.assertEqual(doc['status'],'UNVERIFIED')
         self.assertIn('no bundled catalogue part',doc['message']);self.assertFalse(out.exists())
+
+class PartsImport(Base):
+    def test_import_statuses(self):
+        libs=['--symbols',ROOT/'examples/generated/divider/libraries/symbols','--footprints',ROOT/'examples/generated/divider/libraries/footprints']
+        good=self.dir/'good.parts';good.write_text('(catalogue (part prec_r (kind R) (symbol "Device:R") (footprint "Resistor_SMD:R_0603_1608Metric") (tolerance 0.001) (provenance "synthetic test entry")))\n')
+        bad=self.dir/'bad.parts';bad.write_text('(catalogue (part p1 (kind R) (symbol "Device:R") (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")))\n')
+        into=self.dir/'mine.parts'
+        doc=envelope(self,run('parts','import',good,'--into',into,*libs,'--json'));self.assertEqual(doc['status'],'PASS');self.assertTrue(into.is_file())
+        doc=envelope(self,run('parts','import',bad,*libs,'--json'));self.assertEqual(doc['status'],'INVALID_INPUT');self.assertIn('pad parity',doc['message'])
+        doc=envelope(self,run('parts','import',good,'--symbols',self.dir/'none','--footprints',self.dir/'none','--json'))
+        self.assertEqual(doc['status'],'UNVERIFIED')
 
 class Output(Base):
     def test_colour_policy(self):

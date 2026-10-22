@@ -266,6 +266,17 @@ static int run_parts_remove(PcbaContext *ctx, const PcbaCommand *cmd, const Pcba
     return backend(ctx, cmd, &b);
 }
 
+static int run_parts_import(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const map[][2] = {{"--into", "--into"}, {"--symbols", "--symbol-dir"}, {"--footprints", "--footprint-dir"}};
+    int rc = missing_file(ctx, cmd, a->positional[0], 0);
+    if (rc >= 0) return rc;
+    Bargs b = {{0}, 0};
+    push(&b, "part-import");
+    push(&b, a->positional[0]);
+    pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    return backend(ctx, cmd, &b);
+}
+
 static int run_library_scan(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     static const char *const map[][2] = {{"--symbols", "--symbol-dir"}, {"--footprints", "--footprint-dir"},
                                          {"--out", "--out"}};
@@ -353,6 +364,11 @@ static const PcbaOption ADD_OPTIONS[] = {
 static const PcbaOption REMOVE_OPTIONS[] = {
     {"--catalogue", "FILE", 1, "Catalogue file to edit (the bundled default is read-only)"},
     {"--id", "ID", 1, "Part identifier to remove"},
+};
+static const PcbaOption IMPORT_OPTIONS[] = {
+    {"--into", "FILE", 0, "User catalogue to merge into (created if missing; the bundled default is read-only)"},
+    {"--symbols", "DIR", 0, "KiCad 9.x symbol library directory (default: KICAD_SYMBOL_DIR or installed KiCad)"},
+    {"--footprints", "DIR", 0, "KiCad 9.x footprint library directory (default: KICAD_FOOTPRINT_DIR or installed KiCad)"},
 };
 static const PcbaOption SCAN_OPTIONS[] = {
     {"--symbols", "DIR", 0, "KiCad symbol library directory"},
@@ -474,9 +490,14 @@ static const PcbaCommand COMMANDS[] = {
     {"parts", "remove", "", 0, 0, "Remove one part definition from a catalogue file",
      "Removes a part by id. Projects keep their own embedded snapshot until re-created.",
      "pcba parts remove --catalogue custom.parts --id my_r", OPTS(REMOVE_OPTIONS), NULL, run_parts_remove},
-    {"parts", "import", "<catalogue-file>", 1, 1, "Import an external catalogue with provenance",
-     "Schema-validated catalogue import (accepted/rejected/duplicate reporting) does not exist yet.",
-     "pcba parts import jlcpcb_export.csv", NONE, "Prompt 7: user-extensible part registry", run_planned},
+    {"parts", "import", "<catalogue-file>", 1, 1, "Validate a catalogue against the KiCad libraries and import it",
+     "Checks every part with copper-core (schema, model, pin map, ratings, MCU boundary), requires a provenance for "
+     "any rating or model data, and checks it against the native KiCad 9.x libraries: the symbol and footprint "
+     "exist, symbol pin numbers equal footprint pad numbers, and pin maps and MCU pins name real, consistently "
+     "named pins. Reports accepted, rejected, duplicate and unverified parts. With --into, the parts are merged "
+     "only when every one is accepted. Without usable libraries the result is UNVERIFIED and nothing is written.",
+     "pcba parts import profiles/mcu_modules.parts\npcba parts import vendor.parts --into my.parts", OPTS(IMPORT_OPTIONS),
+     NULL, run_parts_import},
     {"library", "scan", "", 0, 0, "Index installed KiCad symbol and footprint libraries",
      "Writes JSON and CSV inventories of every symbol and footprint in the selected KiCad libraries.",
      "pcba library scan\npcba library scan --symbols /usr/share/kicad/symbols --footprints /usr/share/kicad/footprints",

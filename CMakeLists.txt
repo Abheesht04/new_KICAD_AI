@@ -201,6 +201,10 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   add_test(NAME v2_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_v2.py $<TARGET_FILE:copper-core> V2Native)
   set_tests_properties(v2_integration v2_native PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME engineering_spec COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_spec.py $<TARGET_FILE:copper-core>)
+  add_test(NAME parts_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_parts.py $<TARGET_FILE:copper-core> Registry McuBoundary Geometry Import)
+  # ESP32 module and MOSFET variant through PCB generation and KiCad 9.x gates. Exit 77 = skipped (UNVERIFIED).
+  add_test(NAME parts_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_parts.py $<TARGET_FILE:copper-core> Native)
+  set_tests_properties(parts_native PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME pcba_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_pcba_cli.py
            $<TARGET_FILE:pcba> $<TARGET_FILE:hwc> $<TARGET_FILE:copper-core>)
   set_tests_properties(pcba_cli PROPERTIES SKIP_RETURN_CODE 77)

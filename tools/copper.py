@@ -110,7 +110,8 @@ def component_data(tree):
     parts={str(p[1]):p for p in direct(one(tree,'parts'),'part')};result=[]
     for c in direct(one(tree,'components'),'component'):
         part=parts[text_at(c,'part')];at=one(c,'at') or [None,0,0,0]
-        result.append(dict(ref=str(c[1]),part=part,kind=text_at(part,'kind'),value=float(text_at(c,'value',default='0')),symbol=text_at(part,'symbol'),footprint=text_at(part,'footprint'),pins={str(x[0]):str(x[1]) for x in one(c,'pins')[1:]},x=float(at[1]),y=float(at[2]),rotation=float(at[3])))
+        result.append(dict(ref=str(c[1]),part=part,kind=text_at(part,'kind'),value=float(text_at(c,'value',default='0')),symbol=text_at(part,'symbol'),footprint=text_at(part,'footprint'),pins={str(x[0]):str(x[1]) for x in one(c,'pins')[1:]},
+                           nc=[str(x) for x in (one(c,'nc') or [None])[1:]],x=float(at[1]),y=float(at[2]),rotation=float(at[3])))
     return result
 
 def safe_lib_id(value):
@@ -146,6 +147,7 @@ def symbol_pins(symbol):
         if style>1:continue
         result.extend(direct(unit,'pin'))
     numbers=[text_at(p,'number') for p in result]
+    if any(n.startswith('[') for n in numbers):raise Unverified('Stacked pin numbers such as [1,15] are KiCad 10 library syntax; native support targets KiCad 9.x libraries')
     if len(set(numbers))!=len(numbers):raise ValueError('Duplicate/stacked symbol pins need explicit handling')
     return result
 
@@ -159,10 +161,10 @@ def schematic(tree,components,symbol_dir,stem,bindings=None,specs=None):
     the symbol's pin names (logical terminal -> symbol pin -> footprint pad with the same number)."""
     rootid=uid(stem+'/schematic');lib=sx('lib_symbols');cache={}
     sch=sx('kicad_sch',sx('version',A('20250114')),sx('generator',Q('copper_v2')),sx('uuid',Q(rootid)),sx('paper',Q('A4')),lib)
-    physical=[c for c in components if c['kind'] not in ('V','I')]
+    physical=[c for c in components if c['kind'] not in ('V','I')];power_inputs=set()
     for index,c in enumerate(physical):
         definition=resolve_symbol(symbol_dir,c['symbol'],cache);pins=symbol_pins(definition)
-        if set(c['pins'])!={text_at(p,'number') for p in pins}:raise ValueError(f"{c['ref']}: project pins differ from symbol pins")
+        if set(c['pins'])|set(c['nc'])!={text_at(p,'number') for p in pins}:raise ValueError(f"{c['ref']}: project pins and (nc ...) must be exactly the symbol pins")
         binding=(bindings or {}).get(c['ref'])
         if binding and binding['model'] and specs:check_terminal_pin_names(c['ref'],binding,specs[binding['model']['id']],pins)
         if not any(s[1]==c['symbol'] for s in lib[1:]):lib.append(definition)
@@ -172,10 +174,28 @@ def schematic(tree,components,symbol_dir,stem,bindings=None,specs=None):
             instance.append(sx('property',Q(key),Q(value),sx('at',number(x+7),number(y+offset),A('0')),effects(hide)))
         instance.append(sx('instances',sx('project',Q(stem),sx('path',Q('/'+rootid),sx('reference',Q(c['ref'])),sx('unit',A('1'))))))
         for pin in pins:
-            no=text_at(pin,'number');at=one(pin,'at');px,py=x+float(at[1]),y-float(at[2]);net=c['pins'][no]
+            no=text_at(pin,'number');at=one(pin,'at');px,py=x+float(at[1]),y-float(at[2])
             instance.append(sx('pin',Q(no),sx('uuid',Q(uid(stem+'/'+c['ref']+'/pin/'+no)))))
+            if no in c['nc']:
+                # A deliberate no-connect; a pin the symbol already types no_connect needs no flag.
+                if str(pin[1])!='no_connect':sch.append(sx('no_connect',sx('at',number(px),number(py)),sx('uuid',Q(uid(stem+'/'+c['ref']+'/nc/'+no)))))
+                continue
+            net=c['pins'][no];power_inputs.update([net] if str(pin[1])=='power_in' else [])
             # Labels sit exactly on actual pin endpoints; symbol coordinates have inverted Y.
             sch.append(sx('label',Q(net),sx('at',number(px),number(py),A('0')),effects(),sx('uuid',Q(uid(stem+'/'+c['ref']+'/label/'+no)))))
+        sch.append(instance)
+    # A power input pin must be driven in ERC. The circuit's own source (a V component, which has no symbol)
+    # drives these nets, so a PWR_FLAG marks exactly those nets; an undriven power input stays an ERC error.
+    sourced={net for c in components if c['kind']=='V' for net in c['pins'].values()}
+    for index,net in enumerate(sorted(power_inputs&sourced)):
+        flag=resolve_symbol(symbol_dir,'power:PWR_FLAG',cache);ref=f'#FLG{index+1:02d}'
+        if not any(s[1]=='power:PWR_FLAG' for s in lib[1:]):lib.append(flag)
+        x,y=25.4+index*12.7,25.4;pin=symbol_pins(flag)[0];at=one(pin,'at')
+        instance=sx('symbol',sx('lib_id',Q('power:PWR_FLAG')),sx('at',number(x),number(y),A('0')),sx('unit',A('1')),sx('exclude_from_sim',A('no')),sx('in_bom',A('no')),sx('on_board',A('no')),sx('dnp',A('no')),sx('uuid',Q(uid(stem+'/'+ref))))
+        for key,value,hide in [('Reference',ref,True),('Value','PWR_FLAG',False),('Footprint','',True)]:instance.append(sx('property',Q(key),Q(value),sx('at',number(x),number(y-3),A('0')),effects(hide)))
+        instance.append(sx('pin',Q(text_at(pin,'number')),sx('uuid',Q(uid(stem+'/'+ref+'/pin')))))
+        instance.append(sx('instances',sx('project',Q(stem),sx('path',Q('/'+rootid),sx('reference',Q(ref)),sx('unit',A('1'))))))
+        sch.append(sx('label',Q(net),sx('at',number(x+float(at[1])),number(y-float(at[2])),A('0')),effects(),sx('uuid',Q(uid(stem+'/'+ref+'/label')))))
         sch.append(instance)
     sch.append(sx('sheet_instances',sx('path',Q('/'),sx('page',Q('1')))))
     sch.append(sx('embedded_fonts',A('no')))
@@ -183,10 +203,25 @@ def schematic(tree,components,symbol_dir,stem,bindings=None,specs=None):
 
 def rotate(x,y,angle):
     a=math.radians(angle);return (x*math.cos(a)+y*math.sin(a),-x*math.sin(a)+y*math.cos(a))
-def footprint_geometry(c,fpdir,netids,stem):
+KEEPOUT_FLAGS={'tracks':1,'vias':2,'pads':4,'footprints':8}
+def footprint_keepout(c,zone):
+    """A footprint rule area (keepout) as an axis-aligned board rectangle, taken from the footprint itself.
+    Copper zones, non-rectangular areas and areas that keep nothing out are outside supported geometry."""
+    rules=one(zone,'keepout')
+    if not rules:raise Unverified(f"{c['ref']}: footprint copper zones are outside V2 geometry coverage")
+    flags=sum(bit for key,bit in KEEPOUT_FLAGS.items() if text_at(rules,key)=='not_allowed')
+    names=[str(x) for x in (one(zone,'layers') or one(zone,'layer') or [None])[1:]]
+    layers=(1 if {'F.Cu','*.Cu','F&B.Cu'}&set(names) else 0)|(2 if {'B.Cu','*.Cu','F&B.Cu'}&set(names) else 0)
+    if not flags or not layers:raise Unverified(f"{c['ref']}: footprint keepout keeps nothing out on F.Cu/B.Cu; refusing to guess its meaning")
+    pts=[rotate(float(xy[1]),float(xy[2]),c['rotation']) for xy in direct(one(one(zone,'polygon') or [None],'pts') or [None],'xy')]
+    xs=sorted({round(c['x']+x,9) for x,_ in pts});ys=sorted({round(c['y']+y,9) for _,y in pts})
+    if len(pts)!=4 or len(xs)!=2 or len(ys)!=2:raise Unverified(f"{c['ref']}: only rectangular footprint keepouts are supported")
+    return dict(x1=xs[0],y1=ys[0],x2=xs[1],y2=ys[1],layers=layers,flags=flags)
+def footprint_geometry(c,fpdir,netids,stem,ncnets=None):
     lib,name=safe_lib_id(c['footprint']);fp=load(fpdir/f'{lib}.pretty'/f'{name}.kicad_mod')
     if head(fp)!='footprint':raise ValueError('Expected KiCad footprint')
-    if one(fp,'zone') or one(fp,'embedded_files'):raise Unverified('Footprint zones/embedded files are outside V2 geometry coverage')
+    if one(fp,'embedded_files'):raise Unverified('Footprint embedded files are outside V2 geometry coverage')
+    keepouts=[footprint_keepout(c,z) for z in direct(fp,'zone')]
     for obj in fp:
         if isinstance(obj,list) and head(obj)!='pad' and text_at(obj,'layer') in ('F.Cu','B.Cu','*.Cu') and head(obj)!='layer':raise Unverified('Footprint copper graphics are not represented by the supported pad geometry')
     if any(one(fp,key) for key in ('solder_mask_margin','solder_paste_margin','solder_paste_ratio')):raise Unverified('Per-footprint mask/paste overrides require explicit process support')
@@ -207,7 +242,7 @@ def footprint_geometry(c,fpdir,netids,stem):
         if not at or not size or not layers:raise ValueError('Pad lacks position, size or layers')
         if (kind=='thru_hole') != bool(drill):raise ValueError('Pad drill/type mismatch')
         if kind not in ('smd','thru_hole') or shape not in ('circle','rect','roundrect','oval'):raise Unverified(f"{c['ref']}:{no}: unsupported pad type/shape {kind}/{shape}")
-        if no not in c['pins']:raise ValueError(f"{c['ref']}: physical pad {no} missing from electrical map")
+        if no not in c['pins'] and no not in c['nc']:raise ValueError(f"{c['ref']}: physical pad {no} missing from electrical map")
         if drill and (len(drill)!=2 or not re.fullmatch(r'[0-9.]+',str(drill[1]))):raise Unverified('Slotted/offset drills require native geometry support')
         if any(str(x) not in ('F.Cu','F.Paste','F.Mask','*.Cu','*.Mask') for x in layers[1:]):raise Unverified('Only top-side SMD or through-hole pads are supported')
         dx,dy=rotate(float(at[1]),float(at[2]),c['rotation']);x,y=c['x']+dx,c['y']+dy
@@ -217,15 +252,18 @@ def footprint_geometry(c,fpdir,netids,stem):
         if w<=0 or h<=0:raise ValueError('Pad dimensions must be positive')
         circular=shape=='circle' and abs(w-h)<1e-9
         # C retains the exact axis-aligned core and rounded-corner radius.
-        net=c['pins'][no];mapped.add(no);pad[:]=[v for v in pad if not isinstance(v,list) or head(v) not in ('net','uuid')]
-        pad.extend([sx('net',A(str(netids[net])),Q('/'+net)),sx('uuid',Q(uid(stem+'/'+c['ref']+'/pad/'+no+'/'+str(len(pads)))))])
+        # An (nc ...) pad has no net ('~'): still copper for clearance, never routed.
+        net=c['pins'].get(no,'~');mapped.add(no);pad[:]=[v for v in pad if not isinstance(v,list) or head(v) not in ('net','uuid')]
+        if net!='~':pad.append(sx('net',A(str(netids[net])),Q('/'+net)))
+        elif ncnets and (c['ref'],no) in ncnets:pad.append(sx('net',A(str(ncnets[c['ref'],no][0])),Q(ncnets[c['ref'],no][1])))
+        pad.append(sx('uuid',Q(uid(stem+'/'+c['ref']+'/pad/'+no+'/'+str(len(pads))))))
         pads.append(dict(ref=c['ref'],pin=no,net=net,x=x,y=y,w=w,h=h,through=kind=='thru_hole'))
         # diameter is conservative for legacy edge/annular reporting, exact adapter uses width/height.
         diameter=min(w,h)
         corner=min(w,h)/2 if shape=='oval' else (float(text_at(pad,'roundrect_rratio',default='0'))*min(w,h) if shape=='roundrect' else 0)
         if corner<0 or corner>min(w,h)/2:raise ValueError('Invalid rounded pad radius')
         geo.append(sx('pad',A(c['ref']),A(no),A(net),*map(number,[x,y,diameter,float(drill[1]) if drill else 0,0,w,h,0 if circular else 1,corner])))
-    if mapped!=set(c['pins']):raise ValueError(f"{c['ref']}: symbol pin/footprint pad mismatch")
+    if mapped!=set(c['pins'])|set(c['nc']):raise ValueError(f"{c['ref']}: symbol pin/footprint pad mismatch")
     # Use actual courtyard extents; a footprint lacking a courtyard is not silently invented.
     pts=[]
     for obj in fp:
@@ -234,7 +272,11 @@ def footprint_geometry(c,fpdir,netids,stem):
                 at=one(obj,key)
                 if at:
                     dx,dy=rotate(float(at[1]),float(at[2]),c['rotation']);pts.append((c['x']+dx,c['y']+dy))
-            if head(obj) not in ('fp_rect','fp_line'):raise Unverified('Non-rectilinear courtyard requires explicit geometry support')
+            if head(obj)=='fp_poly':
+                # A polygon courtyard is enclosed by its bounding box: a larger, conservative envelope.
+                for xy in direct(one(obj,'pts') or [None],'xy'):
+                    dx,dy=rotate(float(xy[1]),float(xy[2]),c['rotation']);pts.append((c['x']+dx,c['y']+dy))
+            elif head(obj) not in ('fp_rect','fp_line'):raise Unverified('Non-rectilinear courtyard requires explicit geometry support')
     if not pts:raise ValueError(f"{c['ref']}: footprint has no supported courtyard")
     lo=[min(p[i] for p in pts) for i in range(2)];hi=[max(p[i] for p in pts) for i in range(2)]
     geo.append(sx('body',A(c['ref']),*map(number,[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,hi[0]-lo[0],hi[1]-lo[1],c.get('height',0)])))
@@ -244,9 +286,11 @@ def footprint_geometry(c,fpdir,netids,stem):
             for i,v in enumerate(n):
                 if isinstance(v,list) and head(v)=='uuid':v[1]=Q(uid(stem+'/'+c['ref']+'/nested/'+path+str(i)))
                 else:uuids(v,path+str(i)+'/')
-    uuids(fp);return fp,pads,geo
+    uuids(fp)
+    for k in keepouts:geo.append(sx('keepout',A(c['ref']),*map(number,[k['x1'],k['y1'],k['x2'],k['y2'],k['layers'],k['flags']])))
+    return fp,pads,geo,keepouts
 
-def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6):
+def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6,keepouts=()):
     """Deterministic 2-layer Manhattan A* candidate router, with bounded search.
     Conservative obstacle envelopes; C exact geometry and KiCad DRC judge result.
     """
@@ -256,7 +300,11 @@ def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6):
     def blocked(x,y,z,net,via=False):
         xx,yy=x*grid,y*grid;r=(via_diameter/2+clearance) if via else radius
         if min(xx,yy,width-xx,height-yy)<edge+r:return True
+        for k in keepouts:  # footprint rule areas: tracks (and vias) stay out, with clearance
+            if k['flags']&(2 if via else 1) and (k['layers']&(3 if via else 1<<z)) and k['x1']-r<xx<k['x2']+r and k['y1']-r<yy<k['y2']+r:return True
         for p in pads:
+            # A via never lands on a drilled pad, even of its own net: the holes would overlap.
+            if via and p['through'] and abs(xx-p['x'])<=p['w']/2+r and abs(yy-p['y'])<=p['h']/2+r:return True
             if p['net']==net or (z==1 and not p['through']):continue
             if abs(xx-p['x'])<=p['w']/2+r and abs(yy-p['y'])<=p['h']/2+r:return True
         reach=math.ceil((r+trace_width/2)/grid)
@@ -267,9 +315,10 @@ def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6):
         for vx,vy,vnet in vias:
             if vnet!=net and math.hypot(xx-vx,yy-vy)<r+via_diameter/2:return True
         return False
-    nets=sorted({p['net'] for p in pads})
+    nets=sorted({p['net'] for p in pads}-{'~'})  # '~': no-connect pads are obstacles, never routed
     for net in nets:
-        targets=[p for p in pads if p['net']==net]
+        # Stacked pads of one pin (e.g. a thermal pad's copies) are joined by the footprint; route one of them.
+        targets=list({(p['ref'],p['pin']):p for p in reversed([p for p in pads if p['net']==net])}.values())[::-1]
         if len(targets)<2:continue
         joined=[targets.pop(0)]
         while targets:
@@ -322,13 +371,22 @@ def export_project(args):
     dims=list(map(float,(one(tree,'board') or [None,40,30,1.6,.035,2])[1:]));w,h,thick,copper,layers=dims
     board=sx('kicad_pcb',sx('version',A('20241229')),sx('generator',Q('copper_v2')),sx('general',sx('thickness',number(thick))),sx('paper',Q('A4')),sx('layers',*[sx(str(i),Q(name),A(kind)) for i,name,kind in [(0,'F.Cu','signal'),(2,'B.Cu','signal'),(3,'B.Adhes','user'),(5,'F.SilkS','user'),(7,'B.SilkS','user'),(9,'F.Mask','user'),(11,'B.Mask','user'),(13,'Dwgs.User','user'),(25,'Edge.Cuts','user'),(31,'F.CrtYd','user'),(33,'B.CrtYd','user'),(35,'F.Fab','user'),(37,'B.Fab','user'),(1,'F.Adhes','user'),(19,'F.Paste','user'),(21,'B.Paste','user')]]),sx('setup',sx('pad_to_mask_clearance',number(rule(tree,'mask_expansion_mm',.05)))),sx('net',A('0'),Q('')))
     board.extend(sx('net',A(str(i)),Q('/'+n)) for n,i in netids.items())
+    # KiCad gives every unconnected schematic pin its own net, unconnected-(REF-PIN_NAME-PadN); the board uses
+    # the same names so schematic parity holds. In the copper IR these pads stay net-less ('~').
+    ncnets={}
+    for c in components:
+        if not c['nc']:continue
+        names={text_at(p,'number'):text_at(p,'name') for p in symbol_pins(resolve_symbol(symdir,c['symbol'],{}))}
+        for pin in c['nc']:
+            name=names.get(pin,'');ncnets[c['ref'],pin]=(len(netids)+len(ncnets)+1,f"unconnected-({c['ref']}-{name}-Pad{pin})" if name not in ('','~') else f"unconnected-({c['ref']}-Pad{pin})")
+    board.extend(sx('net',A(str(i)),Q(n)) for i,n in ncnets.values())
     board.append(sx('gr_rect',sx('start',A('0'),A('0')),sx('end',number(w),number(h)),sx('stroke',sx('width',A('.05')),sx('type',A('default'))),sx('fill',A('none')),sx('layer',Q('Edge.Cuts')),sx('uuid',Q(uid('outline')))))
-    pads=[];geometry=sx('geometry')
+    pads=[];geometry=sx('geometry');keepouts=[]
     for c in components:
         if c['kind'] in ('V','I'):continue
-        fp,pp,gg=footprint_geometry(c,fpdir,netids,stem);board.append(fp);pads.extend(pp);geometry.extend(gg)
+        fp,pp,gg,kk=footprint_geometry(c,fpdir,netids,stem,ncnets);board.append(fp);pads.extend(pp);geometry.extend(gg);keepouts.extend(kk)
     traces=[];vias=[]
-    if not args.no_route:traces,vias=route(pads,w,h,rule(tree,'trace_width_mm',.2),rule(tree,'clearance_mm',.2),rule(tree,'edge_mm',.3),rule(tree,'via_diameter_mm',.6))
+    if not args.no_route:traces,vias=route(pads,w,h,rule(tree,'trace_width_mm',.2),rule(tree,'clearance_mm',.2),rule(tree,'edge_mm',.3),rule(tree,'via_diameter_mm',.6),keepouts)
     for i,(net,x1,y1,x2,y2,width,layer) in enumerate(traces):
         board.append(sx('segment',sx('start',number(x1),number(y1)),sx('end',number(x2),number(y2)),sx('width',number(width)),sx('layer',Q('F.Cu' if layer==0 else 'B.Cu')),sx('net',A(str(netids[net]))),sx('uuid',Q(uid('track/'+str(i))))))
         geometry.append(sx('trace',A(net),*map(number,[x1,y1,x2,y2,width,layer])))
@@ -343,7 +401,7 @@ def export_project(args):
     # Snapshot the exact selected source libraries and footprints, with local tables.
     # Native ERC/DRC can now resolve links without modifying global KiCad settings.
     symtable=sx('sym_lib_table',sx('version',A('7')));fptable=sx('fp_lib_table',sx('version',A('7')))
-    for library in sorted({safe_lib_id(c['symbol'])[0] for c in components if c['kind'] not in ('V','I')}):
+    for library in sorted({safe_lib_id(str(sym[1]))[0] for sym in one(sch,'lib_symbols')[1:]}):
         target=out/'libraries/symbols'/f'{library}.kicad_sym';target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(symdir/f'{library}.kicad_sym',target)
         symtable.append(sx('lib',sx('name',Q(library)),sx('type',Q('KiCad')),sx('uri',Q('${KIPRJMOD}/libraries/symbols/'+library+'.kicad_sym')),sx('options',Q('')),sx('descr',Q('Exact local library snapshot'))))
     for library in sorted({safe_lib_id(c['footprint'])[0] for c in components if c['kind'] not in ('V','I')}):
@@ -411,7 +469,11 @@ def native_gates(out,cli):
         root=ET.parse(out/'netlist.xml').getroot();actual={}
         for net in root.findall('./nets/net'):
             for node in net.findall('node'):actual[(node.attrib['ref'],node.attrib['pin'])]=net.attrib['name'].removeprefix('/')
-        expected={(c['ref'],pin):net for c in component_data(load(out/'resolved.copper')) if c['kind'] not in ('V','I') for pin,net in c['pins'].items()}
+        data=[c for c in component_data(load(out/'resolved.copper')) if c['kind'] not in ('V','I')]
+        expected={(c['ref'],pin):net for c in data for pin,net in c['pins'].items()}
+        # Power flags (#FLG) are not parts; KiCad names each unconnected (nc ...) pin's own net 'unconnected-...'.
+        nc={(c['ref'],pin) for c in data for pin in c['nc']}
+        actual={k:v for k,v in actual.items() if not k[0].startswith('#') and not (k in nc and v.startswith('unconnected-'))}
         gates.append({'gate':'netlist_parity','status':'PASS' if expected==actual else 'FAIL','returncode':0 if expected==actual else 2,'message':'Matches electrical IR' if expected==actual else f'Pin/net mismatch: expected {expected}, got {actual}'})
     else:gates.append({'gate':'netlist_parity','status':'UNVERIFIED','message':'KiCad netlist export failed; parity not compared'})
     return found,gates
@@ -453,7 +515,10 @@ def verify(args):
 # ---------------------------------------------------------------------------
 MODEL_GAPS={'unsupported_model','unsupported_analysis'}  # required model or capability absent: UNVERIFIED
 ELECTRICAL_RULES={'unsupported_model','unsupported_analysis','model_stamp','mna_failure','open_node','rating_unknown','voltage_derating','power_derating','voltage_target',
-                  'corner_capacity','corner_allocation','corner_solve','corner_power','corner_voltage','corner_target'}
+                  'corner_capacity','corner_allocation','corner_solve','corner_power','corner_voltage','corner_target','boundary_net',
+                  # MCU behavioral boundary (src/v2/project.c mcu_checks)
+                  'mcu_supply_current','mcu_supply_unknown','mcu_supply_voltage','mcu_output_ideal','mcu_pin_current','mcu_strap_pin',
+                  'mcu_pull_unknown','mcu_input_undefined','mcu_reset','mcu_programming'}
 def scope_status(issues,incomplete=False):
     if any(i['severity']=='error' for i in issues):return 'FAIL'
     return 'UNVERIFIED' if incomplete or issues else 'PASS'
@@ -487,14 +552,14 @@ def render_report(report,scopes=None):
     print(f"Project: {report['name']}")
     if report['dc_solved']:
         print(f"DC operating point: solved (max residual {report['mna_residual']:.3g}, KCL residual {report['kcl_residual_a']:.3g} A)")
-        for n in report['nodes']:print(f"  {n['name']:<12} {n['voltage_v']:.9g} V")
+        for n in report['nodes']:print(f"  {n['name']:<12} "+(f"{n['voltage_v']:.9g} V" if n['voltage_v'] is not None else 'undefined (boundary pins only)'))
         if report['calculations']:print('Resistor calculations (I=(Va-Vb)/R, P=I*I*R):')
         for c in report['calculations']:print(f"  {c['ref']:<12} V={c['voltage_v']:.6g} V  I={c['current_a']:.6g} A  P={c['power_w']:.6g} W")
         if report['tolerance_corner_count']:print(f"Resistor tolerance corners evaluated: {report['tolerance_corner_count']}")
     else:print('DC operating point: NOT solved')
     print('Device models:')
     for c in report['components']:
-        model=f"{c['model']['id']} v{c['model']['version']} ({c['model']['source'].replace('_',' ')})" if c['model'] else ('none (ideal boundary)' if c['kind']=='J' else 'none (analysis blocked)')
+        model=f"{c['model']['id']} v{c['model']['version']} ({c['model']['source'].replace('_',' ')})" if c['model'] else ('none (ideal boundary)' if c['kind']=='J' else 'MCU behavioral boundary (DC constraints; firmware/silicon not simulated)' if c.get('mcu') else 'none (analysis blocked)')
         print(f"  {c['ref']:<12} {model}")
     render_issues(report['issues'])
     if scopes:print(f"Electrical: {scopes['electrical']}   Physical/DFM: {scopes['physical']}"+('' if report['physical_checked'] else '  (no board geometry; run project build)'))
@@ -626,6 +691,95 @@ def ac_sweep(args):
     elif args.format=='json':sys.stdout.write(result.stdout)
     if rule:raise AC_RULE_OUTCOME[rule](message[3:])
     return 0
+IDENTITY_FIELDS={'kind','symbol','footprint','manufacturer','mpn','datasheet','model','pinmap','provenance','catalogue','family','role','alternates'}
+def natural(pin):return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)',pin)]
+def library_parity(part,summary,symdir,fpdir):
+    """Problems of one part against the native KiCad libraries: symbol and footprint exist, symbol pin numbers
+    equal footprint pad numbers, the pin map and MCU pins name real pins, and pin names do not contradict it.
+    Raises Unverified when the library data itself is outside supported KiCad 9.x content."""
+    if text_at(part,'kind') in ('V','I'):return []
+    pins=symbol_pins(resolve_symbol(symdir,text_at(part,'symbol'),{}))  # Unverified: unsupported library data
+    numbers={text_at(p,'number') for p in pins};names={text_at(p,'number'):text_at(p,'name') for p in pins};types={text_at(p,'number'):str(p[1]) for p in pins}
+    problems=[];lib,name=safe_lib_id(text_at(part,'footprint'));path=fpdir/f'{lib}.pretty'/f'{name}.kicad_mod'
+    if not path.is_file():problems.append(f"footprint {text_at(part,'footprint')} not found in {fpdir}")
+    else:
+        pads={str(p[1]) for p in direct(load(path),'pad') if str(p[1])}  # unnumbered pads are mechanical
+        if pads!=numbers:problems.append(f'symbol/footprint pad parity: symbol pins without a pad {sorted(numbers-pads,key=natural)}, pads without a symbol pin {sorted(pads-numbers,key=natural)}')
+    for terminal,pin in summary['terminals'].items():
+        if pin not in numbers:problems.append(f'pin map: terminal {terminal} -> pin {pin}, which the symbol does not have')
+    if summary['model'] and not problems:
+        try:check_terminal_pin_names(str(part[1]),summary,model_specs()[summary['model']],pins)
+        except InvalidInput as exc:problems.append(str(exc))
+    mcu=one(part,'mcu')
+    if mcu:
+        declared=[(k,str(p)) for k in ('supply','ground','program') for p in (one(mcu,k) or [None])[1:]]+[('reset',text_at(mcu,'reset'))]*bool(one(mcu,'reset'))
+        declared+=[('gpio',str(g[1])) for g in direct(one(mcu,'gpio') or [None],'pin')]
+        for what,pin in declared:
+            if pin not in numbers:problems.append(f'mcu {what} pin {pin} is not a symbol pin')
+        for k in ('supply','ground'):
+            for pin in (str(p) for p in (one(mcu,k) or [None])[1:]):
+                if pin in types and types[pin] not in ('power_in','passive'):problems.append(f'mcu {k} pin {pin} is a {types[pin]} pin in the symbol, not a power input')
+        for g in direct(one(mcu,'gpio') or [None],'pin'):
+            pin,label=str(g[1]),str(g[2])
+            if pin in names and label.upper() not in names[pin].upper().split('/'):problems.append(f"mcu gpio pin {pin} is named '{names[pin]}' in the symbol, not {label}")
+    return problems
+def part_import(args):
+    """Validate a catalogue for import (schema, data provenance, native library parity) and, with --into,
+    merge it into a user catalogue. Nothing is written unless every part is accepted."""
+    source=Path(existing(args.file,'Catalogue to import'));tree=load(source)
+    if head(tree)!='catalogue':raise InvalidInput(f'{source} is not a (catalogue ...) file')
+    target=Path(args.into) if args.into else None
+    if target and target.resolve()==BUNDLED_CATALOGUE.resolve():raise InvalidInput('profiles/default.parts is the bundled catalogue and is read-only')
+    existing_ids={str(p[1]) for p in direct(load(BUNDLED_CATALOGUE),'part')}|({str(p[1]) for p in direct(load(target),'part')} if target and target.exists() else set())
+    try:symdir=discover_symbol_dir(args.symbol_dir);fpdir=discover_footprint_dir(args.footprint_dir)
+    except FileNotFoundError as exc:symdir=fpdir=None;library_error=str(exc).splitlines()[0]
+    accepted,rejected,duplicates,unverified,seen=[],[],[],[],set()
+    parts=direct(tree,'part')
+    for part in parts:
+        pid=str(part[1]) if len(part)>1 else '';reasons=[]
+        if pid in seen or pid in existing_ids:duplicates.append(pid);continue
+        seen.add(pid)
+        probe=source.with_name(f'.{source.name}.{pid}.check')
+        try:
+            write_tree(probe,sx('catalogue',[x for x in part if not (isinstance(x,list) and head(x)=='alternates')]))
+            summary=validate_catalogue(probe,args.core,label=pid)['parts'][0]
+        except InvalidInput as exc:rejected.append({'id':pid,'reasons':[str(exc)]});continue
+        finally:probe.unlink(missing_ok=True)
+        data=sorted(head(x) for x in part[2:] if isinstance(x,list) and head(x) not in IDENTITY_FIELDS)
+        if data and not text_at(part,'provenance'):reasons.append(f"{', '.join(data)} need (provenance \"...\") naming their source")
+        if symdir:
+            try:reasons+=library_parity(part,summary,symdir,fpdir)
+            except Unverified as exc:unverified.append({'id':pid,'reason':str(exc)});continue
+            except (ValueError,OSError) as exc:reasons.append(f"symbol {text_at(part,'symbol')}: {exc}")
+        if reasons:rejected.append({'id':pid,'reasons':reasons})
+        else:accepted.append(pid)
+    known=existing_ids|set(accepted)
+    for part in parts:
+        for alt in (str(a) for a in (one(part,'alternates') or [None])[1:]):
+            if str(part[1]) in accepted and alt not in known:
+                accepted.remove(str(part[1]));rejected.append({'id':str(part[1]),'reasons':[f'alternate {alt} is not an accepted or existing part']})
+    status='INVALID_INPUT' if rejected or duplicates else 'UNVERIFIED' if not symdir or unverified else 'PASS'
+    written=None
+    if target and status=='PASS':
+        merged=load(target) if target.exists() else sx('catalogue')
+        if head(merged)!='catalogue':raise InvalidInput(f'{target} is not a (catalogue ...) file')
+        merged.extend(copy.deepcopy(p) for p in parts)
+        probe=target.with_name(target.name+'.check');target.parent.mkdir(parents=True,exist_ok=True)
+        try:write_tree(probe,merged);validate_catalogue(probe,args.core,label=target)
+        finally:probe.unlink(missing_ok=True)
+        write_tree(target,merged);written=str(target.resolve())
+    message='; '.join(f"{r['id']}: {'; '.join(r['reasons'])}" for r in rejected)+('; ' if rejected and duplicates else '')+(f"duplicate part id(s): {', '.join(duplicates)}" if duplicates else '')
+    if status=='UNVERIFIED':message='schema and provenance checked, but native library parity was not: '+(library_error if not symdir else '; '.join(f"{u['id']}: {u['reason']}" for u in unverified))+'; nothing written'
+    args.outcome.update(status=status,message=message,data={'file':str(source.resolve()),'accepted':accepted,'rejected':rejected,'duplicates':duplicates,'unverified':unverified,
+        'libraries':{'symbols':str(symdir),'footprints':str(fpdir)} if symdir else None,'written':written})
+    if args.format=='human':
+        for pid in accepted:print(f'  ACCEPTED  {pid}')
+        for r in rejected:print(f"  REJECTED  {r['id']}: "+'; '.join(r['reasons']))
+        for pid in duplicates:print(f'  DUPLICATE {pid}')
+        for u in unverified:print(f"  UNVERIFIED {u['id']}: {u['reason']}")
+        print(f'Status: {status}'+(f'; merged into {args.into}' if written else '; nothing written' if target else ''))
+    elif args.format=='json':print(json.dumps(args.outcome['data'],indent=2))
+    return 0 if status=='PASS' else 2
 def spec_outcome(args,spec,parse_errors=()):
     """Validate an EngineeringSpec (tools/spec_ir.py) and record status: errors INVALID_INPUT, open questions UNVERIFIED."""
     import spec_ir
@@ -676,6 +830,7 @@ def spec_command(args):
 def run_command(args):
     o=args.outcome;fmt=args.format
     if args.command.startswith('spec-'):return spec_command(args)
+    if args.command=='part-import':return part_import(args)
     if args.command=='new':rc=new_project(args);o['data']={'path':str(Path(args.out).resolve())};return rc
     if args.command=='check':
         report,rc=core_run(existing(args.project),args.core);scopes=report_scopes(report)
@@ -769,6 +924,7 @@ def main(argv=None):
     p=sub.add_parser('part-add',help='Unknown ratings are omitted, never written as 0');p.add_argument('--file',required=True);p.add_argument('--id',required=True);p.add_argument('--kind',choices=list('RCLDVIJUQM'),required=True);p.add_argument('--symbol',default='');p.add_argument('--footprint',default='');p.add_argument('--power',type=float);p.add_argument('--voltage',type=float);p.add_argument('--tolerance',type=float);p.add_argument('--height',type=float);p.add_argument('--manufacturer',default='');p.add_argument('--mpn',default='');p.add_argument('--datasheet',default='')
     p.add_argument('--model',help='device model id (copper-core models); default: the kind default');p.add_argument('--pinmap',help='terminal=symbol_pin,... e.g. cathode=1,anode=2');p.add_argument('--provenance',default='',help='where the ratings come from');p.add_argument('--core')
     p=sub.add_parser('part-remove');p.add_argument('--file',required=True);p.add_argument('--id',required=True)
+    p=sub.add_parser('part-import',help='validate a catalogue against copper-core and the native KiCad libraries; --into merges it');p.add_argument('file');p.add_argument('--into');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')

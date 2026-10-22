@@ -39,7 +39,7 @@ reach the child unchanged.
 | `pcba spec parse ["text"] [--file F] [--out F.espec]` | stable | `copper.py spec-parse` (`tools/spec_nlp.py`) |
 | `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
 | `pcba spec lower <file.espec> --out F.copper` | stable | `copper.py spec-lower` → loaded by `copper-core analyze` before publishing |
-| `pcba parts import <catalogue-file>` | NOT_IMPLEMENTED (Prompt 7) | — |
+| `pcba parts import <catalogue-file> [--into FILE]` | stable | `copper.py part-import` (copper-core schema + KiCad library parity; docs/engineering/PART_REGISTRY.md) |
 | `pcba place <file.copper>` | NOT_IMPLEMENTED (Prompt 8) | — |
 | `pcba route <file.copper>` | NOT_IMPLEMENTED (Prompt 8; routing runs inside `project build`) | — |
 
