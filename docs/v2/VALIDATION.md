@@ -77,10 +77,12 @@ python3 tools/copper.py verify --out examples/generated/divider
 ```
 
 Use installed full KiCad library roots instead when testing additional parts.
-The native workflow case is skipped when the two library environment variables
-are absent. Native CLI gates inside that case execute only when KiCad 9 is
-discoverable. The supplied logs include actual native execution; a generic green
-CTest result on a machine without KiCad does not imply those gates ran.
+Library and native cases live in the `V2Native` class and the separate CTest target
+`v2_native`. `test_library_build_workflow` is skipped without the two library
+environment variables; `test_kicad9_native_gates` is additionally skipped unless a
+KiCad 9.x CLI is discoverable, and the skip message names the version found.
+`test_v2.py` exits 77 when anything was skipped, which CTest reports as "Skipped"
+(not "Passed"). The supplied logs above predate this split.
 
 ```sh
 cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DCOPPER_SANITIZE=ON

@@ -1,0 +1,69 @@
+; MCU module definitions (docs/engineering/PART_REGISTRY.md). Use with --catalogue profiles/mcu_modules.parts.
+;
+; Identity: KiCad library IDs only; symbols and footprints are read from the installed KiCad 9.x libraries
+; and snapshotted per build, never copied here. Pin numbers are the module's physical pads 1..39.
+; Constraints: transcribed from the manufacturer datasheet named in (provenance ...). They are DC
+; constraints of a behavioral boundary, not a silicon model. Confirm them against the datasheet revision
+; you design to; anything not listed (output resistance, pull resistance, supply current) is UNKNOWN.
+(catalogue
+ (part esp32_wroom_32e
+  (kind U) (family esp32) (role mcu_module)
+  (symbol "RF_Module:ESP32-WROOM-32E") (footprint "RF_Module:ESP32-WROOM-32E")
+  (manufacturer "Espressif Systems") (mpn "ESP32-WROOM-32E")
+  (datasheet "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf")
+  (height_mm 3.1)
+  (provenance "Espressif ESP32-WROOM-32E/32UE datasheet: module dimensions, pin definitions, strapping pins, recommended operating conditions and DC characteristics (3.3 V, 25 C)")
+  (alternates esp32_wroom_32ue)
+  (mcu
+   (behavior "DC electrical constraints only: pins are high impedance unless driven by the project; firmware execution, RF and transistor-level silicon are not simulated")
+   (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, recommended operating conditions and DC characteristics; ESP32 datasheet strapping pins")
+   (supply 2) (ground 1 15 38 39) (operating_v 3.0 3.6)
+   (vih_ratio 0.75) (vil_ratio 0.25) (max_source_a 0.04) (max_sink_a 0.028)
+   (gpio
+    (pin 4 SENSOR_VP in) (pin 5 SENSOR_VN in) (pin 6 IO34 in) (pin 7 IO35 in)
+    (pin 8 IO32 in out) (pin 9 IO33 in out) (pin 10 IO25 in out) (pin 11 IO26 in out) (pin 12 IO27 in out)
+    (pin 13 IO14 in out) (pin 14 IO12 in out) (pin 16 IO13 in out) (pin 23 IO15 in out) (pin 24 IO2 in out)
+    (pin 25 IO0 in out) (pin 26 IO4 in out) (pin 27 IO16 in out) (pin 28 IO17 in out) (pin 29 IO5 in out)
+    (pin 30 IO18 in out) (pin 31 IO19 in out) (pin 33 IO21 in out) (pin 34 IO3 in out) (pin 35 IO1 in out)
+    (pin 36 IO22 in out) (pin 37 IO23 in out))
+   (straps
+    (25 "IO0 selects the boot mode: low at reset enters serial download")
+    (24 "IO2 must be low or floating at reset for serial download")
+    (14 "IO12 (MTDI) selects the flash voltage: it must be low at reset for this module's 3.3 V flash")
+    (23 "IO15 (MTDO) controls boot-log output and SDIO timing at reset")
+    (29 "IO5 sets SDIO slave timing at reset"))
+   (reset 3 active_low)
+   (program 35 34 25 3)
+   (reference
+    (decouple 2 10e-6 100e-9) (pull_up 3 10000) (cap_to_ground 3 1e-6)
+    (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, peripheral schematics: 10 uF + 0.1 uF on 3V3, EN RC delay 10 kOhm / 1 uF; transcribed, confirm against your datasheet revision"))))
+ (part esp32_wroom_32ue
+  (kind U) (family esp32) (role mcu_module)
+  (symbol "RF_Module:ESP32-WROOM-32UE") (footprint "RF_Module:ESP32-WROOM-32UE")
+  (manufacturer "Espressif Systems") (mpn "ESP32-WROOM-32UE")
+  (datasheet "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf")
+  (provenance "Espressif ESP32-WROOM-32E/32UE datasheet: pin definitions, strapping pins, recommended operating conditions and DC characteristics (3.3 V, 25 C)")
+  (alternates esp32_wroom_32e)
+  (mcu
+   (behavior "DC electrical constraints only: pins are high impedance unless driven by the project; firmware execution, RF and transistor-level silicon are not simulated")
+   (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, recommended operating conditions and DC characteristics; ESP32 datasheet strapping pins")
+   (supply 2) (ground 1 15 38 39) (operating_v 3.0 3.6)
+   (vih_ratio 0.75) (vil_ratio 0.25) (max_source_a 0.04) (max_sink_a 0.028)
+   (gpio
+    (pin 4 SENSOR_VP in) (pin 5 SENSOR_VN in) (pin 6 IO34 in) (pin 7 IO35 in)
+    (pin 8 IO32 in out) (pin 9 IO33 in out) (pin 10 IO25 in out) (pin 11 IO26 in out) (pin 12 IO27 in out)
+    (pin 13 IO14 in out) (pin 14 IO12 in out) (pin 16 IO13 in out) (pin 23 IO15 in out) (pin 24 IO2 in out)
+    (pin 25 IO0 in out) (pin 26 IO4 in out) (pin 27 IO16 in out) (pin 28 IO17 in out) (pin 29 IO5 in out)
+    (pin 30 IO18 in out) (pin 31 IO19 in out) (pin 33 IO21 in out) (pin 34 IO3 in out) (pin 35 IO1 in out)
+    (pin 36 IO22 in out) (pin 37 IO23 in out))
+   (straps
+    (25 "IO0 selects the boot mode: low at reset enters serial download")
+    (24 "IO2 must be low or floating at reset for serial download")
+    (14 "IO12 (MTDI) selects the flash voltage: it must be low at reset for this module's 3.3 V flash")
+    (23 "IO15 (MTDO) controls boot-log output and SDIO timing at reset")
+    (29 "IO5 sets SDIO slave timing at reset"))
+   (reset 3 active_low)
+   (program 35 34 25 3)
+   (reference
+    (decouple 2 10e-6 100e-9) (pull_up 3 10000) (cap_to_ground 3 1e-6)
+    (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, peripheral schematics: 10 uF + 0.1 uF on 3V3, EN RC delay 10 kOhm / 1 uF; transcribed, confirm against your datasheet revision")))))

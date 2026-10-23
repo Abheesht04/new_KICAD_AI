@@ -410,28 +410,33 @@ static double diode_thermal_voltage(const MnaDiode *diode) {
   return (MNA_BOLTZMANN * diode->temperature_k) / MNA_ELEMENTARY_CHARGE;
 }
 
-static void diode_evaluate(const MnaDiode *diode, double voltage_v,
-                           double *current_a, double *conductance_s) {
-  double vt;
-  double exponent;
-  double exp_value;
+/*
+ * exp(x), continued linearly above x = 40 so that value and slope stay
+ * consistent (C1): a Newton step taken beyond the limit sees the true slope of
+ * the function it is solving. Below the limit it is exact (exp underflows to 0
+ * for large negative x, which is harmless).
+ */
+double mna_limexp(double x, double *slope) {
+  static const double LIMIT = 40.0;
 
-  vt = diode_thermal_voltage(diode);
-  exponent = voltage_v / (diode->ideality_factor * vt);
-
-  if (exponent > 40.0) {
-    exponent = 40.0;
+  if (x > LIMIT) {
+    double e = exp(LIMIT);
+    *slope = e;
+    return e * (1.0 + (x - LIMIT));
   }
 
-  if (exponent < -40.0) {
-    exponent = -40.0;
-  }
+  *slope = exp(x);
+  return *slope;
+}
 
-  exp_value = exp(exponent);
+void mna_diode_evaluate(const MnaDiode *diode, double voltage_v,
+                        double *current_a, double *conductance_s) {
+  double nvt = diode->ideality_factor * diode_thermal_voltage(diode);
+  double slope;
+  double e = mna_limexp(voltage_v / nvt, &slope);
 
-  *current_a = diode->saturation_current_a * (exp_value - 1.0);
-  *conductance_s =
-      diode->saturation_current_a * exp_value / (diode->ideality_factor * vt);
+  *current_a = diode->saturation_current_a * (e - 1.0);
+  *conductance_s = diode->saturation_current_a * slope / nvt;
 }
 
 static int diode_load(void *data, const MnaDevice *device,
@@ -453,7 +458,7 @@ static int diode_load(void *data, const MnaDevice *device,
   vc = node_voltage_from_x(assembly, diode->node_cathode);
   vd = va - vc;
 
-  diode_evaluate(diode, vd, &current, &conductance);
+  mna_diode_evaluate(diode, vd, &current, &conductance);
 
   add_two_terminal_residual(assembly, diode->node_anode, diode->node_cathode,
                             current);
@@ -573,6 +578,252 @@ int mna_add_diode(MnaCircuit *circuit, size_t node_anode, size_t node_cathode,
 }
 
 /* --------------------------------------------------------------------------
+ * Bipolar transistor: first-order Ebers-Moll, transport form
+ * --------------------------------------------------------------------------
+ *
+ * NPN, with Vbe = Vb - Ve and Vbc = Vb - Vc:
+ *     If = Is (exp(Vbe/(Nf Vt)) - 1)        Ir = Is (exp(Vbc/(Nr Vt)) - 1)
+ *     Ic = If - Ir (1 + 1/Br)               Ib = If/Bf + Ir/Br
+ *     Ie = -(Ic + Ib)                        (all currents INTO the terminal)
+ * PNP: the same equations on negated terminal voltages, with negated currents.
+ * The Jacobian then has the same form, evaluated at the transformed voltages.
+ */
+static double thermal_voltage(double temperature_k) {
+  return MNA_BOLTZMANN * temperature_k / MNA_ELEMENTARY_CHARGE;
+}
+
+void mna_bjt_evaluate(const MnaBjt *bjt, double vc, double vb, double ve,
+                      MnaBjtEval *out) {
+  double p = bjt->polarity < 0 ? -1.0 : 1.0;
+  double vt = thermal_voltage(bjt->temperature_k);
+  double sf, sr;
+  double ef = mna_limexp(p * (vb - ve) / (bjt->nf * vt), &sf);
+  double er = mna_limexp(p * (vb - vc) / (bjt->nr * vt), &sr);
+  double i_f = bjt->saturation_current_a * (ef - 1.0);
+  double i_r = bjt->saturation_current_a * (er - 1.0);
+  double gf = bjt->saturation_current_a * sf / (bjt->nf * vt); /* dIf/dVbe */
+  double gr = bjt->saturation_current_a * sr / (bjt->nr * vt); /* dIr/dVbc */
+  double kr = 1.0 + 1.0 / bjt->beta_r;
+
+  out->ic = p * (i_f - i_r * kr);
+  out->ib = p * (i_f / bjt->beta_f + i_r / bjt->beta_r);
+  out->ie = -(out->ic + out->ib);
+
+  /* Rows: Ic, Ib, Ie. Columns: Vc, Vb, Ve. */
+  out->d[0][0] = gr * kr;
+  out->d[0][1] = gf - gr * kr;
+  out->d[0][2] = -gf;
+  out->d[1][0] = -gr / bjt->beta_r;
+  out->d[1][1] = gf / bjt->beta_f + gr / bjt->beta_r;
+  out->d[1][2] = -gf / bjt->beta_f;
+  for (int j = 0; j < 3; ++j) {
+    out->d[2][j] = -(out->d[0][j] + out->d[1][j]);
+  }
+}
+
+/* Adds three-terminal currents (into the device) and their Jacobian. */
+static void stamp_three_terminal(MnaAssembly *assembly, const size_t *nodes,
+                                 const double *current, double d[3][3]) {
+  for (int i = 0; i < 3; ++i) {
+    if (nodes[i] == 0) {
+      continue;
+    }
+    (void)mna_assembly_add_residual(assembly, nodes[i] - 1, current[i]);
+    for (int j = 0; j < 3; ++j) {
+      if (nodes[j] != 0) {
+        (void)mna_assembly_add_jacobian(assembly, nodes[i] - 1, nodes[j] - 1,
+                                        d[i][j]);
+      }
+    }
+  }
+}
+
+static int bjt_load(void *data, const MnaDevice *device, MnaAssembly *assembly) {
+  const MnaBjt *bjt = (const MnaBjt *)data;
+  MnaBjtEval e;
+  size_t nodes[3];
+  double current[3];
+
+  (void)device;
+  if (bjt == NULL || assembly == NULL) {
+    return 0;
+  }
+
+  nodes[0] = bjt->node_collector;
+  nodes[1] = bjt->node_base;
+  nodes[2] = bjt->node_emitter;
+  mna_bjt_evaluate(bjt, node_voltage_from_x(assembly, nodes[0]),
+                   node_voltage_from_x(assembly, nodes[1]),
+                   node_voltage_from_x(assembly, nodes[2]), &e);
+  current[0] = e.ic;
+  current[1] = e.ib;
+  current[2] = e.ie;
+  stamp_three_terminal(assembly, nodes, current, e.d);
+  return 1;
+}
+
+static const MnaDeviceOps BJT_OPS = {.flags = MNA_DEVICE_NONLINEAR,
+                                     .unknown_count = no_extra_unknowns,
+                                     .load = bjt_load,
+                                     .destroy = destroy_payload,
+                                     .branch_current = NULL};
+
+static int positive_finite(double v) { return isfinite(v) && v > 0.0; }
+
+int mna_add_bjt(MnaCircuit *circuit, const MnaBjt *params) {
+  MnaBjt *bjt;
+
+  if (circuit == NULL || params == NULL ||
+      !valid_node(circuit, params->node_collector) ||
+      !valid_node(circuit, params->node_base) ||
+      !valid_node(circuit, params->node_emitter) ||
+      (params->polarity != 1 && params->polarity != -1) ||
+      !positive_finite(params->saturation_current_a) ||
+      !positive_finite(params->beta_f) || !positive_finite(params->beta_r) ||
+      !positive_finite(params->nf) || !positive_finite(params->nr) ||
+      !positive_finite(params->temperature_k)) {
+    return 0;
+  }
+
+  bjt = (MnaBjt *)malloc(sizeof(*bjt));
+  if (bjt == NULL) {
+    return 0;
+  }
+  *bjt = *params;
+  if (!mna_add_device(circuit, &BJT_OPS, bjt)) {
+    free(bjt);
+    return 0;
+  }
+  return 1;
+}
+
+/* --------------------------------------------------------------------------
+ * MOSFET: Level-1 Shichman-Hodges, body tied to source
+ * --------------------------------------------------------------------------
+ *
+ * NMOS with beta = Kp W / L, Vov = Vgs - Vto, for Vds >= 0:
+ *     cutoff      Vov <= 0          Id = 0
+ *     triode      0 <= Vds < Vov    Id = beta (Vov Vds - Vds^2/2) (1 + lambda Vds)
+ *     saturation  Vds >= Vov > 0    Id = beta/2 Vov^2 (1 + lambda Vds)
+ * Id flows into the drain and out of the source. For Vds < 0 the channel is
+ * symmetric: drain and source swap roles and Id changes sign. Value, gm and
+ * gds are continuous at both region boundaries.
+ * PMOS: the same equations on negated voltages and Vto, with negated current.
+ */
+static void level1_forward(double beta, double vto, double lambda, double vgs,
+                           double vds, double *id, double *gm, double *gds,
+                           int *region) {
+  double vov = vgs - vto;
+  double clm = 1.0 + lambda * vds;
+
+  if (vov <= 0.0) {
+    *id = *gm = *gds = 0.0;
+    *region = MNA_MOS_CUTOFF;
+  } else if (vds < vov) {
+    double core = vov * vds - 0.5 * vds * vds;
+    *id = beta * core * clm;
+    *gm = beta * vds * clm;
+    *gds = beta * (vov - vds) * clm + beta * core * lambda;
+    *region = MNA_MOS_TRIODE;
+  } else {
+    *id = 0.5 * beta * vov * vov * clm;
+    *gm = beta * vov * clm;
+    *gds = 0.5 * beta * vov * vov * lambda;
+    *region = MNA_MOS_SATURATION;
+  }
+}
+
+void mna_mosfet_evaluate(const MnaMosfet *mos, double vd, double vg, double vs,
+                         MnaMosfetEval *out) {
+  double p = mos->polarity < 0 ? -1.0 : 1.0;
+  double beta = mos->kp * mos->w / mos->l;
+  double nd = p * vd, ng = p * vg, ns = p * vs, vto = p * mos->vto;
+  double id, gm, gds;
+
+  if (nd - ns >= 0.0) {
+    level1_forward(beta, vto, mos->lambda, ng - ns, nd - ns, &id, &gm, &gds,
+                   &out->region);
+    out->reversed = 0;
+    out->id = p * id;
+    out->d_vd = gds;
+    out->d_vg = gm;
+    out->d_vs = -(gm + gds);
+  } else {
+    level1_forward(beta, vto, mos->lambda, ng - nd, ns - nd, &id, &gm, &gds,
+                   &out->region);
+    out->reversed = 1;
+    out->id = -p * id;
+    out->d_vd = gm + gds;
+    out->d_vg = -gm;
+    out->d_vs = -gds;
+  }
+}
+
+static int mosfet_load(void *data, const MnaDevice *device,
+                       MnaAssembly *assembly) {
+  const MnaMosfet *mos = (const MnaMosfet *)data;
+  MnaMosfetEval e;
+  size_t nodes[3];
+  double current[3];
+  double d[3][3];
+
+  (void)device;
+  if (mos == NULL || assembly == NULL) {
+    return 0;
+  }
+
+  nodes[0] = mos->node_drain;
+  nodes[1] = mos->node_gate;
+  nodes[2] = mos->node_source;
+  mna_mosfet_evaluate(mos, node_voltage_from_x(assembly, nodes[0]),
+                      node_voltage_from_x(assembly, nodes[1]),
+                      node_voltage_from_x(assembly, nodes[2]), &e);
+  current[0] = e.id;
+  current[1] = 0.0;
+  current[2] = -e.id;
+  for (int j = 0; j < 3; ++j) {
+    double dj = j == 0 ? e.d_vd : j == 1 ? e.d_vg : e.d_vs;
+    d[0][j] = dj;
+    d[1][j] = 0.0;
+    d[2][j] = -dj;
+  }
+  stamp_three_terminal(assembly, nodes, current, d);
+  return 1;
+}
+
+static const MnaDeviceOps MOSFET_OPS = {.flags = MNA_DEVICE_NONLINEAR,
+                                        .unknown_count = no_extra_unknowns,
+                                        .load = mosfet_load,
+                                        .destroy = destroy_payload,
+                                        .branch_current = NULL};
+
+int mna_add_mosfet(MnaCircuit *circuit, const MnaMosfet *params) {
+  MnaMosfet *mos;
+
+  if (circuit == NULL || params == NULL ||
+      !valid_node(circuit, params->node_drain) ||
+      !valid_node(circuit, params->node_gate) ||
+      !valid_node(circuit, params->node_source) ||
+      (params->polarity != 1 && params->polarity != -1) ||
+      !isfinite(params->vto) || !positive_finite(params->kp) ||
+      !positive_finite(params->w) || !positive_finite(params->l) ||
+      !isfinite(params->lambda) || params->lambda < 0.0) {
+    return 0;
+  }
+
+  mos = (MnaMosfet *)malloc(sizeof(*mos));
+  if (mos == NULL) {
+    return 0;
+  }
+  *mos = *params;
+  if (!mna_add_device(circuit, &MOSFET_OPS, mos)) {
+    free(mos);
+    return 0;
+  }
+  return 1;
+}
+
+/* --------------------------------------------------------------------------
  * Solver
  * --------------------------------------------------------------------------
  */
@@ -601,6 +852,13 @@ static int mna_options_valid(const MnaOptions *options) {
     return 0;
   }
 
+  if (!isfinite(options->absolute_update_tolerance_v) ||
+      options->absolute_update_tolerance_v < 0.0 ||
+      !isfinite(options->relative_update_tolerance) ||
+      options->relative_update_tolerance < 0.0) {
+    return 0;
+  }
+
   return 1;
 }
 
@@ -613,6 +871,8 @@ void mna_options_default(MnaOptions *options) {
   options->absolute_residual_tolerance = 1.0e-10;
   options->relative_residual_tolerance = 1.0e-10;
   options->maximum_voltage_step_v = 0.25;
+  options->absolute_update_tolerance_v = 1.0e-9;
+  options->relative_update_tolerance = 1.0e-9;
   options->trace = NULL;
   options->trace_context = NULL;
 }
@@ -672,6 +932,7 @@ void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
   size_t unknown_count;
   size_t iteration = 0;
   int device_failure = 0;
+  int converged = 0;
   double initial_residual_scale = 1.0;
 
   if (result == NULL) {
@@ -886,18 +1147,29 @@ void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
               result->x, residual, NULL, NULL, raw_delta, applied_delta,
               max_residual, max_raw_step, max_applied_step, step_scale);
 
-    if (max_residual <=
+    int residual_ok =
+        max_residual <=
         options->absolute_residual_tolerance +
-            options->relative_residual_tolerance * initial_residual_scale) {
+            options->relative_residual_tolerance * initial_residual_scale;
+    int update_ok =
+        !has_nonlinear_device ||
+        max_applied_step <=
+            options->absolute_update_tolerance_v +
+                options->relative_update_tolerance *
+                    vector_max_abs(result->x, circuit->node_count);
+
+    if (residual_ok && update_ok) {
       mna_trace(options, MNA_TRACE_CONVERGED, iteration + 1, unknown_count,
                 result->x, residual, NULL, NULL, raw_delta, applied_delta,
                 max_residual, max_raw_step, max_applied_step, step_scale);
       result->status = MNA_STATUS_SUCCESS;
+      converged = 1;
       break;
     }
   }
 
-  if (iteration >= options->max_iterations && result->status == 0) {
+  /* Ran out of iterations without an error status and without converging. */
+  if (!converged && result->status == MNA_STATUS_SUCCESS) {
     result->status = MNA_STATUS_NOT_CONVERGED;
   }
 

@@ -69,6 +69,24 @@ double e_series_nearest(ESeries series, double value) {
   return snapped_mantissa * pow(10.0, decade_exp); // back to e.g. 4700.0
 }
 
+double e_series_at_least(ESeries series, double value) {
+  if (!(value > 0.0) || !isfinite(value))
+    return 0.0;
+
+  const int *base;
+  size_t count;
+  int scale;
+  series_table(series, &base, &count, &scale);
+
+  int decade_exp;
+  double scaled = normalize(value, &decade_exp) * scale;
+  // 1 ppm slack: a value that already is a series value maps to itself despite float noise.
+  for (size_t i = 0; i < count; i++)
+    if (base[i] >= scaled * (1.0 - 1e-6))
+      return (double)base[i] / scale * pow(10.0, decade_exp);
+  return 1.0 * pow(10.0, decade_exp + 1); // past the last mantissa: the next decade's first value
+}
+
 bool e_series_contains(ESeries series, double value, double tolerance_ppm) {
   double nearest = e_series_nearest(series, value);
   double rel_diff = fabs(value - nearest) / value;

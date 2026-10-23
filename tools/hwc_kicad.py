@@ -157,62 +157,90 @@ def text_at(node: Any, key: str, index: int = 1, default: str = '') -> str:
     return default
 
 
+
 def discover_symbol_dir(explicit: str | None = None) -> Path:
-    candidates: list[Path] = []
+    # An explicit path is authoritative; never silently substitute another library.
     if explicit:
-        candidates.append(Path(explicit))
+        path = Path(explicit)
+        if path.is_dir() and any(path.glob('*.kicad_sym')):
+            return path.resolve()
+        raise FileNotFoundError(
+            f'Explicit KiCad symbol directory is missing or invalid: {path}'
+        )
+
+    candidates: list[Path] = []
     env = os.environ.get('KICAD_SYMBOL_DIR') or os.environ.get('KICAD9_SYMBOL_DIR')
     if env:
         candidates.append(Path(env))
+
     pf = os.environ.get('ProgramFiles', r'C:\Program Files')
     candidates.extend([
-        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'symbols',
         Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'symbols',
+        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'symbols',
         Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'symbols',
         Path('/usr/share/kicad/symbols'),
         Path('/usr/local/share/kicad/symbols'),
         Path('/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols'),
     ])
-    for p in candidates:
-        if p.is_dir() and any(p.glob('*.kicad_sym')):
-            return p.resolve()
-    looked = '\n  '.join(str(p) for p in candidates)
-    raise FileNotFoundError('Cannot find KiCad symbol directory. Supply --symbol-dir. Checked:\n  ' + looked)
+
+    for path in candidates:
+        if path.is_dir() and any(path.glob('*.kicad_sym')):
+            return path.resolve()
+
+    looked = '\n  '.join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        'Cannot find KiCad symbol directory. Supply --symbol-dir. Checked:\n  '
+        + looked
+    )
 
 
 
 def discover_footprint_dir(explicit: str | None = None) -> Path:
-    candidates: list[Path] = []
+    # An explicit path is authoritative; never silently substitute another library.
     if explicit:
-        candidates.append(Path(explicit))
+        path = Path(explicit)
+        if path.is_dir() and any(path.glob('*.pretty')):
+            return path.resolve()
+        raise FileNotFoundError(
+            f'Explicit KiCad footprint directory is missing or invalid: {path}'
+        )
+
+    candidates: list[Path] = []
     for env_name in ('KICAD_FOOTPRINT_DIR', 'KISYSMOD'):
         env = os.environ.get(env_name)
         if env:
             candidates.append(Path(env))
+
     pf = os.environ.get('ProgramFiles', r'C:\Program Files')
     candidates.extend([
-        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'footprints',
         Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'footprints',
+        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'footprints',
         Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'footprints',
         Path('/usr/share/kicad/footprints'),
         Path('/usr/local/share/kicad/footprints'),
         Path('/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'),
     ])
+
     for path in candidates:
         if path.is_dir() and any(path.glob('*.pretty')):
             return path.resolve()
+
     looked = '\n  '.join(str(path) for path in candidates)
-    raise FileNotFoundError('Cannot find KiCad footprint directory. Supply --footprint-dir. Checked:\n  ' + looked)
+    raise FileNotFoundError(
+        'Cannot find KiCad footprint directory. Supply --footprint-dir. Checked:\n  '
+        + looked
+    )
 
 
 def discover_cli(explicit: str | None = None) -> str | None:
+    explicit = explicit or os.environ.get('KICAD_CLI')
     if explicit:
         return explicit
     found = shutil.which('kicad-cli') or shutil.which('kicad-cli.exe')
     if found:
         return found
     pf = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))
-    for version in ('10.0', '9.0', '8.0'):
+    for version in ('9.0', '10.0', '8.0'):  # prefer the KiCad 9.x validation target
         candidate = pf / 'KiCad' / version / 'bin' / 'kicad-cli.exe'
         if candidate.is_file():
             return str(candidate)

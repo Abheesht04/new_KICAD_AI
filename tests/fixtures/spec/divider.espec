@@ -1,0 +1,22 @@
+; Hand-written EngineeringSpec. Its fingerprint must equal the constrained-English description in
+; corpus.json ("divider"): the two frontends produce the same engineering content.
+(engineering_spec
+  (version 1)
+  (name "divider")
+  (components
+    (component V1 (role supply) (value 5 V))
+    (component R1 (role resistor) (value 10000 ohm) (tolerance 0.01) (package "0603"))
+    (component R2 (role resistor) (value 20000 ohm) (package "0603")))
+  (connections
+    (connect V1 + VIN)
+    (connect V1 - GND)
+    (connect R1 1 VIN)
+    (connect R1 2 OUT)
+    (connect R2 1 OUT)
+    (connect R2 2 GND))
+  (requirements
+    (voltage OUT (min 3.2 V) (max 3.4 V)))
+  (board (width 40e-3 m) (height 30e-3 m) (layers 2))
+  (analyses
+    (dc)
+    (ac (start 10 Hz) (stop 100e3 Hz) (points 50))))

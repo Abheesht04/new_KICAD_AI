@@ -17,6 +17,7 @@
 #include "part_registry.h"
 #include "range.h"
 #include "vec.h"
+#include "cli_os.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -48,7 +49,7 @@
 #define HWC_ARG_CAP 64
 
 static void print_help(void) {
-    puts("Hardware Compiler (C23) - deterministic electronics design CLI");
+    puts("Hardware Compiler legacy V1 CLI (deprecated). The primary command is now: pcba --help");
     puts("\nV2: hwc project new|check|build|transient|classify|verify|catalogue --help");
     puts("\nLegacy commands:");
     puts("  make resistor [value]                         create one resistor (default 10k)");
@@ -122,44 +123,45 @@ static int tokenise(char *line, char **argv, int cap) {
     return argc;
 }
 
+/* Python helpers run through cli_run: an argv array, never a shell or a joined
+ * command string, so paths with spaces and metacharacters survive on Windows. */
+static int run_python(const char *launcher, const char *launcher_flag, const char *script, int argc,
+                      const char *const args[]) {
+    const char *av[HWC_ARG_CAP + 6];
+    int n = 0;
+    av[n++] = launcher;
+    if (launcher_flag) av[n++] = launcher_flag;
+    av[n++] = script;
+    for (int i = 0; i < argc && n < HWC_ARG_CAP + 4; ++i) av[n++] = args[i];
+    av[n] = NULL;
+    CliProcResult result;
+    if (!cli_run(av, CLI_STDOUT_INHERIT, &result)) {
+        fprintf(stderr, "ERROR: could not launch Python (%s). Install Python 3 or set HWC_PYTHON.\n", launcher);
+        return 127;
+    }
+    int exit_code = result.exit_code;
+    cli_proc_result_free(&result);
+    return exit_code;
+}
+
+static int tool_script(const char *name, char *path, size_t cap) {
+    char root[1024];
+    return cli_tool_root(root, sizeof root) && snprintf(path, cap, "%s/tools/%s", root, name) > 0 && file_exists(path);
+}
+
 static int spawn_python_bridge(int argc, const char *const args[]) {
-    const char *script = file_exists("tools/hwc_kicad.py")
-        ? "tools/hwc_kicad.py" : "hardware_compiler_kicad_bridge_patch/tools/hwc_kicad.py";
-    if (!file_exists(script)) {
-        fprintf(stderr, "ERROR: catalogue helper not found at tools/hwc_kicad.py\n");
+    char script[1200];
+    if (!tool_script("hwc_kicad.py", script, sizeof script)) {
+        fprintf(stderr, "ERROR: catalogue helper tools/hwc_kicad.py not found; set PCBA_ROOT to the source tree\n");
         return 127;
     }
+    char launcher[1024];
 #ifdef _WIN32
-    const char *exe = getenv("HWC_PY_LAUNCHER");
-    if (!exe || !*exe) exe = "py";
-    char *av[HWC_ARG_CAP + 6];
-    int n = 0;
-    av[n++] = (char *)exe;
-    av[n++] = "-3";
-    av[n++] = (char *)script;
-    for (int i = 0; i < argc && n < HWC_ARG_CAP + 4; ++i) av[n++] = (char *)args[i];
-    av[n] = NULL;
-    intptr_t rc = _spawnvp(HWC_WAIT, exe, (const char * const *)av);
-    if (rc == -1) {
-        fprintf(stderr, "ERROR: could not launch Python. Check that 'py -3' works.\n");
-        return 127;
-    }
-    return (int)rc;
+    if (cli_getenv("HWC_PY_LAUNCHER", launcher, sizeof launcher)) return run_python(launcher, "-3", script, argc, args);
+    return run_python("py", "-3", script, argc, args);
 #else
-    const char *exe = getenv("HWC_PYTHON");
-    if (!exe || !*exe) exe = "python3";
-    char *av[HWC_ARG_CAP + 4];
-    int n = 0;
-    av[n++] = (char *)exe;
-    av[n++] = (char *)script;
-    for (int i = 0; i < argc && n < HWC_ARG_CAP + 2; ++i) av[n++] = (char *)args[i];
-    av[n] = NULL;
-    pid_t pid = fork();
-    if (pid == 0) { execvp(exe, av); perror("execvp"); _exit(127); }
-    if (pid < 0) { perror("fork"); return 127; }
-    int status = 0;
-    if (waitpid(pid, &status, 0) < 0) { perror("waitpid"); return 127; }
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+    if (cli_getenv("HWC_PYTHON", launcher, sizeof launcher)) return run_python(launcher, NULL, script, argc, args);
+    return run_python("python3", NULL, script, argc, args);
 #endif
 }
 
@@ -680,21 +682,23 @@ static int execute_command(char *line, int interactive) {
 }
 
 int main(int argc, char **argv) {
-    if (!ensure_out_dir()) return 2;
+    argv = cli_utf8_argv(argc, argv);
+    int wants_help = argc > 1 && (equals_ci(argv[1], "help") || equals_ci(argv[1], "--help") || equals_ci(argv[1], "-help"));
+    if (!wants_help && !ensure_out_dir()) return 2;
     if (argc > 1) {
-        if (equals_ci(argv[1], "project")) {
+        if (equals_ci(argv[1], "project")) { /* legacy alias: forwards to tools/copper.py; prefer pcba */
+            char script[1200], launcher[1024];
+            if (!tool_script("copper.py", script, sizeof script)) {
+                fprintf(stderr, "ERROR: tools/copper.py not found; set PCBA_ROOT to the source tree\n");
+                return 127;
+            }
+            cli_default_copper_core();
 #ifdef _WIN32
-            const char *exe = getenv("HWC_PYTHON"); if (!exe || !*exe) exe="python";
-            const char *av[HWC_ARG_CAP+4]; int n=0; av[n++]=exe; av[n++]="tools/copper.py";
-            for(int i=2;i<argc && n<HWC_ARG_CAP+2;i++) av[n++]=argv[i]; av[n]=NULL;
-            return (int)_spawnvp(_P_WAIT,exe,av);
+            if (!cli_getenv("HWC_PYTHON", launcher, sizeof launcher)) snprintf(launcher, sizeof launcher, "python");
 #else
-            const char *exe=getenv("HWC_PYTHON"); if(!exe||!*exe)exe="python3";
-            char *av[HWC_ARG_CAP+4];int n=0;av[n++]=(char*)exe;av[n++]="tools/copper.py";
-            for(int i=2;i<argc && n<HWC_ARG_CAP+2;i++)av[n++]=argv[i];
-            av[n]=NULL;
-            execvp(exe,av);perror("Python launch");return 127;
+            if (!cli_getenv("HWC_PYTHON", launcher, sizeof launcher)) snprintf(launcher, sizeof launcher, "python3");
 #endif
+            return run_python(launcher, NULL, script, argc - 2, (const char *const *)argv + 2);
         }
         if (equals_ci(argv[1], "kicad-check")) {
             if (argc > 3) {

@@ -48,7 +48,11 @@ this is a source distribution, not a relocatable installer.
 - Inherited symbol resolution; explicit pin-to-pad matching; selected library snapshots in exports.
 - DC MNA: resistors, ideal voltage/current sources, Shockley diodes, capacitor open circuits,
   inductor shorts, and explicit connector boundaries. Unsupported active devices block analysis.
-- R/C/L/diode/source transients using backward Euler, with zero initial stored energy.
+- Reference transistor models: first-order Ebers-Moll NPN/PNP and Level-1 NMOS/PMOS (no charge
+  storage; see [NONLINEAR_MODELS.md](docs/engineering/NONLINEAR_MODELS.md)), with explicit models
+  and pin maps; never a claim of manufacturer-model fidelity.
+- Fixed-step transients (Backward Euler or trapezoidal) with transactional state commits and
+  explicit failure reports, from zero initial stored energy; see [TRANSIENT.md](docs/engineering/TRANSIENT.md).
 - Explicit current/power calculations, KCL/residual validation, rating derating and voltage targets.
 - Exhaustive corners for up to eight uncertain resistors; nonlinear corner results are sampled
   extremes, not proof of every interior operating point.
@@ -65,6 +69,46 @@ this is a source distribution, not a relocatable installer.
 
 ## Commands
 
+`pcba` is the primary command (built with the core; `pcba.cmd` builds and runs it on Windows).
+See [docs/engineering/CLI.md](docs/engineering/CLI.md) for the full command map, exit codes
+and JSON output.
+
+```sh
+pcba design "Build me an ESP32 LED PCB. Generate the KiCad PCB." --out out/esp32_led --profile profiles/esp32_led.design
+pcba --help
+pcba doctor
+pcba project check examples/v2/divider.copper
+pcba project build examples/v2/divider.copper --out out/divider
+pcba project verify --out out/divider        # KiCad 9.x ERC/DRC/parity; PASS only if everything ran
+pcba simulate transient examples/v2/rc.copper --dt 1e-4 --steps 100 --out out/rc.csv
+pcba spec parse "a 5 V supply on VIN, a 10k resistor from VIN to OUT, a 20k resistor from OUT to GND" --out d.espec
+pcba spec lower d.espec --out d.copper      # only a complete spec (no errors, no open questions)
+```
+
+`pcba spec` is the V2 requirements frontend: constrained English or a hand-written `.espec`
+file becomes an EngineeringSpec with units and provenance, missing decisions become
+clarification questions, and a complete spec is handed to the compiler as a `.copper`
+project. See [ENGINEERING_SPEC.md](docs/engineering/ENGINEERING_SPEC.md).
+
+Parts are data, not code: `pcba parts import FILE [--into my.parts]` checks a catalogue against copper-core
+and the installed KiCad 9.x libraries (symbol pins = footprint pads, pin maps, MCU pins). MCU modules such as
+`profiles/mcu_modules.parts` (ESP32-WROOM-32E) carry a typed *behavioral boundary*: supply range, GPIO
+directions, thresholds, current limits, strapping, reset and programming pins, checked in DC. Firmware and
+silicon are not simulated. See [PART_REGISTRY.md](docs/engineering/PART_REGISTRY.md) and
+`examples/v2/esp32_io.copper`.
+
+`pcba design "REQUEST" --out DIR` compiles a request end to end: it lists every decision with its source
+(request, answers, design profile, catalogue or design rule), asks when a decision is open, builds the KiCad
+project and reports 11 quality gates. See [DESIGN.md](docs/engineering/DESIGN.md).
+
+`pcba place FILE --out placed.copper` searches placements deterministically (constructive placement, seeded
+annealing, rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core
+finds no hard violation; otherwise it reports why no feasible board exists. `pcba route FILE --out DIR` routes a
+given placement with the same exact re-check. See [LAYOUT.md](docs/engineering/LAYOUT.md) and the measured
+[LAYOUT_BENCHMARK.md](docs/engineering/LAYOUT_BENCHMARK.md).
+
+The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
+
 ```sh
 python tools/copper.py new divider --out my_board.copper --vin 5 --r 10000 --r2 20000
 python tools/copper.py new rc --out filter.copper --r 1000 --c 0.000001
@@ -78,8 +122,10 @@ python tools/hwc_kicad.py custom-symbol --help
 ```
 
 `--catalogue custom.parts` and `--rules profiles/conservative.rules` are accepted by
-`new`. Custom template catalogues must contain the template's required IDs (start by
-copying `profiles/default.parts`). A hand-written project can use any defined ID.
+`new`. A custom catalogue is overlaid on `profiles/default.parts`: a part with the same id
+replaces the bundled one, so you only list what you change. A hand-written project can use
+any defined ID. Device models, pin maps and rating provenance are described in
+[DEVICE_MODEL_CONTRACT.md](docs/engineering/DEVICE_MODEL_CONTRACT.md).
 After changing a catalogue, update/re-create the embedded project part definition:
 projects deliberately snapshot their parts rather than silently changing underneath you.
 
@@ -87,6 +133,13 @@ projects deliberately snapshot their parts rather than silently changing underne
 It does not mark physics as passed. `build --no-route` exports placement with unresolved
 connections reported as failures. The `fabricate` command requires fresh native checks,
 unchanged hashes, and zero internal findings before asking KiCad to export CAM files.
+
+Release readiness, the capability matrix by stage and all open issues are in
+[RELEASE_READINESS.md](docs/engineering/RELEASE_READINESS.md).
+
+The numerical baseline (dense MNA, Newton, AC, transient, corners) is measured against closed-form oracles
+by `numeric_bench` and `python tools/numeric_bench.py`; findings and the ranked improvement plan are in
+[NUMERICAL_ROADMAP.md](docs/engineering/NUMERICAL_ROADMAP.md).
 
 ## Verification and scope
 
@@ -98,7 +151,7 @@ supplied example); `fabricate` blocks until these are supplied and all checks pa
 
 This is a working, bounded V2, not a finished replacement for KiCad or a general circuit
 synthesis system. Complex IC model libraries, multi-unit symbols, arbitrary rotated
-pads, zones/planes, complex board outlines, general SPICE/AC analysis, thermal fields,
+pads, zones/planes, complex board outlines, general SPICE analysis (AC covers only the built-in models), thermal fields,
 SI/EMC, assembly stencil analysis and industrial-scale autorouting remain out of scope.
 The desktop currently edits project source, not graphical wires or footprints.
 

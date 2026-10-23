@@ -99,20 +99,31 @@ Supported model kinds:
 | V | Volts | Ideal source, pin 1 positive | Constant source applied at start |
 | I | Amperes | Current from pin 1 to pin 2 | Constant source applied at start |
 | J | Unused | Explicit connector boundary | Explicit connector boundary |
+| Q | Unused | Ebers-Moll NPN/PNP (explicit `model`) | Memoryless |
+| M | Unused | Level-1 NMOS/PMOS (explicit `model`) | Memoryless |
 | U | Unused | Unsupported; block solve | Unsupported; block solve |
 
-For R/C/L/D/V/I, pins must be ordered `(1 NET_A) (2 NET_B)` and cannot short
-the component's own terminals. Other pin labels may be alphanumeric and must
+Each modelled kind binds a versioned device model (`copper-core models` lists them; see
+[DEVICE_MODEL_CONTRACT.md](../engineering/DEVICE_MODEL_CONTRACT.md)). R/C/L/V/I components
+must state `(value ...)` explicitly; an omitted value is rejected, never defaulted (an
+explicit `0` V/A source is accepted). Model terminals are matched to pins by name through
+the part's `(pinmap ...)`, which defaults to terminal *i* → pin *i+1* (diode: cathode 1,
+anode 2). A component must list exactly the mapped pins, in any order, and a two-terminal
+part cannot short its own terminals. Other pin labels may be alphanumeric and must
 match the symbol and footprint exactly. All pins must be assigned; intentional
 no-connect pins are not yet represented. Ground is the first declared net `GND`.
 MNA uses node 0 for ground, while physical copper uses `net_index + 1`, reserving
 physical net 0 for genuinely unassigned copper.
 
-Part attributes: `kind`, `symbol`, `footprint`, `power_w`, `voltage_v`, `tolerance`
-(fraction), `is_a`, `ideality`, `height_mm`, `manufacturer`, `mpn`, `datasheet`. Generic ratings default to unknown (0). Diode
-parameters default to a generic idealized model, not a manufacturer datasheet.
-Copy the default catalogue before customizing a template, or write your own
-project using any part ID. No provider infers procurement data from KiCad geometry.
+Part attributes: `kind`, `model`, `pinmap`, `symbol`, `footprint`, `power_w`, `voltage_v`,
+`tolerance` (fraction), `height_mm`, `manufacturer`, `mpn`, `datasheet`, `provenance`,
+`catalogue`, and the bound model's other parameters (diode: `is_a`, `ideality`). Ratings and
+height are UNKNOWN when absent or written `unknown`; an explicit 0 is rejected. Diode
+parameters default to a generic idealized model, not a manufacturer datasheet. A component may
+add `(override (power_w ...) (voltage_v ...) (height_mm ...) (tolerance ...) (provenance "..."))`,
+which takes precedence over the part's data for that component only.
+`project new --catalogue FILE` overlays your catalogue on the bundled default (same id
+replaces). No provider infers procurement data from KiCad geometry.
 
 Project fields: `version`, `name`, `nets`, `parts`, `components`, `board`, `rules`,
 `geometry`, `targets`. Unknown or duplicate structured fields are rejected.
@@ -149,12 +160,18 @@ and produces a finding. It is never inferred from a package name.
 
 ## Calculations and limits
 
-The transient solver starts with zero capacitor voltage and zero inductor current.
-It applies constant sources at the first positive time step. There is no arbitrary
-waveform source or AC solver. Each step solves MNA and checks residual/KCL before
-emitting CSV. Backward Euler is first-order and introduces numerical damping; the
-user chooses a suitable step. The tests compare both its exact discrete solution
-and an analytical RC/RL response.
+The transient solver (`src/transient.c`, [TRANSIENT.md](../engineering/TRANSIENT.md))
+starts with zero capacitor voltage and zero inductor current and applies constant
+sources at t = 0+. There is no arbitrary waveform source. Each step solves MNA, checks
+residual/KCL and commits device state only if everything succeeded; a failed step
+reports its time, step, solver status and device. Backward Euler (default) is first
+order and damps; trapezoidal (`--method trap`) is second order and takes its first step
+with Backward Euler. The step is fixed and chosen by the user.
+
+Small-signal AC (`pcba simulate ac`, `copper-core ac`) solves the complex system
+A(jw) x = b(jw) at each frequency of a log or linear sweep; independent sources need
+`(ac MAGNITUDE PHASE_DEG)` on the component, and the diode is linearised at the DC
+operating point. See [AC_ANALYSIS.md](../engineering/AC_ANALYSIS.md).
 
 At most eight resistors with nonzero tolerance are exhaustively corner-tested.
 For each corner the actual MNA equations are re-solved, node ranges accumulated,
@@ -184,7 +201,19 @@ physical check can still produce a clearly labelled draft for inspection. `--dra
 explicitly allows a validly parsed project with an unsupported/failing electrical
 model to reach export. Its engineering status remains failed.
 
-`verify` checks the manifest's byte hashes, requires KiCad 9.x, runs ERC and DRC
+`build` writes one of three manifest statuses: `INTERNAL_CHECKS_PASS_NATIVE_KICAD_REQUIRED`,
+`INTERNAL_CHECKS_UNVERIFIED_MISSING_DATA` (any analysis warning, i.e. an unknown rating,
+height or geometry, listed in `unverified_rules`) or `DRAFT_FAILED_CHECKS`. The manifest
+also records the source hash and its path relative to the output directory.
+
+`verify` first deletes any previous `verification.json`, then records each check as
+`PASS`, `FAIL` or `UNVERIFIED`: output hashes; source freshness (recorded path or
+`--project`; a missing source is `UNVERIFIED`, a changed one `FAIL`); build status;
+re-analysis of `resolved.copper` by `copper-core`, which must reproduce `report.json`
+exactly; and data completeness. The overall status is `FAIL` if any check failed, else
+`UNVERIFIED` if any check could not be established, else `PASS`; only `PASS` exits 0.
+Native gates require KiCad 9.x; a missing CLI or another version is recorded as
+`UNVERIFIED` together with the detected version. With KiCad 9.x it runs ERC and DRC
 with violation exit codes, checks schematic parity, and exports KiCad XML netlist.
 Root-sheet net names are normalized by removing one leading `/` before comparing
 every physical `(reference, pin)` against the electrical IR. Reports are retained.
