@@ -134,6 +134,10 @@ It does not mark physics as passed. `build --no-route` exports placement with un
 connections reported as failures. The `fabricate` command requires fresh native checks,
 unchanged hashes, and zero internal findings before asking KiCad to export CAM files.
 
+The numerical baseline (dense MNA, Newton, AC, transient, corners) is measured against closed-form oracles
+by `numeric_bench` and `python tools/numeric_bench.py`; findings and the ranked improvement plan are in
+[NUMERICAL_ROADMAP.md](docs/engineering/NUMERICAL_ROADMAP.md).
+
 ## Verification and scope
 
 See [VALIDATION.md](docs/v2/VALIDATION.md) for exact test evidence and environment.
