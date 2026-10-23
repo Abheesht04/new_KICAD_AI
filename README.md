@@ -134,6 +134,9 @@ It does not mark physics as passed. `build --no-route` exports placement with un
 connections reported as failures. The `fabricate` command requires fresh native checks,
 unchanged hashes, and zero internal findings before asking KiCad to export CAM files.
 
+Release readiness, the capability matrix by stage and all open issues are in
+[RELEASE_READINESS.md](docs/engineering/RELEASE_READINESS.md).
+
 The numerical baseline (dense MNA, Newton, AC, transient, corners) is measured against closed-form oracles
 by `numeric_bench` and `python tools/numeric_bench.py`; findings and the ranked improvement plan are in
 [NUMERICAL_ROADMAP.md](docs/engineering/NUMERICAL_ROADMAP.md).
