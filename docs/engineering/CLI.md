@@ -40,6 +40,7 @@ reach the child unchanged.
 | `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
 | `pcba spec lower <file.espec> --out F.copper` | stable | `copper.py spec-lower` → loaded by `copper-core analyze` before publishing |
 | `pcba parts import <catalogue-file> [--into FILE]` | stable | `copper.py part-import` (copper-core schema + KiCad library parity; docs/engineering/PART_REGISTRY.md) |
+| `python tools/prompt_acceptance.py --pcba PCBA [--native] [--esp32]` (or `tools/copper_prompt_acceptance.ps1`) | harness | runs the English corpus and English → KiCad path through `pcba`; PASS/FAIL/BLOCKED/SKIPPED/UNVERIFIED/NOT_IMPLEMENTED/OBSERVATIONAL (docs/engineering/M0_ACCEPTANCE_EVIDENCE.md) |
 | `pcba design "request" --out DIR [--profile F] [--answers K=V,...]` | stable | `copper.py design` → `tools/design.py` (docs/engineering/DESIGN.md) |
 | `pcba place <file.copper> --out FILE` | stable | `copper.py place` → `tools/layout.py` (docs/engineering/LAYOUT.md) |
 | `pcba route <file.copper> --out DIR` | stable | `copper.py route` → `tools/layout.py` |
@@ -152,3 +153,11 @@ UNVERIFIED, not invalid input.
   - doctor.
 - `tests/cli_quote_test.c` (CTest `cli_quote`) checks the Windows quoting rules against
   hand-written expectations.
+
+## Native KiCad results
+
+`project verify` first checks `board_content` (every designed footprint and pad net is on the board) and only
+then runs KiCad 9.x. Each KiCad run is classified from its own report, never from stderr: errors, unconnected
+items and schematic-parity issues are FAIL; warnings alone are UNVERIFIED and listed; a non-zero exit without a
+readable report is UNVERIFIED. stdout, stderr and the exit code are stored per gate in `verification.json`.
+

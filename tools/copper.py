@@ -309,12 +309,33 @@ def core_check(tree,core=None):
     return report
 
 def rule(tree,key,default):return float(text_at(one(tree,'rules'),key,default=str(default)))
+def auto_place(tree,fpdir,core):
+    """Placement for a project whose physical parts have none (e.g. lowered from an EngineeringSpec): the same
+    deterministic staged search as `place`, re-checked exactly. A partly placed project is refused; mixing given
+    and generated positions would be a silent guess. Returns (tree, placement record or None)."""
+    import layout
+    physical=[str(c[1]) for c in direct(one(tree,'components'),'component')
+              if text_at(next(p for p in direct(one(tree,'parts'),'part') if str(p[1])==text_at(c,'part')),'kind') not in ('V','I')]
+    unplaced=[r for r in physical if not one(next(c for c in direct(one(tree,'components'),'component') if str(c[1])==r),'at')]
+    if not unplaced:return tree,None
+    if len(unplaced)!=len(physical):
+        raise InvalidInput(f"{', '.join(unplaced)} have no (at ...) placement while other parts do: place all of them, or none (pcba place)")
+    best,candidates,problem=layout.optimize(tree,fpdir,core,(1,),300)
+    if not best or not best['feasible']:
+        c=layout.brief(best) if best else None
+        raise Failed('no feasible placement was found for this unplaced project'+(f": best candidate has {c['hard_violations']} hard violation(s) {c['hard_by_rule']} and {c['unrouted']} unrouted connection(s)" if c else ': '+'; '.join(problem['placement_failures'])))
+    record={'source':'generated: layout.optimize (seed 1, 300 iterations), exact copper-core re-check','candidate':best['label'],
+            'trace_width_mm':best['width_rounds'][-1]['trace_width_mm'],'positions':best['placement']}
+    return layout.placed_project(best,problem),record
 def export_project(args):
     project=Path(args.project).resolve();tree=load(project);out=Path(args.out).resolve();out.mkdir(parents=True,exist_ok=True)
     for marker in ('manifest.json','verification.json'):
         (out/marker).unlink(missing_ok=True)
     report,rc=core_run(project,args.core)
     if rc and not getattr(args,'draft',False):raise Failed('Electrical analysis failed; run check to inspect the findings before layout.')
+    try:tree,placement=auto_place(tree,discover_footprint_dir(args.footprint_dir),args.core)
+    except FileNotFoundError as exc:raise ToolUnavailable(str(exc).splitlines()[0]) from exc
+    if placement:print(f"No part had a placement: generated one ({placement['candidate']}; deterministic, re-checked by copper-core).")
     components=component_data(tree);nets=list(map(str,one(tree,'nets')[1:]));netids={n:i+1 for i,n in enumerate(nets)}
     symdir=discover_symbol_dir(args.symbol_dir);fpdir=discover_footprint_dir(args.footprint_dir)
     bindings={b['ref']:b for b in report['components']}
@@ -390,7 +411,7 @@ def export_project(args):
     unverified=sorted({v['rule'] for v in report['issues'] if v['severity']!='error'})
     try:source_path=os.path.relpath(project,out)
     except ValueError:source_path=str(project)  # Windows: different drive
-    manifest={'schema':2,'source_sha256':sha256_file(project),'source_path':Path(source_path).as_posix(),'status':STATUS_DRAFT if rc else (STATUS_UNVERIFIED if unverified else STATUS_PASS),'unverified_rules':unverified,'files':{name:sha256_file(out/name) for name in files},'symbols':str(symdir),'footprints':str(fpdir)}
+    manifest={'schema':2,'placement':placement or {'source':'project (at ...) placements'},'source_sha256':sha256_file(project),'source_path':Path(source_path).as_posix(),'status':STATUS_DRAFT if rc else (STATUS_UNVERIFIED if unverified else STATUS_PASS),'unverified_rules':unverified,'files':{name:sha256_file(out/name) for name in files},'symbols':str(symdir),'footprints':str(fpdir)}
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     # Lightweight exact board preview for external viewing, independent of desktop renderer.
     import html
@@ -402,6 +423,42 @@ def export_project(args):
 
 def overall_status(statuses):
     return 'FAIL' if 'FAIL' in statuses else 'UNVERIFIED' if 'UNVERIFIED' in statuses else 'PASS'
+def native_status(label,returncode,report):
+    """Classify one kicad-cli run from its own report, not from stderr or the exit code alone: KiCad's
+    --exit-code-violations is non-zero for warnings too. Errors, unconnected items and schematic-parity issues
+    are FAIL; warnings alone are UNVERIFIED (listed, never hidden); a missing or unreadable report is
+    UNVERIFIED (the check did not complete), whatever stderr said."""
+    if label=='netlist':
+        ok=returncode==0 and report.is_file() and report.stat().st_size>0
+        return {'status':'PASS' if ok else 'UNVERIFIED','message':'' if ok else f'netlist export exited {returncode} without a netlist'}
+    try:data=json.loads(report.read_text(encoding='utf-8'))
+    except (OSError,ValueError):return {'status':'UNVERIFIED','message':f'kicad-cli exited {returncode} and wrote no readable {report.name}; the check did not complete'}
+    violations=[v for sheet in data.get('sheets',[]) for v in sheet.get('violations',[])] if label=='erc' else list(data.get('violations',[]))
+    errors=[v for v in violations if v.get('severity')=='error'];warnings=[v for v in violations if v.get('severity')!='error']
+    unconnected=data.get('unconnected_items',[]) if label=='drc' else [];parity=data.get('schematic_parity',[]) if label=='drc' else []
+    counts={'errors':len(errors),'warnings':len(warnings),'unconnected':len(unconnected),'parity':len(parity),
+            'types':sorted({v.get('type','?') for v in violations+parity})}
+    if errors or unconnected or parity:status='FAIL'
+    elif warnings:status='UNVERIFIED'
+    elif returncode==0:status='PASS'
+    else:return {'status':'UNVERIFIED','counts':counts,'message':f'kicad-cli exited {returncode} but its report lists no violation'}
+    detail='; '.join(f"{v.get('severity')}:{v.get('type')} {v.get('description','')}" for v in (errors+warnings)[:5])
+    return {'status':status,'counts':counts,'message':detail or ('no violations' if status=='PASS' else '')}
+def board_content(out):
+    """The built board must hold what the electrical IR says: every physical part's footprint and every connected
+    pin's pad on its net. An empty or partial board is never a product result, whatever DRC says about it."""
+    data=[c for c in component_data(load(out/'resolved.copper')) if c['kind'] not in ('V','I')]
+    footprints={}
+    for fp in direct(load(out/'design.kicad_pcb'),'footprint'):
+        ref=next((str(p[2]) for p in direct(fp,'property') if str(p[1])=='Reference'),None)
+        footprints[ref]={str(p[1]):(str(one(p,'net')[2]).removeprefix('/') if one(p,'net') else '') for p in direct(fp,'pad')}
+    if not data:return {'check':'board_content','status':'UNVERIFIED','message':'the design has no physical parts: a native DRC of an empty board proves nothing'}
+    missing=[c['ref'] for c in data if c['ref'] not in footprints]
+    wrong=[f"{c['ref']}.{pin}" for c in data if c['ref'] in footprints for pin,net in c['pins'].items() if footprints[c['ref']].get(pin)!=net]
+    pads=sum(len(v) for v in footprints.values());nets=len({n for v in footprints.values() for n in v.values() if n and not n.startswith('unconnected-')})
+    ok=not missing and not wrong
+    return {'check':'board_content','status':'PASS' if ok else 'FAIL','counts':{'footprints':len(footprints),'pads':pads,'nets':nets},
+            'message':f'{len(footprints)} footprints, {pads} pads, {nets} named nets, as the electrical IR requires' if ok else f'missing footprints {missing}; pads not on their IR net {wrong[:10]}'}
 def native_gates(out,cli):
     """KiCad 9.x ERC/DRC/netlist plus independent pin/net parity. Returns (version, gates)."""
     version=None;error='KiCad CLI not found; set --kicad-cli'
@@ -414,9 +471,15 @@ def native_gates(out,cli):
     if not re.match(r'^9\.',found):return found,[{'gate':'kicad_version','status':'UNVERIFIED','message':f'Native validation targets KiCad 9.x only; found {found}'}]
     gates=[]
     for label,cmd in [('erc',['sch','erc','--format','json','--exit-code-violations','-o',str(out/'erc.json'),str(out/'design.kicad_sch')]),('drc',['pcb','drc','--format','json','--all-track-errors','--schematic-parity','--exit-code-violations','-o',str(out/'drc.json'),str(out/'design.kicad_pcb')]),('netlist',['sch','export','netlist','--format','kicadxml','-o',str(out/'netlist.xml'),str(out/'design.kicad_sch')])]:
-        r=subprocess.run([cli,*cmd],capture_output=True,text=True,timeout=180);gates.append({'gate':label,'status':'PASS' if r.returncode==0 else 'FAIL','returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr})
+        report=out/('netlist.xml' if label=='netlist' else f'{label}.json')
+        report.unlink(missing_ok=True)  # a stale report from an earlier run must never be read as this run's result
+        try:r=subprocess.run([cli,*cmd],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
+        except (OSError,subprocess.SubprocessError) as exc:
+            gates.append({'gate':label,'status':'UNVERIFIED','returncode':None,'stdout':'','stderr':'','message':f'kicad-cli could not run: {exc}'});continue
+        gate={'gate':label,'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr}
+        gate.update(native_status(label,r.returncode,report));gates.append(gate)
     # Compare all electrical physical-pin mappings against KiCad's own extracted netlist.
-    if gates[-1]['returncode']==0:
+    if gates[-1]['status']=='PASS':
         import xml.etree.ElementTree as ET
         root=ET.parse(out/'netlist.xml').getroot();actual={}
         for net in root.findall('./nets/net'):
@@ -455,7 +518,9 @@ def verify(args):
             else:check('internal_reanalysis','PASS','Re-analysis reproduces report.json with no errors')
             missing=sorted({v['rule'] for v in fresh['issues'] if v['severity']!='error'})
             check('data_completeness','UNVERIFIED' if missing else 'PASS',f'Missing data: {missing}' if missing else 'No unknown ratings, heights or geometry')
-        version,gates=native_gates(out,discover_cli(args.kicad_cli))
+        content=board_content(out);checks.append(content)
+        if content['status']=='PASS':version,gates=native_gates(out,discover_cli(args.kicad_cli))
+        else:gates=[{'gate':'native','status':'UNVERIFIED','message':'native KiCad checks were not run: the board does not hold the designed content (board_content)'}]
     status=overall_status([c['status'] for c in checks+gates])
     result={'status':status,'pass':status=='PASS','kicad_version':version,'checks':checks,'gates':gates,'hashes':manifest['files']}
     marker.write_text(json.dumps(result,indent=2)+'\n')
@@ -755,12 +820,7 @@ def layout_command(args):
     if feasible:
         out=Path(args.out)
         if args.command=='place':
-            placed=copy.deepcopy(best['resolved']);placed[:]=[v for v in placed if not (isinstance(v,list) and head(v)=='geometry')]
-            width=best['width_rounds'][-1]['trace_width_mm']
-            if width!=problem['trace_width']:  # the widened copper becomes the project's (stricter) trace width
-                rules=one(placed,'rules')
-                if not rules:rules=sx('rules');placed.append(rules)
-                rules[:]=[v for v in rules if not (isinstance(v,list) and head(v)=='trace_width_mm')]+[sx('trace_width_mm',number(width))]
+            placed=layout.placed_project(best,problem)
             if out.exists() and not args.force:raise InvalidInput(f'{out} exists; use --force to replace it')
             write_tree(out,placed);data['written']=str(out.resolve())
         else:
@@ -822,7 +882,8 @@ def spec_command(args):
     import spec_ir,spec_nlp
     if args.command=='spec-parse':
         if args.file and args.text:raise InvalidInput('give the description as text or with --file, not both')
-        text=Path(existing(args.file,'Description file')).read_text(encoding='utf-8') if args.file else args.text
+        try:text=Path(existing(args.file,'Description file')).read_text(encoding='utf-8-sig') if args.file else args.text
+        except UnicodeDecodeError as exc:raise InvalidInput(f'{args.file} is not UTF-8 text (byte {exc.start}); save it as UTF-8') from None
         spec,parse_errors=spec_nlp.parse(text or '');errors,questions=spec_outcome(args,spec,parse_errors)
         if args.out and not errors:
             if Path(args.out).exists() and not args.force:raise InvalidInput(f'{args.out} exists; use --force to replace it')

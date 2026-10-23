@@ -430,12 +430,7 @@ def build_once(text, profile, answers, symdir, fpdir, out, core):
                   best=best, candidates=candidates, problem=problem, out=out)
     if not best or not best['feasible']:
         return record
-    placed = copy.deepcopy(best['resolved']); placed[:] = [v for v in placed if not (isinstance(v, list) and str(v[0]) == 'geometry')]
-    width = best['width_rounds'][-1]['trace_width_mm']
-    if width != problem['trace_width']:
-        from hwc_kicad import one
-        rules = one(placed, 'rules')
-        rules[:] = [v for v in rules if not (isinstance(v, list) and str(v[0]) == 'trace_width_mm')] + [copper.sx('trace_width_mm', copper.number(width))]
+    placed = layout.placed_project(best, problem)
     copper.write_tree(out / 'placed.copper', placed)
     args = argparse.Namespace(project=str(out / 'placed.copper'), out=str(out / 'build'), core=core, symbol_dir=str(symdir),
                               footprint_dir=str(fpdir), no_route=False, draft=False)

@@ -120,6 +120,12 @@ class Fixtures(unittest.TestCase):
         self.assertEqual(problem['fixed'], {'J1', 'J2', 'R1', 'R2'})
         for c in cands:
             self.assertEqual({r: tuple(a) for r, a in c['placement'].items()}, {r: tuple(a) for r, a in problem['given'].items()})
+    def test_placed_project_records_widened_copper_even_without_rules(self):
+        tree = copper.load(FIX / 'high_current.copper'); base, best, cands, problem = self.run_fixture('high_current')
+        self.assertIsNone(copper.one(tree, 'rules'), 'fixture has no (rules ...) block')
+        placed = layout.placed_project(best, problem)
+        self.assertGreaterEqual(float(copper.text_at(copper.one(placed, 'rules'), 'trace_width_mm')), 0.7)
+        self.assertIsNone(copper.one(placed, 'geometry'))
     def test_optimizer_is_deterministic(self):
         tree = copper.load(FIX / 'multi_connector.copper')
         a = layout.optimize(tree, FP, CORE, SEEDS, ITER); b = layout.optimize(tree, FP, CORE, SEEDS, ITER)

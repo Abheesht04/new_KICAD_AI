@@ -82,6 +82,13 @@ Legend: **Tested** — implemented and covered by passing tests against independ
 | — | Copper Studio desktop (Vulkan) | **Unverified** | not built in this review (`COPPER_BUILD_DESKTOP=OFF`) | — |
 | — | Sparse solver, adaptive timestep, BDF2, device capacitances, Monte Carlo, ngspice differential checks | **Not implemented** | roadmap only | — |
 
+**Owner's KiCad 9.0.6 evidence (2026-10-23, `out.zip`, after this review):** the ESP32 LED acceptance run on the
+owner's machine (KiCad 9.0.6 libraries and CLI) produced ERC PASS, KiCad netlist export PASS and independent
+pin/net parity PASS; DRC exited 5 with a single **warning**, `lib_footprint_mismatch` on U1, and no errors,
+unconnected items or schematic-parity issues. The gate then reported FAIL because it equated any non-zero exit
+with failure; since M0 it classifies from the report (warnings only → UNVERIFIED, listed). Details and the
+other M0 fixes: [M0_ACCEPTANCE_EVIDENCE.md](M0_ACCEPTANCE_EVIDENCE.md).
+
 Development-only evidence (not counted above): with a local copy of the KiCad 10.0.5 libraries whose one
 stacked pin was split, KiCad 10.0.5 ERC/DRC/schematic parity and the independent netlist comparison were clean
 for the ESP32 example, the optimized layout fixtures and the ESP32 LED acceptance board. KiCad 10 is not the

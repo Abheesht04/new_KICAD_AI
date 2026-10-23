@@ -134,6 +134,10 @@ It does not mark physics as passed. `build --no-route` exports placement with un
 connections reported as failures. The `fabricate` command requires fresh native checks,
 unchanged hashes, and zero internal findings before asking KiCad to export CAM files.
 
+Acceptance: `python tools/prompt_acceptance.py --pcba build/pcba.exe [--native --kicad-cli PATH] [--esp32]` runs the
+English corpus and the English → KiCad path with honest outcomes; see
+[M0_ACCEPTANCE_EVIDENCE.md](docs/engineering/M0_ACCEPTANCE_EVIDENCE.md).
+
 Release readiness, the capability matrix by stage and all open issues are in
 [RELEASE_READINESS.md](docs/engineering/RELEASE_READINESS.md).
 

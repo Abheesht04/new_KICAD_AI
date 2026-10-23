@@ -8,7 +8,7 @@ only that check decides whether a board is feasible. DFM rule ownership is uncha
 |---|---|---|
 | `pcba place FILE --out PLACED [--seeds 1,2,3] [--iterations N] [--report F]` | staged placement search; writes the best feasible placement | PASS, or FAIL when no feasible board was found (nothing written) |
 | `pcba route FILE --out DIR` | routes the project's own placement; writes `DIR/layout.json` and, if feasible, `DIR/routed.copper` | PASS / FAIL; UNVERIFIED if the geometry could not be judged |
-| `pcba project build` | unchanged contract; its router now has rip-up/reroute and still fails rather than claim a partial route | — |
+| `pcba project build` | routes with rip-up/reroute and fails rather than claim a partial route; a project with **no** placed part (e.g. lowered from a spec) is first placed by the same staged search, recorded in `manifest.json` → `placement`; a partly placed project is refused | — |
 | `python tools/layout_bench.py` | baseline vs optimizer on the fixtures ([LAYOUT_BENCHMARK.md](LAYOUT_BENCHMARK.md)) | — |
 
 ## Router and instrumentation

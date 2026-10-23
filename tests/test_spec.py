@@ -54,6 +54,13 @@ class Quantities(unittest.TestCase):
         for written,ohms in (('4k7',4700),('4K7',4700),('4.7k',4700),('4.7 kohm',4700),('4.7kΩ',4700),('4.7 kΩ',4700),
                              ('4r7',4.7),('1M',1e6),('1 Mohm',1e6),('1meg',1e6),('10m',0.01),('100',100)):
             q=value_of(f'a {written} resistor R1 between SIG and GND','R1');self.assertAlmostEqual(q.value,ohms,delta=ohms*1e-12,msg=written);self.assertEqual(q.unit,'ohm')
+    def test_double_encoded_text_is_named_and_bom_ignored(self):
+        # UTF-8 read as Windows-1252 upstream ("Âµ" for "µ", "Î©" for "Ω") is reported, never silently repaired.
+        for garbled, intended in (('a 2.2 ÂµF capacitor between VIN and GND', 'µ'), ('a 1 kÎ© resistor between VIN and GND', 'Ω')):
+            status, errors, _, _ = outcome(garbled)
+            self.assertEqual(status, 'INVALID_INPUT'); self.assertIn('double-encoded', errors[0]); self.assertIn(intended, errors[0])
+        self.assertEqual(outcome('a 1 kΩ resistor R1 between VIN and GND. a 5 V supply on VIN')[0], 'PASS')
+        self.assertEqual(outcome('﻿a 1k resistor R1 between VIN and GND. a 5 V supply on VIN')[0], 'PASS')
     def test_requirement_bounds(self):
         base='a 5 V supply on VIN. a 1k resistor from VIN to OUT. a 2k resistor from OUT to GND. '
         for written,(lo,hi) in (('OUT must be 3.3 V ± 3%',(3.201,3.399)),('OUT must be 3.3 V +/- 0.1 V',(3.2,3.4)),

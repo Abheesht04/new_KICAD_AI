@@ -539,6 +539,22 @@ def brief(c):
                 time_s=round(n['time_s'], 4), failures=n['failures']) for n in r['nets']])
 
 
+def placed_project(best, problem):
+    """The project with the chosen candidate's placements and no geometry; a widened trace width becomes the
+    project's (stricter) trace_width_mm, so a later build routes with the copper the candidate was proven with."""
+    import copper
+    from hwc_kicad import one
+    placed = copy.deepcopy(best['resolved'])
+    placed[:] = [v for v in placed if not (isinstance(v, list) and str(v[0]) == 'geometry')]
+    width = best['width_rounds'][-1]['trace_width_mm']
+    if width != problem['trace_width']:
+        rules = one(placed, 'rules')
+        if not rules:
+            rules = copper.sx('rules'); placed.append(rules)
+        rules[:] = [v for v in rules if not (isinstance(v, list) and str(v[0]) == 'trace_width_mm')] + [copper.sx('trace_width_mm', copper.number(width))]
+    return placed
+
+
 def baseline(tree, fpdir, core=None):
     """The pre-optimizer pipeline on the project's own placement, measured with the same exact check."""
     problem = problem_from(tree, fpdir)

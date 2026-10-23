@@ -624,10 +624,35 @@ class _Groups:
         return self.groups.get(name, '')
 
 
+MOJIBAKE = re.compile('[ÂÃÎÏâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]')
+
+
+def double_encoded(text):
+    """A message when the text is UTF-8 that was decoded as Windows-1252 somewhere upstream (e.g. 'Âµ' for 'µ',
+    'Î©' for 'Ω'), else None. The text is not repaired: the caller must send UTF-8."""
+    if not MOJIBAKE.search(text):
+        return None
+    try:
+        repaired = text.encode('cp1252').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return None
+    if repaired == text:
+        return None
+    pairs = sorted({(m.group(0), m.group(0).encode('cp1252').decode('utf-8', 'replace')) for m in re.finditer(MOJIBAKE.pattern + '+', text)})
+    shown = ', '.join(f'"{a}" (probably "{b}")' for a, b in pairs[:4])
+    return (f'the text looks double-encoded (UTF-8 read as Windows-1252 before it reached Copper): {shown}. '
+            'Send the request as UTF-8, e.g. PowerShell Get-Content -Encoding UTF8 or pcba spec parse --file')
+
+
 def parse(text):
     """Text -> (Spec, parse errors). validate() adds schema errors and clarification questions."""
+    if isinstance(text, str):
+        text = text.lstrip('﻿')  # a UTF-8 byte-order mark is not part of the request
     if not isinstance(text, str) or not text.strip():
         return ir.Spec(source={'kind': 'nlp', 'text': text or ''}), ['the description is empty']
+    garbled = double_encoded(text)
+    if garbled:
+        return ir.Spec(source={'kind': 'nlp', 'text': text}), [garbled]
     frontend = Frontend(text); spec, errors = frontend.parse()
     if frontend.notes:
         spec.source['notes'] = frontend.notes  # frontend remarks for the user (not engineering content)

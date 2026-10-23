@@ -48,14 +48,57 @@ int pcba_find_python(PcbaPython *out) {
     return out->found;
 }
 
+static int hex4(const char *p, unsigned *out) {
+    *out = 0;
+    for (int i = 0; i < 4; ++i) {
+        char c = p[i];
+        int v = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+        if (v < 0) return 0;
+        *out = *out * 16 + (unsigned)v;
+    }
+    return 1;
+}
+
+/* Appends code point cp as UTF-8 if it fits (leaving room for the terminator). */
+static void put_utf8(char *s, size_t *n, size_t cap, unsigned cp) {
+    char b[4];
+    size_t k = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    if (k == 1) b[0] = (char)cp;
+    else if (k == 2) { b[0] = (char)(0xC0 | cp >> 6); b[1] = (char)(0x80 | (cp & 0x3F)); }
+    else if (k == 3) { b[0] = (char)(0xE0 | cp >> 12); b[1] = (char)(0x80 | (cp >> 6 & 0x3F)); b[2] = (char)(0x80 | (cp & 0x3F)); }
+    else { b[0] = (char)(0xF0 | cp >> 18); b[1] = (char)(0x80 | (cp >> 12 & 0x3F)); b[2] = (char)(0x80 | (cp >> 6 & 0x3F)); b[3] = (char)(0x80 | (cp & 0x3F)); }
+    if (*n + k + 1 > cap) return;
+    memcpy(s + *n, b, k);
+    *n += k;
+}
+
+/* The backend's "message" as UTF-8: JSON escapes (including \uXXXX and surrogate pairs) are decoded,
+ * so non-ASCII text such as units reaches the user unchanged. */
 static void extract_message(const char *raw, char *message, size_t cap) {
     const char *p = strstr(raw, "\"message\": \"");
     size_t n = 0;
     if (cap) message[0] = '\0';
-    if (!p) return;
+    if (!p || !cap) return;
     for (p += 12; *p && *p != '"' && n + 1 < cap; ++p) {
-        if (*p == '\\' && p[1]) ++p;
-        message[n++] = *p;
+        if (*p != '\\' || !p[1]) { message[n++] = *p; continue; }
+        unsigned cp, low;
+        switch (*++p) {
+        case 'n': message[n++] = '\n'; break;
+        case 't': message[n++] = '\t'; break;
+        case 'r': message[n++] = '\r'; break;
+        case 'b': message[n++] = '\b'; break;
+        case 'f': message[n++] = '\f'; break;
+        case 'u':
+            if (!hex4(p + 1, &cp)) { message[n++] = 'u'; break; }
+            p += 4;
+            if (cp >= 0xD800 && cp < 0xDC00 && p[1] == '\\' && p[2] == 'u' && hex4(p + 3, &low) && low >= 0xDC00 && low < 0xE000) {
+                cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                p += 6;
+            }
+            put_utf8(message, &n, cap, cp);
+            break;
+        default: message[n++] = *p; /* \" \\ \/ */
+        }
     }
     message[n] = '\0';
 }
