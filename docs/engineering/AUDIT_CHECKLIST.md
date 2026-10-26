@@ -125,3 +125,25 @@ Placement and routing take 8.6 s (both styles), and the KiCad judge adds 4 s whe
 candidates of that design had six 0-degree "acute angles": overlapping copies of one segment, the same copper.
 The rule now ignores exact overlaps, and the DFM table tests that case.
 
+## Build plan, step 5: parallelism
+
+| Item | Status | Evidence |
+|---|---|---|
+| Placement seeds in parallel | **Done** | `layout.optimize` runs `anneal` per seed on a reused process pool (`COPPER_JOBS`, default the CPU count) |
+| Candidate routing in parallel | **Done** | every (placement, style) evaluation is a pool job |
+| Deterministic winner, independent of finish time | **Done** | results in submission order; ties broken by candidate index; 1 vs 3 processes identical on multi_connector, mixed_current, unroutable (`test_layout.Parallel`); the ESP32 board is byte-identical with `COPPER_JOBS=1` and `4` |
+| KiCad second judge in parallel | **Tried, not kept** | judging three candidates at once took 9.6 s against 4.8 s sequentially: the first candidate usually passes, so the extra builds are wasted |
+
+Measured on this 4-logical-core machine (1500 iterations, 3 seeds, wall clock):
+
+| Run | 1 process | 4 processes |
+|---|---|---|
+| high_current | 3.54 s | 1.18 s |
+| tight_clearance | 2.09 s | 0.88 s |
+| multi_connector | 5.92 s | 3.43 s |
+| unroutable | 10.60 s | 5.00 s |
+| ESP32 LED design, placement and routing stage | 9.6 s | 6.3 s |
+
+Each search's wall time is now bounded by its slowest single candidate. That is typically a congested given
+placement that needs rip-up passes, and those passes are sequential by nature.
+

@@ -118,6 +118,14 @@ exist yet, so "length of sensitive nets" is reported per net only.
 7. **Baseline comparison**: `layout_bench.py` measures the pre-optimizer pipeline (given placement, one
    routing pass, profile width) with the same exact check.
 
+**Parallel** (build plan step 5): annealing seeds, then candidate evaluations (route, widen, exact check), run
+on `COPPER_JOBS` worker processes (default: the CPU count). Each job is the same function the in-process path
+runs. Results come back in submission order, and the winner is chosen by `(judged, hard, unrouted, soft score,
+candidate index)`, so nothing depends on which worker finishes first. The same optimization on 1 and 3
+processes gives identical candidate reports and boards (`test_layout.Parallel`). The KiCad second judge stays
+sequential: it stops at the first candidate KiCad accepts, usually the first one, and judging several at once
+doubled its time.
+
 Determinism: identical inputs give byte-identical boards and reports apart from wall-time fields (tested).
 No claim of optimality is made: the search is a small, bounded, deterministic heuristic. When no candidate is
 feasible the result is FAIL with the best candidate's hard findings and unrouted connections, and nothing is

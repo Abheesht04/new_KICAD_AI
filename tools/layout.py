@@ -10,6 +10,7 @@ explored search states and iteration counts; elapsed time is reported but never 
 from __future__ import annotations
 
 import copy, heapq, math, random, time
+from pathlib import Path
 
 GRID = .25
 PAD_BUCKET = 2.0  # mm: spatial bucket for pad obstacle lookup (a performance detail; results are unchanged)
@@ -803,24 +804,76 @@ def resolved_tree(tree, problem, placement, fpdir, traces, vias, routing=None):
 
 
 # --------------------------------------------------------------------------- staged optimizer
-def optimize(tree, fpdir, core=None, seeds=(1, 2, 3), iterations=1500, styles=STYLES):
+# --------------------------------------------------------------------------- parallel candidates
+# Seeds and candidates are independent, so they run in worker processes. Each job is the same pure function the
+# sequential path runs; results come back in submission order and the winner is chosen by candidate_key (whose
+# last element is the candidate index), so nothing depends on which worker finishes first.
+_WORKER_PROBLEMS = {}
+_POOLS = {}
+
+
+def default_jobs():
+    """COPPER_JOBS when set (1 = sequential), else the CPU count."""
+    import os
+    return max(1, int(os.environ.get('COPPER_JOBS') or os.cpu_count() or 1))
+
+
+def _problem(tree_text, fpdir):
+    from hwc_kicad import parse_sexpr
+    key = (tree_text, str(fpdir))
+    if key not in _WORKER_PROBLEMS:
+        tree = parse_sexpr(tree_text)
+        _WORKER_PROBLEMS.clear()          # one project at a time per worker
+        _WORKER_PROBLEMS[key] = (tree, problem_from(tree, Path(fpdir)))
+    return _WORKER_PROBLEMS[key]
+
+
+def _anneal_job(job):
+    tree_text, fpdir, initial, seed, iterations = job
+    return anneal(_problem(tree_text, fpdir)[1], initial, seed, iterations)
+
+
+def _evaluate_job(job):
+    tree_text, fpdir, core, placement, index, label, style = job
+    tree, problem = _problem(tree_text, fpdir)
+    return evaluate(tree, problem, placement, Path(fpdir), core, index, label, style=style)
+
+
+def run_jobs(fn, jobs, workers):
+    """fn over jobs, results in job order: in this process for workers <= 1 (or a single job), else in a reused
+    process pool of that size."""
+    if workers <= 1 or len(jobs) <= 1:
+        return [fn(j) for j in jobs]
+    from concurrent.futures import ProcessPoolExecutor
+    pool = _POOLS.get(workers)
+    if pool is None:
+        pool = _POOLS[workers] = ProcessPoolExecutor(workers)
+    return list(pool.map(fn, jobs))
+
+
+def optimize(tree, fpdir, core=None, seeds=(1, 2, 3), iterations=1500, styles=STYLES, jobs=None):
     """Staged, deterministic layout search. Candidates: the given placement (when every part has one), the
     constructive placement, and one annealed placement per seed; each is routed in every style (Manhattan and
-    octilinear) with rip-up/reroute, its nets widened for their current budgets, and re-checked exactly. The best candidate is chosen lexicographically:
-    judged, hard violations, unrouted connections, then soft score. Returns (best, candidates, problem)."""
-    problem = problem_from(tree, fpdir); candidates = []
+    octilinear) with rip-up/reroute, its nets widened for their current budgets, and re-checked exactly. The best
+    candidate is chosen lexicographically: judged, hard violations, unrouted connections, soft score, index.
+    Annealing seeds and candidate evaluations run on `jobs` processes (default_jobs()); the result is identical
+    for any value. Returns (best, candidates, problem)."""
+    from hwc_kicad import dump_sexpr
+    jobs = default_jobs() if jobs is None else max(1, jobs)
+    problem = problem_from(tree, fpdir); text = dump_sexpr(tree)
     starts = []
     if problem['components'] and all(c['ref'] in problem['given'] for c in problem['components']):
         starts.append(('given placement', dict(problem['given'])))
     initial, failures = initial_placement(problem)
     if not failures:
         starts.append(('constructive placement', initial))
-        for seed in seeds:
-            starts.append((f'annealed (seed {seed}, {iterations} iterations)', anneal(problem, initial, seed, iterations)))
-    for label, placement in starts:
-        for style in styles:
-            candidates.append(evaluate(tree, problem, placement, fpdir, core, len(candidates),
-                                       label if style == 'manhattan' else f'{label}, octilinear', style=style))
+        annealed = run_jobs(_anneal_job, [(text, str(fpdir), initial, seed, iterations) for seed in seeds], jobs)
+        starts += [(f'annealed (seed {seed}, {iterations} iterations)', a) for seed, a in zip(seeds, annealed)]
+    work = [(label if style == 'manhattan' else f'{label}, octilinear', placement, style) for label, placement in starts for style in styles]
+    if jobs <= 1 or len(work) <= 1:
+        candidates = [evaluate(tree, problem, pl, fpdir, core, i, label, style=style) for i, (label, pl, style) in enumerate(work)]
+    else:
+        candidates = run_jobs(_evaluate_job, [(text, str(fpdir), core, pl, i, label, style) for i, (label, pl, style) in enumerate(work)], jobs)
     best = min(candidates, key=candidate_key) if candidates else None
     return best, candidates, dict(problem, placement_failures=failures)
 
@@ -831,7 +884,7 @@ def second_judge(candidates, judge, limit=3):
     (KiCad 9.x DRC). The first that KiCad does not FAIL is chosen; every verdict is kept on its candidate. When all
     of them FAIL, the top candidate is returned with its FAIL: verification then reports it, nothing is hidden."""
     ranked = sorted((c for c in candidates if c['feasible']), key=candidate_key); verdicts = []
-    for c in ranked[:limit]:
+    for c in ranked[:limit]:     # one at a time: usually the first passes, and judging more would be wasted work
         c['kicad_drc'] = judge(c)
         verdicts.append(dict(label=c['label'], status=c['kicad_drc']['status'], message=c['kicad_drc'].get('message', '')))
         if c['kicad_drc']['status'] != 'FAIL':

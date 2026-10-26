@@ -152,6 +152,26 @@ class Dfm(unittest.TestCase):
                 self.assertIn(f"(condition \"A.NetName == '/{net}'\") (constraint track_width (min {w:g}mm))", dru)
 
 
+class Parallel(unittest.TestCase):
+    """Annealing seeds and candidates run on worker processes; the result never depends on how many or which finishes
+    first (results are collected in submission order and ties are broken by candidate index)."""
+    def test_identical_for_any_number_of_processes(self):
+        for name in ('multi_connector', 'mixed_current', 'unroutable'):
+            tree = copper.load(FIX / f'{name}.copper')
+            runs = [layout.optimize(tree, FP, CORE, SEEDS, ITER, jobs=j) for j in (1, 3)]
+            self.assertEqual(stable([layout.brief(c) for c in runs[0][1]]), stable([layout.brief(c) for c in runs[1][1]]), name)
+            self.assertEqual(copper.dump_sexpr(runs[0][0]['resolved']), copper.dump_sexpr(runs[1][0]['resolved']), name)
+
+    def test_jobs_setting(self):
+        old = os.environ.get('COPPER_JOBS')
+        try:
+            os.environ['COPPER_JOBS'] = '1'; self.assertEqual(layout.default_jobs(), 1)
+            os.environ.pop('COPPER_JOBS'); self.assertEqual(layout.default_jobs(), os.cpu_count() or 1)
+        finally:
+            if old is not None:
+                os.environ['COPPER_JOBS'] = old
+
+
 class Legality(unittest.TestCase):
     def test_fast_legality_equals_the_full_violation_list(self):
         # Placement uses Board.legal (early exit, envelope pre-filter); it must agree with violations() exactly.

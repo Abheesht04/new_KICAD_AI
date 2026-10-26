@@ -138,6 +138,7 @@ UNVERIFIED, not invalid input.
 | `COPPER_CORE` | copper.py | copper-core path. pcba and hwc set it to their sibling build when unset |
 | `KICAD_CLI` | copper.py | kicad-cli path. Discovery prefers KiCad 9.0 installs |
 | `KICAD_SYMBOL_DIR`, `KICAD_FOOTPRINT_DIR` | copper.py | KiCad library roots |
+| `COPPER_JOBS` | tools/layout.py | processes for annealing seeds and layout candidates (`place`, `design`, `project build` of an unplaced project); default the CPU count, `1` = in-process. Results are identical for any value |
 | `NO_COLOR`, `PCBA_FORCE_COLOR` | pcba | colour policy above |
 
 ## Tests
