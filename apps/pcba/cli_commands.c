@@ -310,12 +310,35 @@ static int run_layout(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *
     return backend(ctx, cmd, &b);
 }
 
-static int run_library_scan(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
-    static const char *const map[][2] = {{"--symbols", "--symbol-dir"}, {"--footprints", "--footprint-dir"},
-                                         {"--out", "--out"}};
+/* library env | scan | search | pair: tools/kicad_library.py through copper.py. */
+static int run_library(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const scan_map[][2] = {{"--symbols", "--symbol-dir"}, {"--footprints", "--footprint-dir"},
+                                              {"--out", "--out"}, {"--project", "--project"}, {"--jobs", "--jobs"}};
+    static const char *const env_map[][2] = {{"--project", "--project"}, {"--out", "--out"}};
+    static const char *const search_map[][2] = {{"--index", "--index"}, {"--kind", "--kind"}, {"--limit", "--limit"}};
+    static const char *const pair_map[][2] = {{"--index", "--index"}, {"--limit", "--limit"}};
+    const char *jobs = pcba_opt(cmd, a, "--jobs"), *limit = pcba_opt(cmd, a, "--limit"), *kind = pcba_opt(cmd, a, "--kind");
+    const char *project = pcba_opt(cmd, a, "--project");
+    char backend_name[32];
+    long n;
+    if (jobs && !pcba_parse_count(jobs, 1, 256, &n))
+        return pcba_usage_error(ctx, cmd, "--jobs must be an integer from 1 to 256 (got '%s')", jobs);
+    if (limit && !pcba_parse_count(limit, 1, 10000, &n))
+        return pcba_usage_error(ctx, cmd, "--limit must be an integer from 1 to 10000 (got '%s')", limit);
+    if (kind && strcmp(kind, "symbol") && strcmp(kind, "footprint"))
+        return pcba_usage_error(ctx, cmd, "--kind must be symbol or footprint (got '%s')", kind);
+    if (project && !cli_is_dir(project)) return finish_named(ctx, cmd, "INVALID_INPUT", "--project must be a project folder");
+    snprintf(backend_name, sizeof backend_name, "library-%s", cmd->name);
     Bargs b = {{0}, 0};
-    push(&b, "library-scan");
-    pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    push(&b, backend_name);
+    if (cmd->max_positional) {
+        if (!*a->positional[0]) return pcba_usage_error(ctx, cmd, "the argument is empty");
+        push(&b, a->positional[0]);
+    }
+    if (!strcmp(cmd->name, "scan")) pass(&b, cmd, a, scan_map, sizeof scan_map / sizeof scan_map[0]);
+    else if (!strcmp(cmd->name, "env")) pass(&b, cmd, a, env_map, sizeof env_map / sizeof env_map[0]);
+    else if (!strcmp(cmd->name, "search")) pass(&b, cmd, a, search_map, sizeof search_map / sizeof search_map[0]);
+    else pass(&b, cmd, a, pair_map, sizeof pair_map / sizeof pair_map[0]);
     return backend(ctx, cmd, &b);
 }
 
@@ -426,9 +449,24 @@ static const PcbaOption IMPORT_OPTIONS[] = {
     {"--footprints", "DIR", 0, "KiCad 9.x footprint library directory (default: KICAD_FOOTPRINT_DIR or installed KiCad)"},
 };
 static const PcbaOption SCAN_OPTIONS[] = {
-    {"--symbols", "DIR", 0, "KiCad symbol library directory"},
-    {"--footprints", "DIR", 0, "KiCad footprint library directory"},
-    {"--out", "DIR", 0, "Where to write the inventories (default out/library)"},
+    {"--symbols", "DIR", 0, "Index this symbol folder instead of the library tables (default: KICAD_SYMBOL_DIR)"},
+    {"--footprints", "DIR", 0, "Index this footprint folder instead of the library tables (default: KICAD_FOOTPRINT_DIR)"},
+    {"--project", "DIR", 0, "Also read this KiCad project's sym-lib-table and fp-lib-table (they override global names)"},
+    {"--out", "DIR", 0, "Where to write index.sqlite and environment.json (default out/library)"},
+    {"--jobs", "N", 0, "Parallel parser processes, 1..256 (default: CPU count)"},
+};
+static const PcbaOption ENV_OPTIONS[] = {
+    {"--project", "DIR", 0, "KiCad project folder: its library tables and KIPRJMOD"},
+    {"--out", "FILE", 0, "Write the JSON snapshot here"},
+};
+static const PcbaOption LIB_SEARCH_OPTIONS[] = {
+    {"--index", "FILE", 0, "Library index (default out/library/index.sqlite)"},
+    {"--kind", "symbol|footprint", 0, "What to search (default symbol)"},
+    {"--limit", "N", 0, "Most results, 1..10000 (default 20)"},
+};
+static const PcbaOption PAIR_OPTIONS[] = {
+    {"--index", "FILE", 0, "Library index (default out/library/index.sqlite)"},
+    {"--limit", "N", 0, "Most candidates listed, 1..10000 (default 50)"},
 };
 static const PcbaOption SPEC_PARSE_OPTIONS[] = {
     {"--file", "FILE", 0, "Read the description from a UTF-8 text file instead of the argument"},
@@ -562,10 +600,29 @@ static const PcbaCommand COMMANDS[] = {
      "only when every one is accepted. Without usable libraries the result is UNVERIFIED and nothing is written.",
      "pcba parts import profiles/mcu_modules.parts\npcba parts import vendor.parts --into my.parts", OPTS(IMPORT_OPTIONS),
      NULL, run_parts_import},
-    {"library", "scan", "", 0, 0, "Index installed KiCad symbol and footprint libraries",
-     "Writes JSON and CSV inventories of every symbol and footprint in the selected KiCad libraries.",
-     "pcba library scan\npcba library scan --symbols /usr/share/kicad/symbols --footprints /usr/share/kicad/footprints",
-     OPTS(SCAN_OPTIONS), NULL, run_library_scan},
+    {"library", "env", "", 0, 0, "Detect KiCad installs, select one by policy, read the library tables",
+     "Finds every KiCad install (kicad-cli version), selects the highest 9.x (never another major version), and reads "
+     "the global and project sym-lib-table and fp-lib-table with ${VAR} expansion: the process environment, then "
+     "kicad_common.json, then the install's defaults. Each library is listed as ok, disabled, missing, unresolved, "
+     "unsupported_type, duplicate or overridden. UNVERIFIED when no KiCad 9.x is installed.",
+     "pcba library env\npcba library env --project my_board --out env.json", OPTS(ENV_OPTIONS), NULL, run_library},
+    {"library", "scan", "", 0, 0, "Index KiCad symbols and footprints into a searchable SQLite cache",
+     "Writes index.sqlite (symbols: description, keywords, pins, footprint filters; footprints: pads, courtyard, "
+     "attributes; full-text search) and environment.json. The index is a regenerable cache: only libraries whose "
+     "files changed are parsed again. A library that cannot be read is listed and left out (UNVERIFIED).",
+     "pcba library scan\npcba library scan --project my_board\n"
+     "pcba library scan --symbols /usr/share/kicad/symbols --footprints /usr/share/kicad/footprints",
+     OPTS(SCAN_OPTIONS), NULL, run_library},
+    {"library", "search", "<query>", 1, 1, "Full-text search of the library index",
+     "Every word must match (as a prefix) the name, description or keywords/tags. Ranked by relevance, then id.",
+     "pcba library search \"esp32 wroom\"\npcba library search \"0603 resistor\" --kind footprint", OPTS(LIB_SEARCH_OPTIONS),
+     NULL, run_library},
+    {"library", "pair", "<LIB:SYMBOL>", 1, 1, "Footprints whose pad numbers equal a symbol's pin numbers",
+     "Pairs by the exact set of pin and pad numbers (unnumbered mechanical holes are not pads). The symbol's default "
+     "footprint and the footprints its filters accept are ranked first; filters never add a footprint whose pads "
+     "differ. UNVERIFIED when no indexed footprint has the same pad numbers.",
+     "pcba library pair Device:R\npcba library pair Connector_Generic:Conn_01x03 --limit 5", OPTS(PAIR_OPTIONS), NULL,
+     run_library},
     {NULL, "place", "<file.copper>", 1, 1, "Search placements; write the best feasible one",
      "Deterministic staged search: the project's own placement (when complete), a constructive placement that "
      "respects the outline, edge clearance, courtyard gap and keepouts, and one seeded simulated-annealing "

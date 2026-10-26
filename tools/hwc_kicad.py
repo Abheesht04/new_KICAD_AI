@@ -138,6 +138,20 @@ def text_at(node: Any, key: str, index: int = 1, default: str = '') -> str:
 
 
 
+def _installs() -> list[dict[str, Any]]:
+    # One owner for finding KiCad: tools/kicad_library.py (KiCad 9.x first, then other versions, newest first).
+    import kicad_library
+    return kicad_library.ordered(kicad_library.find_installs(probe=False))
+
+
+def installed(key: str) -> list[Path]:
+    return [Path(i[key]) for i in _installs() if i[key]]
+
+
+NO_INSTALL = ('no KiCad installation found (Program Files/KiCad/*, /usr, /usr/local, /Applications/KiCad, '
+              'kicad-cli on PATH or KICAD_CLI)')
+
+
 def discover_symbol_dir(explicit: str | None = None) -> Path:
     # An explicit path is authoritative; never silently substitute another library.
     if explicit:
@@ -153,21 +167,13 @@ def discover_symbol_dir(explicit: str | None = None) -> Path:
     if env:
         candidates.append(Path(env))
 
-    pf = os.environ.get('ProgramFiles', r'C:\Program Files')
-    candidates.extend([
-        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'symbols',
-        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'symbols',
-        Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'symbols',
-        Path('/usr/share/kicad/symbols'),
-        Path('/usr/local/share/kicad/symbols'),
-        Path('/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols'),
-    ])
+    candidates.extend(installed('symbols'))
 
     for path in candidates:
         if path.is_dir() and any(path.glob('*.kicad_sym')):
             return path.resolve()
 
-    looked = '\n  '.join(str(path) for path in candidates)
+    looked = '\n  '.join(str(path) for path in candidates) or NO_INSTALL
     raise FileNotFoundError(
         'Cannot find KiCad symbol directory. Supply --symbol-dir. Checked:\n  '
         + looked
@@ -191,21 +197,13 @@ def discover_footprint_dir(explicit: str | None = None) -> Path:
         if env:
             candidates.append(Path(env))
 
-    pf = os.environ.get('ProgramFiles', r'C:\Program Files')
-    candidates.extend([
-        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'footprints',
-        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'footprints',
-        Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'footprints',
-        Path('/usr/share/kicad/footprints'),
-        Path('/usr/local/share/kicad/footprints'),
-        Path('/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'),
-    ])
+    candidates.extend(installed('footprints'))
 
     for path in candidates:
         if path.is_dir() and any(path.glob('*.pretty')):
             return path.resolve()
 
-    looked = '\n  '.join(str(path) for path in candidates)
+    looked = '\n  '.join(str(path) for path in candidates) or NO_INSTALL
     raise FileNotFoundError(
         'Cannot find KiCad footprint directory. Supply --footprint-dir. Checked:\n  '
         + looked
@@ -219,12 +217,7 @@ def discover_cli(explicit: str | None = None) -> str | None:
     found = shutil.which('kicad-cli') or shutil.which('kicad-cli.exe')
     if found:
         return found
-    pf = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))
-    for version in ('9.0', '10.0', '8.0'):  # prefer the KiCad 9.x validation target
-        candidate = pf / 'KiCad' / version / 'bin' / 'kicad-cli.exe'
-        if candidate.is_file():
-            return str(candidate)
-    return None
+    return next((i['cli'] for i in _installs() if i['cli']), None)  # the KiCad 9.x validation target first
 
 
 def symbol_definitions(lib_dir: Path, requested: str, seen: set[str] | None = None) -> list[list[Any]]:

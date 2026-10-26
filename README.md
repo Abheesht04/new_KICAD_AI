@@ -107,6 +107,10 @@ finds no hard violation; otherwise it reports why no feasible board exists. `pcb
 given placement with the same exact re-check. See [LAYOUT.md](docs/engineering/LAYOUT.md) and the measured
 [LAYOUT_BENCHMARK.md](docs/engineering/LAYOUT_BENCHMARK.md).
 
+`pcba library env` lists every installed KiCad and selects the highest 9.x; `pcba library scan` indexes the
+symbols and footprints of its library tables (global and project, `${VAR}` expanded) into a regenerable SQLite cache;
+`pcba library search` and `pcba library pair` query it. See [KICAD_LIBRARY.md](docs/engineering/KICAD_LIBRARY.md).
+
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 
 ```sh

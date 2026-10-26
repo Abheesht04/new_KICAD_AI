@@ -34,7 +34,10 @@ reach the child unchanged.
 | `pcba parts search <query>` | stable | `copper.py catalogue` |
 | `pcba parts add --catalogue FILE --id ID --kind K` | stable | `copper.py part-add` |
 | `pcba parts remove --catalogue FILE --id ID` | stable | `copper.py part-remove` |
-| `pcba library scan` | stable | `copper.py library-scan` (reuses `hwc_kicad.py` indexers) |
+| `pcba library env [--project DIR] [--out FILE]` | stable | `copper.py library-env` → `tools/kicad_library.py` (installs, 9.x policy, library tables; docs/engineering/KICAD_LIBRARY.md) |
+| `pcba library scan [--symbols DIR --footprints DIR] [--project DIR] [--jobs N]` | stable | `copper.py library-scan`: SQLite + FTS5 index and environment snapshot |
+| `pcba library search <query> [--kind symbol\|footprint]` | stable | `copper.py library-search` |
+| `pcba library pair <LIB:SYMBOL>` | stable | `copper.py library-pair`: footprints with the symbol's exact pin-number set |
 | `pcba dfm check <file-or-build-dir>` | stable | `copper.py dfm` |
 | `pcba spec parse ["text"] [--file F] [--out F.espec]` | stable | `copper.py spec-parse` (`tools/spec_nlp.py`) |
 | `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
@@ -57,7 +60,7 @@ separately in `pcba --help`, validates its arguments, and exits 4 without doing 
 | `copper.py catalogue --search` | `pcba parts search` | |
 | `copper.py part-add` | `pcba parts add` | `--file` is `--catalogue` in pcba |
 | `copper.py classify` | not exposed | old language classifier; the charter forbids building V2 NLP on it. Still in `copper-core classify`. The V2 frontend is `pcba spec parse` (docs/engineering/ENGINEERING_SPEC.md), a new implementation |
-| `hwc_kicad.py catalog` + `footprints` | `pcba library scan` | same JSON/CSV format |
+| `hwc_kicad.py catalog` + `footprints` | `pcba library scan` | now a SQLite index (`index.sqlite`) instead of JSON/CSV inventories; the V1 `hwc_kicad.py` commands still write JSON/CSV |
 | `hwc_kicad.py doctor` | `pcba doctor` | |
 | `hwc_kicad.py search/search-footprint/generate/validate/custom-symbol/name` | not exposed | V1 helpers; still runnable directly |
 | `hwc make/validate/DFM/physics-apply/catalogue/kicad-check/status` | not exposed | legacy V1 `Design` path; `hwc` is kept as a deprecated compatibility CLI |

@@ -638,15 +638,77 @@ def doctor(args):
     return 0 if status=='PASS' else 2
 
 def library_scan(args):
-    from hwc_kicad import cmd_catalog, cmd_footprints
-    try:symdir=discover_symbol_dir(args.symbol_dir);fpdir=discover_footprint_dir(args.footprint_dir)
-    except FileNotFoundError as exc:raise ToolUnavailable(str(exc)) from exc
-    out=Path(args.out);files={'symbols':out/'kicad_catalog.json','footprints':out/'kicad_footprints.json'}
-    cmd_catalog(argparse.Namespace(symbol_dir=str(symdir),out=str(files['symbols']),csv=str(out/'kicad_catalog.csv')))
-    cmd_footprints(argparse.Namespace(footprint_dir=str(fpdir),out=str(files['footprints']),csv=str(out/'kicad_footprints.csv')))
-    counts={'symbols':json.loads(files['symbols'].read_text(encoding='utf-8'))['symbol_count'],'footprints':json.loads(files['footprints'].read_text(encoding='utf-8'))['footprint_count']}
-    status='PASS' if all(counts.values()) else 'UNVERIFIED'
-    args.outcome.update(status=status,message='' if status=='PASS' else 'A library directory contained no entries',data={'symbol_dir':str(symdir),'footprint_dir':str(fpdir),'counts':counts,'files':{k:str(v.resolve()) for k,v in files.items()}})
+    """The KiCad environment snapshot and the regenerable library index (tools/kicad_library.py). Libraries come from
+    --symbol-dir/--footprint-dir (or KICAD_SYMBOL_DIR/KICAD_FOOTPRINT_DIR) when given, else from the library tables
+    of the KiCad selected by policy (9.x). Only changed libraries are parsed again."""
+    import time,kicad_library as kl
+    t0=time.perf_counter();out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
+    snap=kl.environment(project=args.project);libs={}
+    for kind,option,env in (('symbol',args.symbol_dir,'KICAD_SYMBOL_DIR'),('footprint',args.footprint_dir,'KICAD_FOOTPRINT_DIR')):
+        folder=option or os.environ.get(env)
+        if folder:
+            if not Path(folder).is_dir():raise InvalidInput(f'{kind} library directory not found: {folder}')
+            libs[kind]=kl.directory_libraries(folder,kind);snap[f'{kind}_libraries']['explicit']=str(Path(folder).resolve())
+        else:libs[kind]=kl.table_libraries(snap,kind)
+    empty=[k for k,v in libs.items() if not v]
+    if empty:raise ToolUnavailable(f'No {" or ".join(empty)} libraries to index ({snap["reason"]}); pass --symbols/--footprints or install KiCad 9.x')
+    (out/'environment.json').write_text(json.dumps(snap,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+    stats=kl.build_index(out/'index.sqlite',libs,args.jobs)
+    status='UNVERIFIED' if stats['errors'] else 'PASS'
+    args.outcome.update(status=status,message=f'{len(stats["errors"])} libraries could not be read; they are not in the index' if stats['errors'] else '',
+                        data={'index':str((out/'index.sqlite').resolve()),'environment':str((out/'environment.json').resolve()),
+                              'kicad':snap['selected']['version'] if snap['selected'] else None,'reason':snap['reason'],'counts':stats['counts'],
+                              'parsed':len(stats['parsed']),'unchanged':stats['unchanged'],'removed':stats['removed'],'errors':stats['errors'],
+                              'seconds':round(time.perf_counter()-t0,3)})
+    if args.format=='human':
+        d=args.outcome['data'];print(f"KiCad: {snap['reason']}")
+        print(f"Indexed {d['counts']['symbol']} symbols, {d['counts']['footprint']} footprints ({d['parsed']} libraries parsed, {d['unchanged']} unchanged) in {d['seconds']} s -> {d['index']}")
+        for e in stats['errors']:print(f"  not indexed: {e['library']}: {e['error']}")
+    return 0 if status=='PASS' else 2
+
+def library_env(args):
+    import kicad_library as kl
+    snap=kl.environment(project=args.project)
+    if args.out:Path(args.out).parent.mkdir(parents=True,exist_ok=True);Path(args.out).write_text(json.dumps(snap,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+    status='PASS' if snap['selected'] else 'UNVERIFIED'
+    args.outcome.update(status=status,message='' if snap['selected'] else snap['reason'],data=snap)
+    if args.format=='human':
+        for i in snap['installs']:print(f"{'*' if i==snap['selected'] else ' '} KiCad {i['version'] or '?'} ({i['version_source'] or 'unknown'}) at {i['root']}")
+        print(snap['reason'])
+        for kind in ('symbol','footprint'):
+            entries=snap[f'{kind}_libraries']['entries'];bad=[e for e in entries if e['status'] not in ('ok','overridden')]
+            print(f"{kind} libraries: {sum(e['status']=='ok' for e in entries)} usable of {len(entries)}"+''.join(f"\n  {e['status']}: {e['name']} ({e['uri']})" for e in bad))
+    return 0 if status=='PASS' else 2
+
+def library_index(path):
+    import sqlite3
+    path=Path(path)
+    if not path.is_file():raise InvalidInput(f'Library index not found: {path}; run pcba library scan first')
+    try:
+        con=sqlite3.connect(f'file:{path.resolve().as_posix()}?mode=ro',uri=True);con.execute("select value from meta where key='schema'").fetchone();con.close()
+    except sqlite3.DatabaseError as exc:raise InvalidInput(f'{path} is not a Copper library index ({exc}); run pcba library scan') from exc
+    return path
+
+def library_search(args):
+    import kicad_library as kl
+    results=kl.search(library_index(args.index),args.query,args.kind,args.limit)
+    args.outcome.update(status='PASS',data={'index':str(Path(args.index).resolve()),'query':args.query,'kind':args.kind,'results':results})
+    if args.format=='human':
+        for r in results:print(f"{r['id']:<60} {r['description'][:70]}")
+        print(f'{len(results)} {args.kind}(s) match')
+    return 0
+
+def library_pair(args):
+    import kicad_library as kl
+    result=kl.pair(library_index(args.index),args.symbol,args.limit)
+    if result is None:raise InvalidInput(f'Symbol {args.symbol} is not in the index (use LIBRARY:NAME, e.g. Device:R)')
+    status='PASS' if result['candidates'] else 'UNVERIFIED'
+    args.outcome.update(status=status,data=result,message='' if result['candidates'] else
+                        f"No indexed footprint has exactly the pad numbers {result['pins'] or '(the symbol has no numbered pins)'}")
+    if args.format=='human':
+        print(f"{args.symbol}: pins {' '.join(result['pins'])}; filters {' '.join(result['fp_filters']) or '-'}; default {result['default_footprint'] or '-'}")
+        for c in result['candidates']:print(f"  {'default ' if c['default'] else 'filter  ' if c['filter_match'] else '        '}{c['id']}")
+        print(f"{result['total']} footprints with the same pad numbers, {result['filter_matches']} accepted by the symbol's filters")
     return 0 if status=='PASS' else 2
 
 def dfm_check(args):
@@ -997,6 +1059,9 @@ def run_command(args):
         return 0
     if args.command=='doctor':return doctor(args)
     if args.command=='library-scan':return library_scan(args)
+    if args.command=='library-env':return library_env(args)
+    if args.command=='library-search':return library_search(args)
+    if args.command=='library-pair':return library_pair(args)
     if args.command=='dfm':return dfm_check(args)
 
 def main(argv=None):
@@ -1024,7 +1089,10 @@ def main(argv=None):
     p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
-    p=sub.add_parser('library-scan');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
+    p=sub.add_parser('library-scan',help='KiCad environment snapshot + SQLite library index (docs/engineering/KICAD_LIBRARY.md)');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--project');p.add_argument('--jobs',type=int)
+    p=sub.add_parser('library-env');p.add_argument('--project');p.add_argument('--out')
+    p=sub.add_parser('library-search');p.add_argument('query');p.add_argument('--index',default='out/library/index.sqlite');p.add_argument('--kind',choices=['symbol','footprint'],default='symbol');p.add_argument('--limit',type=int,default=20)
+    p=sub.add_parser('library-pair');p.add_argument('symbol');p.add_argument('--index',default='out/library/index.sqlite');p.add_argument('--limit',type=int,default=50)
     p=sub.add_parser('spec-parse',help='constrained English -> EngineeringSpec (docs/engineering/ENGINEERING_SPEC.md)');p.add_argument('text',nargs='?');p.add_argument('--file',help='read the description from a UTF-8 text file');p.add_argument('--out',help='.espec path to write');p.add_argument('--force',action='store_true')
     p=sub.add_parser('spec-check');p.add_argument('spec')
     p=sub.add_parser('spec-lower',help='complete EngineeringSpec -> .copper project');p.add_argument('spec');p.add_argument('--out',required=True);p.add_argument('--catalogue');p.add_argument('--force',action='store_true');p.add_argument('--core')

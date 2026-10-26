@@ -80,3 +80,17 @@ That is correct and separate from the board gates this slice asserts.
 Development preview only (not native validation): KiCad 10.0.5's engine, run through a wrapper that reports 9.0.6,
 gave ERC, DRC, netlist and parity `PASS` for this board. The slice is done when `slice1_divider` passes on a real
 KiCad 9.x install.
+
+## Build plan, step 2: KiCad environment and library index
+
+| Item | Status | Evidence |
+|---|---|---|
+| Detect installed KiCad versions, select by policy, JSON snapshot | **Done** | `pcba library env`; highest 9.x with CLI and libraries, never another major; `test_kicad_library.Installs` |
+| Global and project lib-tables, `${VAR}` expansion, user libraries | **Done** | environment, then `kicad_common.json`, then install defaults; per-entry status; `test_kicad_library.Tables` |
+| SQLite index with full-text search, regenerable | **Done** | `pcba library scan` / `search`; only changed libraries reparsed; byte-identical for any `--jobs`; `test_kicad_library.Index` |
+| Symbol-to-footprint pairing by pin/pad number sets | **Done** | `pcba library pair`; filters rank, never add; `test_kicad_library.Index.test_search_and_pairing` |
+| One owner for finding KiCad | **Done** | `hwc_kicad.discover_*` use `kicad_library` (9.x first) |
+
+Cold index of a full KiCad library set: 292 s for the first version, **33.8 s** after profiling (selective reader,
+bulk inserts, largest libraries first); warm re-scan 0.9 s. Details: [KICAD_LIBRARY.md](KICAD_LIBRARY.md).
+
