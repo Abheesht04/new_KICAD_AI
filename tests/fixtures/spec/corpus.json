@@ -14,6 +14,11 @@
    "same_as": "divider.espec"
   },
   {
+   "name": "divider board",
+   "text": "Name: divider_board. A 5 V supply V1 on VIN. R1 is a 10k 1% 0603 resistor from VIN to OUT. R2 is a 20k resistor in 0603 package from OUT to GND. J1 is a connector. J1 uses part header3. J1 pin 1 is on VIN. J1 pin 2 is on OUT. J1 pin 3 is on GND. OUT must be between 3.2 V and 3.4 V. The board is 40 x 30 mm with 2 layers.",
+   "status": "PASS"
+  },
+  {
    "name": "rc filter with unicode units",
    "text": "A 3V3 supply on VDD. A 4k7 resistor R1 from VDD to OUT. A 100 nF capacitor C1 between OUT and GND. Transient with step 1 µs for 1 ms using trapezoidal.",
    "status": "PASS"

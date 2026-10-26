@@ -219,7 +219,10 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   set_tests_properties(design_acceptance PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME dfm_rules COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_dfm_rules.py $<TARGET_FILE:copper-core>)
   add_test(NAME native_gates COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_native_gates.py $<TARGET_FILE:copper-core>)
-  add_test(NAME prompt_acceptance_harness COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_prompt_acceptance.py $<TARGET_FILE:pcba>)
+  add_test(NAME prompt_acceptance_harness COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_prompt_acceptance.py $<TARGET_FILE:pcba> Classification UnicodeRun)
+  # Slice 1: English -> divider board passing KiCad 9.x ERC/DRC; the project stays in slice1/ to open in KiCad. Exit 77 = skipped (UNVERIFIED).
+  add_test(NAME slice1_divider COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_prompt_acceptance.py $<TARGET_FILE:pcba> Slice1)
+  set_tests_properties(slice1_divider PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "COPPER_SLICE1_OUT=${CMAKE_BINARY_DIR}/slice1")
   add_test(NAME numeric_oracles COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_numeric_oracles.py $<TARGET_FILE:copper-core> $<TARGET_FILE:numeric_bench>)
   add_test(NAME pcba_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_pcba_cli.py
            $<TARGET_FILE:pcba> $<TARGET_FILE:hwc> $<TARGET_FILE:copper-core>)

@@ -203,6 +203,17 @@ class Lowering(unittest.TestCase):
         tree,_=spec_ir.lower(spec,str(catalogue))
         d1=next(c for c in direct(one(tree,'components'),'component') if str(c[1])=='D1');self.assertEqual(text_at(d1,'part'),'red_led')
         path=self.dir/'led.copper';copper.write_tree(path,tree);report,_=copper.core_run(path);self.assertTrue(report['dc_solved'])
+    def test_english_binds_a_part_by_id_only(self):
+        base='a 5 V supply on VIN. a 10k resistor from VIN to OUT. J1 is a connector. J1 pin 1 is on VIN. J1 pin 2 is on OUT. J1 pin 3 is on GND. '
+        for phrase in ('J1 uses part header3','use part header3 for J1','J1 uses the part "header3"'):
+            status,errors,_,spec=outcome(base+phrase)
+            self.assertEqual((status,errors),('PASS',[]),phrase);self.assertEqual(spec.component('J1').attrs['part'].value,'header3')
+        tree,_=spec_ir.lower(spec);j1=next(c for c in direct(one(tree,'components'),'component') if str(c[1])=='J1')
+        self.assertEqual(text_at(j1,'part'),'header3');self.assertEqual({str(p[0]):str(p[1]) for p in one(j1,'pins')[1:]},{'1':'VIN','2':'OUT','3':'GND'})
+        for phrase,needle in (('J2 uses part header3','J2 is not declared'),('J1 uses part header3. J1 uses part header3','two parts'),
+                              ('J1 uses part','not understood')):
+            status,errors,_,_=outcome(base+phrase);self.assertEqual(status,'INVALID_INPUT',phrase);self.assertTrue(any(needle in e for e in errors),(phrase,errors))
+        with self.assertRaises(copper.Unverified):spec_ir.lower(outcome(base+'J1 uses part header9')[3])  # not in the catalogue: never invented
 
 class Independence(unittest.TestCase):
     RETIRED=('nlp_rules','transformer','Extras/','tokenizer')

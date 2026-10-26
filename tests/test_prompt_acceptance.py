@@ -1,6 +1,9 @@
-"""The prompt-acceptance harness itself: classification rules and a real run of its Unicode cases.
+"""The prompt-acceptance harness itself: classification rules and a real run of its Unicode cases; and Slice 1,
+one English description to a divider board that passes KiCad 9.x ERC and DRC.
 
 Usage: test_prompt_acceptance.py PCBA [unittest args]
+Exit status: 0 all ran and passed, 1 failure, 77 skipped (UNVERIFIED: no KiCad 9.x CLI or libraries).
+Slice 1 writes its project to $COPPER_SLICE1_OUT when set (open design.kicad_pro in KiCad), else a temporary folder.
 """
 import json, os, sys, tempfile, unittest
 from pathlib import Path
@@ -72,6 +75,49 @@ class UnicodeRun(unittest.TestCase):
         self.assertIn('µ', doc['message'], 'the envelope message keeps non-ASCII text (no literal \\u escapes)')
 
 
+class Slice1(unittest.TestCase):
+    """English -> .espec -> .copper -> KiCad project -> native ERC, DRC, netlist and pin/net parity, all PASS on KiCad 9.x.
+    The overall verdict stays UNVERIFIED (generic parts have no ratings or heights); this slice asserts the board gates."""
+    def test_english_divider_board_passes_kicad9_erc_and_drc(self):
+        import subprocess, copper
+        cli = copper.discover_cli(os.environ.get('KICAD_CLI'))
+        version = subprocess.run([cli, 'version'], capture_output=True, text=True).stdout.strip() if cli else ''
+        if not version.startswith('9.'):
+            self.skipTest(f'UNVERIFIED: KiCad 9.x CLI required (found {version or "none"}); set KICAD_CLI')
+        try:
+            libs = ['--symbols', str(copper.discover_symbol_dir(os.environ.get('KICAD_SYMBOL_DIR'))),
+                    '--footprints', str(copper.discover_footprint_dir(os.environ.get('KICAD_FOOTPRINT_DIR')))]
+        except FileNotFoundError as exc:
+            self.skipTest(f'UNVERIFIED: KiCad 9.x libraries required: {exc}')
+        text = next(c['text'] for c in json.loads((ROOT / 'tests/fixtures/spec/corpus.json').read_text(encoding='utf-8'))['cases']
+                    if c['name'] == 'divider board')
+        keep = os.environ.get('COPPER_SLICE1_OUT'); tmp = None if keep else tempfile.TemporaryDirectory()
+        out = Path(keep or tmp.name); out.mkdir(parents=True, exist_ok=True)
+        try:
+            def pcba(*args):
+                r = subprocess.run([PCBA, *map(str, args), '--json'], capture_output=True, cwd=str(ROOT), timeout=900)
+                return r.returncode, json.loads(r.stdout.decode('utf-8'))
+            for args in (('spec', 'parse', text, '--out', out / 'divider.espec', '--force'),
+                         ('spec', 'lower', out / 'divider.espec', '--out', out / 'divider.copper', '--force')):
+                rc, doc = pcba(*args); self.assertEqual((doc['status'], rc), ('PASS', 0), doc['message'])
+            rc, doc = pcba('project', 'build', out / 'divider.copper', '--out', out / 'build', *libs)
+            self.assertIn(doc['status'], ('PASS', 'UNVERIFIED'), doc['message'])
+            self.assertTrue((out / 'build/design.kicad_pro').is_file(), 'no KiCad project was written')
+            rc, doc = pcba('project', 'verify', '--out', out / 'build', '--kicad-cli', cli)
+            ver = doc['result']['data']['verification']
+            self.assertTrue(str(ver['kicad_version']).startswith('9.'), ver['kicad_version'])
+            gates = {g['gate']: g['status'] for g in ver['gates']}
+            self.assertEqual(gates, {'erc': 'PASS', 'drc': 'PASS', 'netlist': 'PASS', 'netlist_parity': 'PASS'},
+                             [(g['gate'], g.get('message', '')) for g in ver['gates']])
+            checks = {c['check']: c for c in ver['checks']}
+            self.assertEqual(checks['board_content']['status'], 'PASS', checks['board_content']['message'])
+            self.assertEqual(checks['board_content']['counts'], {'footprints': 3, 'pads': 7, 'nets': 3})
+            self.assertEqual(checks['output_hashes']['status'], 'PASS')
+        finally:
+            if tmp:
+                tmp.cleanup()
+
+
 if __name__ == '__main__':
     result = unittest.main(verbosity=2, exit=False).result
-    sys.exit(0 if result.wasSuccessful() else 1)
+    sys.exit(1 if not result.wasSuccessful() else 77 if result.skipped else 0)

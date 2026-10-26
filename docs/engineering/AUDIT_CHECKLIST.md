@@ -65,3 +65,18 @@ numbers yet; the next target would be the remaining first parse of `Connector_Ge
 | 114 of 133 open-hardware boards: no DRC report, exit 9009 | owner's raw-board runner → kicad-cli | KiCad 9.0.6 could not load the board ("Failed to load board"): **104** are KiCad 5 files (`20171130`, legacy zone fill), **7** are KiCad 10 files (`20260206`), **3** are KiCad 4 legacy files. `9009` is the runner's fallback, not a KiCad exit code | input-format incompatibility, not a DRC result: classify as `INPUT_UNSUPPORTED` in that runner (outside this repository) |
 | 15 open-hardware boards `ERRORS_PRESENT`, 2 `WARNINGS_ONLY`, 2 `PASS` | KiCad 9 DRC | real findings in third-party boards (e.g. `hackrf-one`: 22 errors, 448 warnings) | third-party evidence only; not Copper output |
 | Open-hardware "passes" on empty boards | owner's runner | boards with 0 pads/tracks/nets | Copper's own gate refuses empty boards (`board_content`) |
+
+## Build plan, Slice 1: English to a divider board that passes KiCad 9 DRC
+
+| Item | Status | Evidence |
+|---|---|---|
+| Automated test | **Written; UNVERIFIED here** (no KiCad 9.x on this machine) | CTest `slice1_divider` → `tests/test_prompt_acceptance.py Slice1`: the corpus case `divider board` through `spec parse` → `spec lower` → `project build` → `project verify`; requires KiCad 9.x and asserts ERC, DRC, netlist and pin/net parity all `PASS`, the content gate (3 footprints, 7 pads, 3 nets) and unchanged output hashes. Exit 77 (skipped) without a KiCad 9.x CLI or libraries |
+| Open it in KiCad | after the run | the project is kept in `<build>/slice1/build/design.kicad_pro` |
+| Connector from English | **Done** | the first divider board had no connector, so VIN and GND each reached one pin (ERC `isolated_pin_label`). English can now bind a catalogue part by id (`J1 uses part header3`); nothing else selects a part. `test_spec.Lowering.test_english_binds_a_part_by_id_only` |
+
+The overall verdict of `project verify` stays `UNVERIFIED` for this board: generic parts have no ratings or heights.
+That is correct and separate from the board gates this slice asserts.
+
+Development preview only (not native validation): KiCad 10.0.5's engine, run through a wrapper that reports 9.0.6,
+gave ERC, DRC, netlist and parity `PASS` for this board. The slice is done when `slice1_divider` passes on a real
+KiCad 9.x install.

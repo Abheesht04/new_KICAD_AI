@@ -239,7 +239,8 @@ class Frontend:
                                                                self.analysis, self.power, self.mcu, self.component)):
                 rest.append((shape, toks, clause))
         for shape, toks, clause in rest:
-            if not any(rule(shape, toks, clause) for rule in (self.requirement, self.gpio, self.placement, self.connection)):
+            if not any(rule(shape, toks, clause) for rule in (self.binding, self.requirement, self.gpio, self.placement,
+                                                               self.connection)):
                 self.error(clause, 'not understood; see docs/engineering/ENGINEERING_SPEC.md for the accepted phrases')
         return self.spec, self.errors
 
@@ -438,6 +439,24 @@ class Frontend:
         self.spec.unresolved.append(ir.Question('', 'power.input', f'"{clause}" does not say the supply voltage and '
                                                 'the net it drives. State it, e.g. "a 5 V supply on VIN".',
                                                 ['a 5 V supply on VIN', 'a 3.3 V supply on VDD']))
+
+    BIND = re.compile(rf'^(?:(?P<ref>{REF_RE}) uses|use) (?:the )?part "?(?P<id>[A-Za-z0-9_][A-Za-z0-9_+./-]*)"?'
+                      rf'(?: for (?P<ref2>{REF_RE}))?$', re.I)
+
+    def binding(self, shape, toks, clause):
+        """'J1 uses part header3', 'use part header3 for J1': an explicit catalogue part id (nothing else selects one)."""
+        m = self.BIND.match(clause)
+        if not m or bool(m.group('ref')) == bool(m.group('ref2')):
+            return False
+        ref = (m.group('ref') or m.group('ref2')).upper()
+        c = self.spec.component(ref)
+        if c is None:
+            self.error(clause, f'{ref} is not declared')
+        elif 'part' in c.attrs:
+            self.error(clause, f'two parts for {ref} ({c.attrs["part"].value} and {m.group("id")})')
+        else:
+            c.attrs['part'] = ir.Attr(m.group('id'))
+        return True
 
     def placement(self, shape, toks, clause):
         m = re.match(r'^(?:place |put |connect )?(?P<subj>%\w+|the(?: \w+){1,2}?) (?:is )?(?P<post>(?:connected )?'

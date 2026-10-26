@@ -72,7 +72,7 @@ No model, network or randomness is involved: the same text always gives the same
 
   Terminal names are canonicalized on validation (`anode` → `2`, `+` → `1`).
 * **Attributes**: `package`, `color`, `family`, `variant`, `part`. `part` names a catalogue
-  part id; nothing else selects a part.
+  part id (in English: `J1 uses part header3`); nothing else selects a part.
 
 ### Validation
 
@@ -132,6 +132,7 @@ one of these forms (words in brackets are optional):
 | supply | `a 5 V supply on VIN` (− on GND, inferred), `V1 is a 3V3 supply between VDD and GND`, `powered from 5 V on VIN` |
 | MCU | `an ESP32-WROOM-32E module U1`, `use an ESP32` (asks for the variant), `an RP2040 chip` |
 | connection | `R1 pin 1 to VIN`, `R1.2 to GND`, `connect the LED anode to OUT`, `D1 cathode to GND`, `R1 between VIN and OUT` |
+| part | `J1 uses part header3`, `use part header3 for J1`: binds a catalogue part id (the only way English selects a part) |
 | GPIO intent | `GPIO2 drives the LED`, `U1 GPIO4 drives D1`, `drive the red LED from GPIO5` |
 | requirement | `OUT must be between 3.2 V and 3.4 V`, `the voltage at OUT should stay within 3.2 V and 3.4 V`, `OUT must be 3.3 V ± 3%`, `VIN must be at least 4.5 V`, `the current through R1 must be below 10 mA` |
 | board | `the board is 40 x 30 mm with 2 layers`, `board: 40 mm x 30 mm`, `two layers` |
