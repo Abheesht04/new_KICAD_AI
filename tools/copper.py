@@ -551,7 +551,9 @@ ELECTRICAL_RULES={'unsupported_model','unsupported_analysis','model_stamp','mna_
                   # ideal regulator limits (src/v2/project.c regulator_checks)
                   'regulator_dropout','regulator_current','regulator_reverse',
                   # unmodelled IC declared by its (reference (supply ...)) (tools/blocks.py)
-                  'ic_supply_current'}
+                  'ic_supply_current',
+                  # solver diagnostics (src/v2/project.c)
+                  'ill_conditioned'}
 def scope_status(issues,incomplete=False):
     if any(i['severity']=='error' for i in issues):return 'FAIL'
     return 'UNVERIFIED' if incomplete or issues else 'PASS'

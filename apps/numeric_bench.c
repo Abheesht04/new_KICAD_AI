@@ -185,8 +185,9 @@ static double lambert_w_exp(double lnz) {
 static void bench_diode(int quick) {
     static const double vs[] = {0.3, 0.7, 1, 5, 10, 20, 24, 25, 26, 30, 50, 100, 1000};
     const double is = 1e-14, n = 1.0, r = 1000.0, vt = 1.380649e-23 * 300.0 / 1.602176634e-19;
-    size_t count = quick ? 8 : sizeof vs / sizeof vs[0];
-    printf(",\"diode_newton\":{\"is_a\":%g,\"ideality\":%g,\"r_ohm\":%g,\"max_iterations\":100,\"max_step_v\":0.25,\"cases\":[", is, n, r);
+    size_t count = sizeof vs / sizeof vs[0]; /* every supply: cheap since step 7 */
+    (void)quick;
+    printf(",\"diode_newton\":{\"is_a\":%g,\"ideality\":%g,\"r_ohm\":%g,\"max_iterations\":100,\"junction_limiting\":\"pnjlim\",\"cases\":[", is, n, r);
     for (size_t i = 0; i < count; ++i) {
         double nvt = n * vt, lnz = log(is * r / nvt) + (vs[i] + is * r) / nvt;
         double exact_i = nvt / r * lambert_w_exp(lnz) - is;
@@ -210,7 +211,7 @@ static void bench_diode(int quick) {
 
 int main(int argc, char **argv) {
     int quick = argc > 1 && !strcmp(argv[1], "--quick");
-    printf("{\"tool\":\"numeric_bench\",\"solver\":\"dense Gaussian elimination, partial pivoting, absolute pivot threshold 1e-12\",");
+    printf("{\"tool\":\"numeric_bench\",\"solver\":\"dense LU, partial pivoting, relative pivot threshold n*eps*column max; Newton with SPICE junction limiting\",");
     bench_ladder(quick);
     bench_scaling();
     bench_degenerate();

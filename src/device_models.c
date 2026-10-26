@@ -222,7 +222,7 @@ static int diode_ac(MnaAcSystem *s, const size_t *n, const double *p, const Devi
     if (!c->operating_point) {
         return 0;
     }
-    MnaDiode d = {n[1], n[0], p[0], p[1], 300.0};
+    MnaDiode d = {n[1], n[0], p[0], p[1], 300.0, 0.0};
     double current, conductance;
     mna_diode_evaluate(&d, mna_node_voltage(c->operating_point, n[1]) - mna_node_voltage(c->operating_point, n[0]),
                        &current, &conductance);
@@ -252,7 +252,7 @@ static const double ROOM_K = 300.0;
 /* Terminals 0 = collector, 1 = base, 2 = emitter; params is_a, beta_f, beta_r, nf, nr. */
 static MnaBjt bjt_params(const size_t *n, const double *p, int polarity)
 {
-    MnaBjt b = {n[0], n[1], n[2], polarity, p[0], p[1], p[2], p[3], p[4], ROOM_K};
+    MnaBjt b = {n[0], n[1], n[2], polarity, p[0], p[1], p[2], p[3], p[4], ROOM_K, 0.0, 0.0};
     return b;
 }
 

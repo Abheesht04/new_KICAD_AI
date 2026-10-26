@@ -439,6 +439,35 @@ void mna_diode_evaluate(const MnaDiode *diode, double voltage_v,
   *conductance_s = diode->saturation_current_a * slope / nvt;
 }
 
+/* SPICE junction-voltage limiting (pnjlim; Nagel, SPICE2, UCB/ERL M520, 1975): above the critical voltage a large
+ * increase is compressed logarithmically, so the exponential stays in range while the rest of the circuit takes
+ * a full Newton step. vold is the previous linearisation's (limited) value. */
+static double pnjlim(double vnew, double vold, double nvt, double is) {
+  double vcrit = nvt * log(nvt / (sqrt(2.0) * is));
+  if (vnew > vcrit && fabs(vnew - vold) > 2.0 * nvt) {
+    if (vold > 0.0) {
+      double arg = 1.0 + (vnew - vold) / nvt;
+      vnew = arg > 0.0 ? vold + nvt * log(arg) : vcrit;
+    } else {
+      vnew = nvt * log(vnew / nvt);
+    }
+  }
+  return vnew;
+}
+
+/* The junction voltage to evaluate at: exact (limit 0), the first linearisation of a solve (1, starts the history),
+ * or limited against the previous linearisation (2). Updates the history for nonzero limit. */
+static double junction(const MnaAssembly *assembly, double v, double *last, double nvt, double is) {
+  if (assembly->limit == 0) {
+    return v;
+  }
+  if (assembly->limit == 2) {
+    v = pnjlim(v, *last, nvt, is);
+  }
+  *last = v;
+  return v;
+}
+
 static int diode_load(void *data, const MnaDevice *device,
                       MnaAssembly *assembly) {
   MnaDiode *diode = (MnaDiode *)data;
@@ -457,8 +486,12 @@ static int diode_load(void *data, const MnaDevice *device,
   va = node_voltage_from_x(assembly, diode->node_anode);
   vc = node_voltage_from_x(assembly, diode->node_cathode);
   vd = va - vc;
+  /* The companion model at the evaluation voltage: I(v_eval) + G (vd - v_eval); exact when they are equal. */
+  double v_eval = junction(assembly, vd, &diode->v_last, diode->ideality_factor * diode_thermal_voltage(diode),
+                           diode->saturation_current_a);
 
-  mna_diode_evaluate(diode, vd, &current, &conductance);
+  mna_diode_evaluate(diode, v_eval, &current, &conductance);
+  current += conductance * (vd - v_eval);
 
   add_two_terminal_residual(assembly, diode->node_anode, diode->node_cathode,
                             current);
@@ -568,6 +601,7 @@ int mna_add_diode(MnaCircuit *circuit, size_t node_anode, size_t node_cathode,
   diode->saturation_current_a = saturation_current_a;
   diode->ideality_factor = ideality_factor;
   diode->temperature_k = temperature_k;
+  diode->v_last = 0.0;
 
   if (!mna_add_device(circuit, &DIODE_OPS, diode)) {
     free(diode);
@@ -639,7 +673,7 @@ static void stamp_three_terminal(MnaAssembly *assembly, const size_t *nodes,
 }
 
 static int bjt_load(void *data, const MnaDevice *device, MnaAssembly *assembly) {
-  const MnaBjt *bjt = (const MnaBjt *)data;
+  MnaBjt *bjt = (MnaBjt *)data;
   MnaBjtEval e;
   size_t nodes[3];
   double current[3];
@@ -652,12 +686,26 @@ static int bjt_load(void *data, const MnaDevice *device, MnaAssembly *assembly) 
   nodes[0] = bjt->node_collector;
   nodes[1] = bjt->node_base;
   nodes[2] = bjt->node_emitter;
-  mna_bjt_evaluate(bjt, node_voltage_from_x(assembly, nodes[0]),
-                   node_voltage_from_x(assembly, nodes[1]),
-                   node_voltage_from_x(assembly, nodes[2]), &e);
+  double v[3], ev[3], p = bjt->polarity < 0 ? -1.0 : 1.0, vt = thermal_voltage(bjt->temperature_k);
+  for (int i = 0; i < 3; ++i) {
+    v[i] = node_voltage_from_x(assembly, nodes[i]);
+  }
+  /* Both junctions limited (polarity applied); evaluated at node voltages that give the limited junctions with the
+   * base unchanged, then extended linearly to the true voltages: I(v_eval) + dI/dV (v - v_eval). */
+  double vbe = junction(assembly, p * (v[1] - v[2]), &bjt->vbe_last, bjt->nf * vt, bjt->saturation_current_a);
+  double vbc = junction(assembly, p * (v[1] - v[0]), &bjt->vbc_last, bjt->nr * vt, bjt->saturation_current_a);
+  ev[1] = v[1];
+  ev[2] = v[1] - p * vbe;
+  ev[0] = v[1] - p * vbc;
+  mna_bjt_evaluate(bjt, ev[0], ev[1], ev[2], &e);
   current[0] = e.ic;
   current[1] = e.ib;
   current[2] = e.ie;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      current[i] += e.d[i][j] * (v[j] - ev[j]);
+    }
+  }
   stamp_three_terminal(assembly, nodes, current, e.d);
   return 1;
 }
@@ -870,7 +918,8 @@ void mna_options_default(MnaOptions *options) {
   options->max_iterations = 100;
   options->absolute_residual_tolerance = 1.0e-10;
   options->relative_residual_tolerance = 1.0e-10;
-  options->maximum_voltage_step_v = 0.25;
+  options->maximum_voltage_step_v = 0.0;
+  options->junction_limiting = 1;
   options->absolute_update_tolerance_v = 1.0e-9;
   options->relative_update_tolerance = 1.0e-9;
   options->trace = NULL;
@@ -959,6 +1008,8 @@ void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
   unknown_count = circuit->unknown_count;
   result->node_count = circuit->node_count;
   result->unknown_count = unknown_count;
+  result->condition_estimate = NAN;
+  result->singular_unknown = (size_t)-1;
   int has_nonlinear_device = 0;
 
   for (size_t i = 0; i < circuit->device_count; ++i) {
@@ -1013,6 +1064,7 @@ void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
     assembly.residual = residual;
     assembly.node_count = circuit->node_count;
     assembly.unknown_count = unknown_count;
+    assembly.limit = options->junction_limiting ? (iteration == 0 ? 1 : 2) : 0;
 
     for (i = 0; i < circuit->device_count; ++i) {
       const MnaDevice *device = &circuit->devices[i];
@@ -1053,10 +1105,13 @@ void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
               result->x, residual, &jacobian, rhs, NULL, NULL,
               vector_max_abs(residual, unknown_count), 0.0, 0.0, 1.0);
 
-    if (!matrix_solve(&jacobian, rhs, raw_delta)) {
+    MatrixSolveInfo solve_info;
+    if (!matrix_solve_info(&jacobian, rhs, raw_delta, &solve_info)) {
+      result->singular_unknown = solve_info.singular_column;
       result->status = MNA_STATUS_SINGULAR_MATRIX;
       break;
     }
+    result->condition_estimate = solve_info.condition_estimate;
 
     if (!vector_is_finite(raw_delta, unknown_count)) {
       result->status = MNA_STATUS_SINGULAR_MATRIX;
@@ -1106,6 +1161,7 @@ void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
     residual_zero(residual, unknown_count);
 
     assembly.x = result->x;
+    assembly.limit = 0;
 
     for (i = 0; i < circuit->device_count; ++i) {
       const MnaDevice *device = &circuit->devices[i];
@@ -1187,6 +1243,92 @@ cleanup:
       result->unknown_count = 0;
     }
   }
+}
+
+/* --------------------------------------------------------------------------
+ * Structural diagnosis of a singular system
+ * --------------------------------------------------------------------------
+ * The Jacobian's nonzero pattern (devices loaded exactly at x, or at zero) is a bipartite graph of equations and
+ * unknowns. A maximum matching (augmenting paths) leaves an unknown unmatched when no assignment of equations can
+ * determine it; every unknown reachable from such an unknown by alternating paths (unknown -> an equation using it
+ * -> the unknown matched to that equation) belongs to the same underdetermined set (Dulmage-Mendelsohn; Duff,
+ * Erisman & Reid, Direct Methods for Sparse Matrices). A floating node is a set of one with no equation; parallel
+ * or looped voltage sources share one set of branch currents. Structural rank cannot see numerical cancellation:
+ * then the set is empty and the relative pivot test's column is the only clue.
+ */
+static int augment(size_t col, const unsigned char *pattern, size_t n, size_t *row_of, size_t *col_of, unsigned char *seen) {
+  for (size_t r = 0; r < n; ++r) {
+    if (!pattern[r * n + col] || seen[r]) {
+      continue;
+    }
+    seen[r] = 1;
+    if (row_of[r] == (size_t)-1 || augment(row_of[r], pattern, n, row_of, col_of, seen)) {
+      row_of[r] = col;
+      col_of[col] = r;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+size_t mna_structural_deficiency(const MnaCircuit *circuit, const double *x, size_t *unknowns, size_t cap) {
+  size_t n = circuit ? circuit->unknown_count : 0, found = 0;
+  if (n == 0) {
+    return 0;
+  }
+  Matrix j = {0};
+  double *residual = calloc(n, sizeof *residual), *zero = calloc(n, sizeof *zero);
+  unsigned char *pattern = calloc(n * n, 1), *seen = calloc(n, 1), *member = calloc(n, 1);
+  size_t *row_of = malloc(n * sizeof *row_of), *col_of = malloc(n * sizeof *col_of), *queue = malloc(n * sizeof *queue);
+  if (!residual || !zero || !pattern || !seen || !member || !row_of || !col_of || !queue || !matrix_create(&j, n, n)) {
+    goto done;
+  }
+  MnaAssembly a = {x ? x : zero, &j, residual, circuit->node_count, n, 0};
+  for (size_t i = 0; i < circuit->device_count; ++i) {
+    const MnaDevice *d = &circuit->devices[i];
+    if (d->ops && d->ops->load) {
+      (void)d->ops->load(d->data, d, &a);
+    }
+  }
+  for (size_t i = 0; i < n * n; ++i) {
+    pattern[i] = j.data[i] != 0.0;
+  }
+  for (size_t i = 0; i < n; ++i) {
+    row_of[i] = col_of[i] = (size_t)-1;
+  }
+  for (size_t col = 0; col < n; ++col) {
+    memset(seen, 0, n);
+    (void)augment(col, pattern, n, row_of, col_of, seen);
+  }
+  size_t head = 0, tail = 0;
+  for (size_t col = 0; col < n; ++col) {
+    if (col_of[col] == (size_t)-1) {
+      member[col] = 1;
+      queue[tail++] = col;
+    }
+  }
+  while (head < tail) {
+    size_t col = queue[head++];
+    for (size_t r = 0; r < n; ++r) {
+      size_t next = row_of[r];
+      if (pattern[r * n + col] && next != (size_t)-1 && !member[next]) {
+        member[next] = 1;
+        queue[tail++] = next;
+      }
+    }
+  }
+  for (size_t col = 0; col < n; ++col) {
+    if (member[col]) {
+      if (found < cap && unknowns) {
+        unknowns[found] = col;
+      }
+      ++found;
+    }
+  }
+done:
+  matrix_free(&j);
+  free(residual), free(zero), free(pattern), free(seen), free(member), free(row_of), free(col_of), free(queue);
+  return found;
 }
 
 /* --------------------------------------------------------------------------

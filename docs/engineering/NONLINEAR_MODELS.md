@@ -106,7 +106,7 @@ voltage.
 | Item | Behaviour |
 |---|---|
 | Initial guess | x₀ = 0, every unknown; deterministic, so repeated solves are bit-identical (tested) |
-| Damping | The node-voltage step is limited to 0.25 V per iteration when any nonlinear device is present |
+| Damping | SPICE junction limiting (`pnjlim`) inside the diode and BJT models: each junction is evaluated at a limited voltage relative to its previous linearisation, while linear nodes take full steps. The old 0.25 V global clamp is `maximum_voltage_step_v` (default 0, off). See NUMERICAL_ROADMAP.md, step 7 results |
 | Residual test | max\|F\| ≤ 1e-10 + 1e-10·max(1, \|F₀\|) |
 | Update test (new) | Nonlinear circuits must also satisfy max\|ΔV\| ≤ 1e-9 V + 1e-9·max\|V\|. A small residual alone can hide a large voltage error at a high-impedance node. Linear circuits need only the residual test (one exact Newton step) |
 | Guards | Non-finite residual or Jacobian → `DEVICE_FAILURE`; singular matrix → `SINGULAR_MATRIX`; iteration limit (default 100) → `NOT_CONVERGED`. None of these ever reports success |

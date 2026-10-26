@@ -18,9 +18,9 @@ dependency is proposed for the default build.
 
 | Area | Current method (owner) |
 |---|---|
-| Linear solve | dense Gaussian elimination, partial pivoting, absolute pivot threshold 1e-12 (`src/matrix.c`); MNA assembled dense |
+| Linear solve | dense LU, partial pivoting; a column is singular when its pivot is ≤ n·ε × its largest original entry (relative; step 7, S1); Hager/Higham 1-norm condition estimate reported (`src/matrix.c`); MNA assembled dense |
 | Residual / convergence | max-norm residual over all rows (KCL in A and branch rows in V), `abs 1e-10 + rel 1e-10 × initial`; plus max update `1e-9 V + 1e-9 × max|V|` for nonlinear circuits (`src/mna.c`) |
-| Nonlinear | Newton; the whole update vector scaled so no node moves more than 0.25 V; 100 iterations; `mna_limexp` above x = 40 |
+| Nonlinear | Newton with SPICE junction limiting (`pnjlim`) in the diode and BJT models; full steps for linear nodes; 100 iterations; `mna_limexp` above x = 40. The old global 0.25 V clamp remains an option, off by default (step 7, N1) |
 | AC | complex MNA as a real 2N block, linearised at the DC point (`src/mna_ac.c`); no device capacitances |
 | Transient | fixed step, Backward Euler or trapezoidal (first step BE), transactional state commit/rollback (`src/transient.c`) |
 | Uncertainty | exhaustive resistor-tolerance corners, at most 8 resistors (2^8 solves), with target/rating checks |
@@ -76,10 +76,10 @@ refused (`corner_capacity`), never silently truncated.
 
 | # | Proposal | Measured limitation it addresses | Recommendation | Needs approval |
 |---|---|---|---|---|
-| N1 | Junction-voltage limiting + damped Newton (backtracking line search) in place of the global 0.25 V clamp | diode circuits above ~24 V do not converge; iterations ∝ supply | **Do next** | yes (solver behaviour) |
+| N1 | Junction-voltage limiting + damped Newton (backtracking line search) in place of the global 0.25 V clamp | diode circuits above ~24 V do not converge; iterations ∝ supply | **Done** (step 7: limiting; no line search, see below) | — |
 | N2 | gmin and source-stepping continuation as a reported fallback | none measured yet beyond N1; needed for multi-transistor operating points | after N1, if a fixture needs it | yes |
-| S1 | Relative pivot threshold + 1-norm condition estimate in results | absolute 1e-12 threshold is unit-dependent; no conditioning diagnostic | **Do** (small) | yes (result schema) |
-| S2 | Structural diagnosis of singular systems (source loops, floating nodes) before factorisation | singular systems are refused without naming the cause | **Do** | no (diagnostic only) |
+| S1 | Relative pivot threshold + 1-norm condition estimate in results | absolute 1e-12 threshold is unit-dependent; no conditioning diagnostic | **Done** (step 7) | — |
+| S2 | Structural diagnosis of singular systems (source loops, floating nodes) before factorisation | singular systems are refused without naming the cause | **Done** (step 7; run when the solve is singular) | — |
 | S3 | Per-row-type tolerances (A rows vs V rows) | mixed-unit max-norm; not yet a measured error | defer; document | — |
 | L1 | Factor reuse for linear transient (one LU, many solves) | every step refactors O(n³) | do when a transient benchmark exceeds 1 s | no |
 | L2 | Sparse unsymmetric LU (own CSR + AMD-ordered LU, or optional KLU) | cubic growth; 99 % zeros above 100 nodes | **defer**: designs are capped at ≲ 512 unknowns (≲ 30 ms) | yes (dependency) |
@@ -225,12 +225,45 @@ closed-form dividers. *Failure:* non-monotone nonlinear responses (interior extr
 results reported with confidence intervals (Clopper–Pearson for yield). Never a replacement for required
 worst-case constraints; temperature and model uncertainty only from explicit data.
 
+## Step 7 results (2026-10-27)
+
+**N1, junction limiting.**
+- **How it works:**
+  - The diode and BJT models evaluate each junction at `pnjlim(v_new, v_previous)`, with the critical voltage n·Vt·ln(n·Vt / (√2·Is)).
+  - Each stamps the companion model I(v_lim) + G·(v − v_lim), so linearly driven nodes take the full Newton step.
+  - The assembly flag `limit` tells devices whether they are linearising (limited, with history) or being evaluated exactly. Residual checks, validation and the per-net current bounds are always exact, so a converged answer is the true solution.
+- **Line search:** a backtracking (Armijo) line search on the true residual was not added. With limiting, the true residual of a full step can rise while the iterate makes progress, because the device was linearised at the limited voltage. That is SPICE's practice too, and the measurements below did not need it.
+- **MOSFETs:** the Level-1 MOSFET has no exponential and is not limited. Common-source bias points at 5, 48 and 400 V converge.
+
+| Supply (diode, 1 kΩ, Is 1e-14) | 0.3 V | 1 V | 5 V | 10 V | 20 V | 24 V | 25 V | 50 V | 100 V | 1000 V |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Iterations before (0.25 V clamp) | 4 | 12 | 23 | 42 | 82 | 98 | — | — | — | — |
+| Iterations now | 3 | 14 | 12 | 9 | 8 | 8 | 8 | 8 | 7 | 9 |
+| Relative error vs Lambert W | 2e-11 | 1e-16 | 0 | 2e-16 | 2e-16 | 0 | 1e-16 | 1e-16 | 0 | 1e-16 |
+
+A BJT common-emitter bias point (β 100, 100 k/10 k divider, 4.7 k / 1 k) converges at 12, 48 and 400 V. Its
+collector voltage equals VCC − RC·IE·β/(β+1) to 1e-6 relative (`test_numeric_oracles.Bjt`).
+
+**S1, relative pivot test and condition estimate.**
+- **Closed forms:** a 2×2 system scaled by 10⁻¹⁵ … 10¹⁵ gives the same answer and κ₁ = 21. The (2, −1) tridiagonal gives κ₁ = 8 (`tests/matrix_test.c`).
+- **Audit I-01 fixed:** a 0.01 pF/0.01 pF capacitive divider at 1 Hz was reported singular by the absolute threshold and now solves to exactly 0.5 (`test_numeric_oracles.RelativePivot`).
+- **Reported:** `condition_estimate` is part of every DC analysis. A solution with κ₁·ε > 10⁻⁶ is reported `ill_conditioned` (a warning, so the result is UNVERIFIED). Examples: the divider has κ₁ ≈ 6.7·10³; 1 nΩ into a node held by 1 TΩ gives ≈ 4·10⁹ (no warning); a node held only by two 1 TΩ resistors next to it gives ≈ 10²¹ (warned).
+
+**S2, structural diagnosis.**
+- **Method:** when the solve is singular, a maximum matching of equations to unknowns over the Jacobian pattern finds the unknowns the structure leaves undetermined, together with their alternating-path set. copper-core names them.
+- **Messages, as measured:**
+  - two sources in parallel: "the current of V1, the current of V2 … in parallel or in a loop";
+  - a net touching only capacitors: "net X has no DC path";
+  - a three-source loop: names V1, V2 and V3;
+  - an inductor across a source: names V1 and L1.
+- **Numerical singularity:** a singularity the structure cannot see is reported at the relative pivot test's column.
+
 ## Approvals requested
 
-1. **N1** (junction limiting + damped Newton) — fixes the measured 25 V convergence limit; changes solver
-   behaviour on every nonlinear circuit, so it lands behind an option with a both-paths comparison first.
-2. **S1 + S2** (relative pivot test, condition estimate, structural diagnosis) — adds fields to results.
-3. **T1 + T2** (LTE control, BDF2) — new transient options and result fields.
+1. ~~N1~~, ~~S1 + S2~~: done in build plan step 7 (above). The 0.25 V clamp remains available as
+   `MnaOptions.maximum_voltage_step_v` for comparison; every existing solver, transient, AC and nonlinear-model test
+   passes unchanged with limiting on.
+2. **T1 + T2** (LTE control, BDF2) — new transient options and result fields.
 
 No dependency (KLU, SuiteSparse, SUNDIALS, ngspice) is proposed for the default build; L2/T4 stay deferred
 until a measured benchmark at a raised project cap justifies them and packaging is reviewed.

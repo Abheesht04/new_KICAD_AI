@@ -77,11 +77,10 @@ At today's sizes (≤ 256 nets, dense) the cost doesn't matter; correctness and 
 do. Device equations only see `MnaAcSystem`, so the storage or solver can change later
 without touching models (see Prompt 10's sparse roadmap).
 
-**Pivot and scaling policy:** inherited from `matrix_solve`. There is an absolute pivot
-threshold of 1e-12 and no scaling (audit issue I-01). A node whose total admittance stays
-below about 1e-12 S during elimination is reported singular even if the exact system is
-solvable. For example, a 0.1 pF capacitor at 1 Hz has ωC ≈ 6.3e-13 S. Prompt 10 covers
-scaling.
+**Pivot and scaling policy:** inherited from `matrix_solve`. Since build plan step 7 a column is singular only
+when its pivot is at most n·ε times its largest original entry. This is relative, so a node held only by tiny
+admittances is still solved: a 0.01 pF/0.01 pF divider at 1 Hz (≈1.3e-13 S), which the old absolute 1e-12
+threshold refused (audit issue I-01), now gives exactly 0.5.
 
 ## Statuses
 

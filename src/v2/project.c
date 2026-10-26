@@ -1,6 +1,7 @@
 #include "project.h"
 #include "pcb_copper.h"
 #include "transient.h"
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -551,6 +552,7 @@ typedef struct {
     size_t drive_count;
     unsigned char boundary[CP_MAX_NETS]; /* 1: only connectors, MCU pins or nothing touch this net */
     size_t device_first[CP_MAX_COMPONENTS]; /* the component's first MNA device */
+    size_t component_device_end;            /* devices before this are components'; then one per drive, then ties */
 } DcExtra;
 static size_t branch_count(const MnaCircuit *m) {
     size_t n=0, local;
@@ -605,6 +607,7 @@ static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why
         }
         for(size_t t=0;t<c->model->terminal_count;t++) touched[nodes[t]]=1;
     }
+    if(x) x->component_device_end=m->device_count;
     /* After every device, so V/L branch indices keep component order. */
     for(size_t i=0;i<p->component_count;i++) if(p->components[i].mcu && !stamp_mcu(&p->components[i],i,m,x,touched)) {
         *rule="model_stamp"; snprintf(why,cap,"%s: MCU boundary could not be stamped (allocation failure).",p->components[i].ref);
@@ -1017,7 +1020,7 @@ static void net_current_bounds(const CpProject *p,const MnaCircuit *m,const MnaR
     for(size_t i=0;ok && i<m->device_count;i++) {
         const MnaDevice *d=mna_device_at(m,i); double out=0;
         memset(rows,0,m->unknown_count*sizeof *rows);
-        MnaAssembly a={res->x,&scratch,rows,m->node_count,m->unknown_count};
+        MnaAssembly a={res->x,&scratch,rows,m->node_count,m->unknown_count,0};   /* exact, no limiting */
         if(!d->ops->load(d->data,d,&a)) { ok=0; break; }
         for(size_t n=1;n<=m->node_count && n<CP_MAX_NETS;n++) { sum[n]+=fabs(rows[n-1]); out+=rows[n-1]; }
         sum[0]+=fabs(out);
@@ -1039,6 +1042,46 @@ static void regulator_checks(const CpComponent *c,const MnaCircuit *m,const MnaR
     if(!c->power_w.known) issue(r,1,"rating_unknown",c->ref,watts,0,"Regulator power rating is unknown; dissipation (Vin - Vout) * Iout + Vin * Iq not verified.");
     else if(watts>c->power_w.value*derating) issue(r,2,"power_derating",c->ref,watts,c->power_w.value*derating,"Regulator dissipation exceeds its derated power rating.");
 }
+/* A solver unknown in words: a net's voltage, or the branch unknown of a component's device. */
+static void unknown_name(const CpProject *p,const MnaCircuit *m,const DcExtra *dx,size_t u,char *out,size_t cap) {
+    if(u<m->node_count) { snprintf(out,cap,"net %s",p->nets[u+1]); return; }
+    for(size_t d=0;d<m->device_count;d++) {
+        const MnaDevice *dev=mna_device_at(m,d);
+        if(u<dev->unknown_offset || u>=dev->unknown_offset+dev->unknown_count) continue;
+        if(d>=dx->component_device_end) {
+            size_t k=d-dx->component_device_end;
+            if(k<dx->drive_count) snprintf(out,cap,"the driven pin %s of %s",p->components[dx->drive[k].component].pins[dx->drive[k].pin],p->components[dx->drive[k].component].ref);
+            else snprintf(out,cap,"a boundary tie");
+            return;
+        }
+        size_t owner=SIZE_MAX;
+        for(size_t i=0;i<p->component_count;i++) if(p->components[i].model && dx->device_first[i]<=d) owner=i;
+        snprintf(out,cap,"the current of %s",owner==SIZE_MAX?"?":p->components[owner].ref); return;
+    }
+    snprintf(out,cap,"unknown %zu",u);
+}
+/* Why the DC solve failed, in the circuit's own names: the structurally undetermined unknowns (floating nets,
+ * sources in parallel or in a loop), a numerically singular column, or Newton's non-convergence. */
+static void dc_failure(const CpProject *p,const MnaCircuit *m,const MnaResult *res,const DcExtra *dx,char *out,size_t cap) {
+    char name[160]; size_t set[16], n=0, used=0;
+    if(res->status==MNA_STATUS_NOT_CONVERGED) {
+        snprintf(out,cap,"DC solve did not converge in %zu Newton iterations (largest residual %.3g).",res->iterations,res->maximum_residual); return;
+    }
+    if(res->status!=MNA_STATUS_SINGULAR_MATRIX) { snprintf(out,cap,"DC solve failed (solver status %d).",(int)res->status); return; }
+    n=mna_structural_deficiency(m,NULL,set,16);
+    if(n==0) {
+        unknown_name(p,m,dx,res->singular_unknown,name,sizeof name);
+        snprintf(out,cap,"DC system is numerically singular at %s (relative pivot test): values that cancel exactly, e.g. ideal sources whose voltages conflict.",res->singular_unknown==(size_t)-1?"an unknown":name);
+        return;
+    }
+    if(n==1 && set[0]<m->node_count) {
+        unknown_name(p,m,dx,set[0],name,sizeof name);
+        snprintf(out,cap,"DC system is singular: %s has no DC path to the rest of the circuit (it touches nothing, or only capacitors).",name); return;
+    }
+    used=(size_t)snprintf(out,cap,"DC system is singular: the circuit's structure leaves undetermined");
+    for(size_t i=0;i<n && i<16 && used<cap;i++) { unknown_name(p,m,dx,set[i],name,sizeof name); used+=(size_t)snprintf(out+used,cap-used,"%s %s",i?",":"",name); }
+    if(used<cap) snprintf(out+used,cap-used,"%s: voltage sources or inductors in parallel or in a loop, or nets without a DC path.",n>16?" (and more)":"");
+}
 int cp_analyze(const CpProject *p,FILE *f) {
     MnaCircuit m={0}; MnaResult result={0}; MnaOptions opt; MnaValidation valid={0}; mna_options_default(&opt);
     const char *rule="mna_failure"; char why[256]; DcExtra dx;
@@ -1046,7 +1089,12 @@ int cp_analyze(const CpProject *p,FILE *f) {
     int solved=supported && result.status==MNA_STATUS_SUCCESS && valid.valid;
     fprintf(f,"{\"schema\":2,\"name\":"); js(f,p->name); fprintf(f,",\"dc_solved\":%s,\"physical_checked\":%s,\"issues\":[",solved?"true":"false",p->has_geometry?"true":"false");
     Report r={.f=f};
-    if(!solved) issue(&r,2,rule,"circuit",supported?result.status:0,0,supported?"DC solve failed: check floating nodes, ideal-source loops and nonlinear convergence.":why);
+    char failure[1024]="";
+    if(!solved && supported) dc_failure(p,&m,&result,&dx,failure,sizeof failure);
+    if(!solved) issue(&r,2,rule,"circuit",supported?result.status:0,0,supported?failure:why);
+    /* A solution can lose about log10(cond * eps) digits; past 1e-6 relative the reported values are not trustworthy. */
+    if(solved && isfinite(result.condition_estimate) && result.condition_estimate*DBL_EPSILON>1e-6)
+        issue(&r,1,"ill_conditioned","circuit",result.condition_estimate,1e-6/DBL_EPSILON,"The DC system is ill-conditioned: node voltages may be accurate only to about cond * 2.2e-16 relative (1-norm condition estimate).");
     size_t degree[CP_MAX_NETS]={0};
     for(size_t i=0;i<p->component_count;i++) for(size_t j=0;j<p->components[i].pin_count;j++) degree[p->components[i].nodes[j]]++;
     for(size_t i=0;i<p->net_count;i++) if(degree[i]<2) issue(&r,2,"open_node",p->nets[i],(double)degree[i],2,"Net has fewer than two terminals.");
@@ -1130,6 +1178,7 @@ int cp_analyze(const CpProject *p,FILE *f) {
         if(net_bound[i]>=0) fprintf(f,",\"bound_a\":%.12g}",net_bound[i]); else fputs(",\"bound_a\":null}",f); }
 #undef TRACE_CURRENT
     fprintf(f,"],\"circuit_current_a\":%.12g",budget); components_json(p,f);
+    if(solved && isfinite(result.condition_estimate)) fprintf(f,",\"condition_estimate\":%.6g",result.condition_estimate); else fputs(",\"condition_estimate\":null",f);
     fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I/Q/M, ideal connectors and MCU behavioral boundaries (DC constraints only; firmware and silicon not simulated); exact supported copper; rectangular footprint keepouts; rectangular assembly envelopes. AC and transient are separate analyses (simulate ac/transient). No thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
     mna_result_free(&result);mna_circuit_free(&m);return ferror(f)?3:(r.errors?2:0);
 }

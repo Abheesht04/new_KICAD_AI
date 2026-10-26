@@ -161,3 +161,13 @@ placement that needs rip-up passes, and those passes are sequential by nature.
 No regulator, receptacle, sensor or button is bundled: inventing one is not allowed, so a real board needs real
 parts with their datasheet data. Tests use TEST ONLY stand-ins. Details: [BLOCKS.md](BLOCKS.md).
 
+## Build plan, step 7: solver fixes
+
+| Item | Status | Evidence |
+|---|---|---|
+| Damped Newton with junction limiting (24 V limit) | **Done** | diode and BJT `pnjlim`; the diode sweep 0.3–1000 V converges in at most 14 iterations (was 98 at 24 V and failing above); BJT bias at 12/48/400 V; MOSFET bias at 5/48/400 V; `test_numeric_oracles.Newton`, `.Bjt` |
+| Relative pivot threshold and conditioning estimate | **Done** | n·ε × column max; Hager/Higham κ₁ in every DC analysis, `ill_conditioned` above κ₁·ε = 1e-6; closed-form tests in `matrix_test.c`; audit I-01 (tiny capacitive divider) fixed |
+| Singularity diagnosis that names the cause | **Done** | maximum matching over the Jacobian pattern; parallel sources, floating net, source loop, inductor short each named (`test_numeric_oracles.Diagnosis`) |
+
+Details: [NUMERICAL_ROADMAP.md](NUMERICAL_ROADMAP.md), "Step 7 results".
+

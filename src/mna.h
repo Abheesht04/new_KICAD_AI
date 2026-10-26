@@ -87,6 +87,11 @@ struct MnaAssembly {
 
   size_t node_count;
   size_t unknown_count;
+
+  /* 0: evaluate exactly at x (residual checks, validation, any other caller). Nonzero: a Newton linearisation,
+   * where a nonlinear device may evaluate its junctions at SPICE-limited voltages (pnjlim) relative to its previous
+   * linearisation and stamp the companion model there; 1 marks the first linearisation of a solve (no history). */
+  int limit;
 };
 
 /* --------------------------------------------------------------------------
@@ -129,6 +134,7 @@ typedef struct {
   double saturation_current_a;
   double ideality_factor;
   double temperature_k;
+  double v_last; /* junction voltage of the previous Newton linearisation (solver state) */
 } MnaDiode;
 
 /* --------------------------------------------------------------------------
@@ -189,6 +195,7 @@ typedef struct {
   double nf;
   double nr;
   double temperature_k;
+  double vbe_last, vbc_last; /* junction voltages (polarity applied) of the previous linearisation (solver state) */
 } MnaBjt;
 
 typedef struct {
@@ -277,6 +284,11 @@ typedef struct {
   double absolute_update_tolerance_v;
   double relative_update_tolerance;
 
+  /* 1 (default): nonlinear devices limit their junction voltages between Newton iterations (SPICE pnjlim), so
+   * linearly driven nodes take full steps. maximum_voltage_step_v > 0 additionally scales the whole update so no
+   * node moves more than that (the pre-step-7 behaviour, 0.25 V; default 0 = off). */
+  int junction_limiting;
+
   MnaTraceFn trace;
   void *trace_context;
 
@@ -308,9 +320,16 @@ typedef struct {
   double maximum_residual;
   double maximum_kcl_residual_a;
   double initial_residual_scale;
+  double condition_estimate; /* 1-norm condition estimate of the last Newton Jacobian; NAN if none was factored */
+  size_t singular_unknown;   /* the unknown whose column was found singular, or (size_t)-1 */
 } MnaResult;
 
 void mna_result_free(MnaResult *result);
+
+/* The unknowns (indices: 0..node_count-1 are node voltages of nodes 1..node_count, then device unknowns) that the
+ * system's structure leaves undetermined, from a maximum matching of equations to unknowns over the Jacobian pattern
+ * at x (NULL: zero). Writes up to cap of them and returns how many there are; 0 = structurally nonsingular. */
+size_t mna_structural_deficiency(const MnaCircuit *circuit, const double *x, size_t *unknowns, size_t cap);
 
 void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
                MnaResult *result);

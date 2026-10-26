@@ -126,10 +126,53 @@ static void test_singular_matrix_reports_failure(void)
     sparse_matrix_free(&sparse);
 }
 
+/* Step 7 (S1): a relative pivot test (the same answer for any scaling of the system), the singular column, and the
+ * 1-norm condition estimate against closed forms. */
+static void fill(Matrix *m, const double *v, double scale)
+{
+    for (size_t i = 0; i < m->rows * m->cols; ++i)
+        m->data[i] = v[i] * scale;
+}
+
+static void test_relative_pivot_and_condition(void)
+{
+    /* [[1 2] [3 4]]: ||A||_1 = 6, A^-1 = [[-2 1] [1.5 -0.5]], ||A^-1||_1 = 3.5, kappa_1 = 21. */
+    const double a2[] = {1, 2, 3, 4}, b2[] = {5, 6};
+    Matrix m;
+    MatrixSolveInfo info;
+    double x[3];
+    assert(matrix_create(&m, 2, 2));
+    for (int e = -15; e <= 15; e += 5) {
+        double s = pow(10.0, e), b[2] = {b2[0] * s, b2[1] * s};
+        fill(&m, a2, s);
+        assert(matrix_solve_info(&m, b, x, &info)); /* the old absolute 1e-12 test refused e <= -15 */
+        assert(approx(x[0], -4.0, 1e-12) && approx(x[1], 4.5, 1e-12));
+        assert(approx(info.condition_estimate, 21.0, 1e-9) && info.singular_column == (size_t)-1);
+    }
+    matrix_free(&m);
+
+    /* Tridiagonal Toeplitz (2, -1): symmetric, so kappa_1 = ||A||_1 ||A^-1||_1 with ||A^-1||_1 the largest
+     * column sum of the known inverse; n = 3: inverse = [[3 2 1] [2 4 2] [1 2 3]] / 4, ||A^-1||_1 = 2, ||A||_1 = 4. */
+    const double t3[] = {2, -1, 0, -1, 2, -1, 0, -1, 2}, b3[] = {1, 0, 1};
+    assert(matrix_create(&m, 3, 3));
+    fill(&m, t3, 1.0);
+    assert(matrix_solve_info(&m, b3, x, &info));
+    assert(approx(x[0], 1.0, 1e-12) && approx(x[1], 1.0, 1e-12) && approx(x[2], 1.0, 1e-12));
+    assert(approx(info.condition_estimate, 8.0, 1e-9));
+
+    /* Singular: the third column is the sum of the first two; the factorisation stops at column 2. */
+    const double s3[] = {1, 2, 3, 2, 1, 3, 1, 1, 2};
+    fill(&m, s3, 1e-20);
+    assert(!matrix_solve_info(&m, b3, x, &info));
+    assert(info.singular_column == 2 && isnan(info.condition_estimate));
+    matrix_free(&m);
+}
+
 int main(void)
 {
     test_sparse_stamp_and_solve();
     test_singular_matrix_reports_failure();
+    test_relative_pivot_and_condition();
 
     printf("\n================================\n");
     printf("MATRIX TEST SUITE: PASS\n");
