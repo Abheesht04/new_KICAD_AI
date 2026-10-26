@@ -105,3 +105,23 @@ bulk inserts, largest libraries first); warm re-scan 0.9 s. Details: [KICAD_LIBR
 
 Details: [KICAD_RULES.md](KICAD_RULES.md).
 
+## Build plan, step 4: DFM-aware router
+
+| Item | Status | Evidence |
+|---|---|---|
+| Cost includes margin to rule limits | **Done** | octilinear routing costs steps within 0.1 mm beyond clearance; candidates pay per copper pair within 0.05 mm of the limit; measured margin per candidate; `test_layout.Dfm.test_margin_metric` |
+| 45-degree routing, no acute angles | **Done** | octilinear style, no turn sharper than 90°, no corner cutting; kernel rule `acute_angle` judges every board; `Dfm.test_octilinear_is_shorter...` |
+| Slivers | **Not done** | no sliver check yet (DFM_RULES.md, not implemented) |
+| Via budget | **Cost only** | 20 grid steps per layer change, weight 2 per via; no hard per-net limit |
+| Neck-downs at pads | **Done** | within 0.5 mm of a narrower pad, never below the net's current floor; `Dfm.test_neck_down_never_below_the_current_floor` |
+| Per-net width from current | **Done** | copper-core per-net DC current bound (device residuals, half the absolute sum); only violating nets widened; `(routing (width NET MM))` checked by the kernel (`net_width`) and exported to KiCad; `Dfm.test_per_net_width_from_the_current_bound` |
+| Two judges: exact kernel and KiCad DRC | **Done** | copper-core judges every candidate; with KiCad 9.x the top three are built and KiCad-DRC-checked (`layout.second_judge`); `test_native_gates.SecondJudge`, `Dfm.test_kicad_is_the_second_judge` |
+| C port or threads only after profiling | **Profiled; neither needed yet** | octilinear routing first spent its time in a per-probe neighbourhood scan (7.3 M dict lookups on one board); routed copper now marks the cells it blocks, so a probe is one lookup (multi_connector given placement 3.0 → 0.9 s, identical results); a hopeless connection is refuted by a flood fill (unroutable 69 s → about 1 s). `layout_optimizer` runs both styles in 38 s (35 s before, Manhattan only) |
+
+Results: [LAYOUT_BENCHMARK.md](LAYOUT_BENCHMARK.md).
+
+ESP32 LED design: the chosen octilinear candidate has 222.95 mm and 12 vias, against 252.56 mm and 14 vias.
+Placement and routing take 8.6 s (both styles), and the KiCad judge adds 4 s when KiCad is present. The Manhattan
+candidates of that design had six 0-degree "acute angles": overlapping copies of one segment, the same copper.
+The rule now ignores exact overlaps, and the DFM table tests that case.
+

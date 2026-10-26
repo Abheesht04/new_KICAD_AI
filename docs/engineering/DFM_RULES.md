@@ -28,6 +28,8 @@ a separate, independent gate (`project verify`) and is not counted here.
 | `keepout_violation` | keepouts | tested: passing and failing board | a rule area over the VIN trace |
 | `current_density_budget` | current | tested: passing and failing board | 0.17 mA over 0.007 mm2 = 0.024 A/mm2; an estimate, not IPC-2152 |
 | `trace_drop_budget` | current | tested: passing and failing board | I x rho x L / A per segment |
+| `net_width` | current | tested: passing and failing board | VIN declared 0.25 mm wide, routed at 0.20 mm |
+| `acute_angle` | copper | tested: passing and failing board | VIN segments meeting at 90 degrees (and one overlapping another: the same copper), then at 17 degrees, away from pads |
 | `board_size` | outline | enforced at load (INVALID_INPUT) | boards over 500 mm are refused at load (INVALID_INPUT) |
 | `layer_count` | stack-up | enforced at load (INVALID_INPUT) | only two-layer boards are supported; others are refused at load |
 | `invalid_geometry` | geometry | enforced at load (INVALID_INPUT) | a zero-width trace is refused at load |
@@ -41,10 +43,10 @@ a separate, independent gate (`project verify`) and is not counted here.
 
 - zones, copper pours, planes and thermal relief
 - non-rectangular board outlines, cutouts, slots, castellations
-- arcs and 45-degree tracks
+- arcs
 - more than two copper layers
 - silkscreen checks (only placement keeps silk apart)
-- acute-angle (acid trap) and sliver checks, teardrops, via-in-pad, tenting
+- sliver checks, teardrops, via-in-pad, tenting
 - solder-mask slivers and mask-to-trace clearance
 - paste apertures, stencil ratio, fiducials, tooling holes, panel rails
 - creepage and voltage-dependent clearance

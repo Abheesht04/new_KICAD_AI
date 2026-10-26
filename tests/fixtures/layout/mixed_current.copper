@@ -1,0 +1,61 @@
+; Layout fixture: a 10 ohm load (0.5 A) and a 100k/100k divider (25 uA) on one 5 V supply, no connector, so
+; copper-core bounds every net's DC current: VIN and GND carry 0.500025 A, SIG 25 uA. Only VIN and GND need
+; copper wider than 0.2 mm under the default 20 A/mm2 density budget; SIG must stay at the rule width.
+(copper_project
+  (version 2)
+  (name "mixed_current")
+  (nets GND VIN SIG)
+  (board 30 20 1.6 0.035 2)
+  (parts
+    (part
+      resistor
+      (kind R)
+      (symbol "Device:R")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      voltage
+      (kind V)
+      (catalogue "bundled:default.parts")
+    )
+  )
+  (components
+    (component
+      V1
+      (part voltage)
+      (value 5)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+    )
+    (component
+      R1
+      (part resistor)
+      (value 10)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+    )
+    (component
+      R2
+      (part resistor)
+      (value 100000)
+      (pins
+        (1 VIN)
+        (2 SIG)
+      )
+    )
+    (component
+      R3
+      (part resistor)
+      (value 100000)
+      (pins
+        (1 SIG)
+        (2 GND)
+      )
+    )
+  )
+)

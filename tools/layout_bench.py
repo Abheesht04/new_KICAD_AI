@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Layout benchmark: the pre-optimizer baseline versus the staged optimizer on the layout fixtures.
+"""Layout benchmark: the pre-optimizer baseline, the Manhattan-only optimizer and the DFM-aware optimizer
+(Manhattan and octilinear candidates, per-net widths, clearance margin) on the layout fixtures.
 
 Usage: layout_bench.py [--symbol-dir DIR] [--footprint-dir DIR] [--out FILE.json] [--markdown FILE.md]
                        [--seeds 1,2,3] [--iterations N] [--kicad-cli PATH] [--core PATH]
@@ -20,6 +21,7 @@ FIXTURES = [('divider', ROOT / 'examples/v2/divider.copper'), ('rc_network', ROO
             ('tight_clearance', ROOT / 'tests/fixtures/layout/tight_clearance.copper'),
             ('edge_keepout', ROOT / 'tests/fixtures/layout/edge_keepout.copper'),
             ('high_current', ROOT / 'tests/fixtures/layout/high_current.copper'),
+            ('mixed_current', ROOT / 'tests/fixtures/layout/mixed_current.copper'),
             ('unroutable', ROOT / 'tests/fixtures/layout/unroutable.copper')]
 SNAPSHOT = ROOT / 'examples/generated/divider/libraries'
 
@@ -66,13 +68,19 @@ def main(argv=None):
             continue
         tree = copper.load(path); entry = dict(fixture=name, source=str(path.relative_to(ROOT)).replace('\\', '/'))
         try:
-            base = layout.baseline(tree, fpdir, args.core)
+            try:
+                base = layout.baseline(tree, fpdir, args.core)
+            except ValueError as exc:       # an unplaced project has no pre-optimizer baseline
+                if 'needs a placement' not in str(exc):
+                    raise
+                base = None
+            manhattan, _, _ = layout.optimize(tree, fpdir, args.core, seeds, args.iterations, ('manhattan',))
             best, candidates, problem = layout.optimize(tree, fpdir, args.core, seeds, args.iterations)
         except FileNotFoundError as exc:
             entry.update(status='UNVERIFIED', reason=f'footprint {Path(exc.filename or "?").name} is not in {fpdir}'); results.append(entry); continue
         except (copper.Unverified, ValueError) as exc:
             entry.update(status='UNVERIFIED', reason=str(exc).splitlines()[0]); results.append(entry); continue
-        entry.update(baseline=layout.brief(base), optimized=layout.brief(best), candidates=[layout.brief(c) for c in candidates],
+        entry.update(baseline=layout.brief(base) if base else None, manhattan=layout.brief(manhattan), optimized=layout.brief(best), candidates=[layout.brief(c) for c in candidates],
                      placement_failures=problem['placement_failures'],
                      status='FEASIBLE' if best and best['feasible'] else 'NO_FEASIBLE_BOARD',
                      kicad_drc=kicad_drc(best, name, symdir, fpdir, cli, args.core) if best and best['feasible'] and symdir else
@@ -90,16 +98,20 @@ def main(argv=None):
 
 
 def markdown(doc):
-    rows = ['| Fixture | Run | Feasible | Hard (by rule) | Unrouted | Length mm | Vias | Bends | Width mm | Explored | Blocked | Soft score |',
-            '|---|---|---|---|---|---|---|---|---|---|---|---|']
+    rows = ['| Fixture | Run | Style | Feasible | Hard (by rule) | Unrouted | Length mm | Vias | Bends | Widths mm | Margin mm | Near limit | Explored | Soft score |',
+            '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for r in doc['results']:
         if r.get('status') == 'UNVERIFIED' and 'baseline' not in r:
-            rows.append(f"| {r['fixture']} | — | UNVERIFIED | {r['reason']} | | | | | | | | |"); continue
-        for run in ('baseline', 'optimized'):
+            rows.append(f"| {r['fixture']} | — | | UNVERIFIED | {r['reason']} | | | | | | | | | |"); continue
+        for run in ('baseline', 'manhattan', 'optimized'):
             c = r[run]
+            if c is None:
+                rows.append(f"| {r['fixture']} | {run} | | — | the project has no placement of its own | | | | | | | | | |"); continue
             hard = ', '.join(f'{k} {v}' for k, v in c['hard_by_rule'].items()) or '0'
-            rows.append(f"| {r['fixture']} | {run} | {'yes' if c['feasible'] else 'NO'} | {hard} | {c['unrouted']} | {c['length_mm']:.2f} | {c['vias']} | "
-                        f"{c['bends']} | {c['trace_width_mm']:.2f} | {c['explored']} | {c['blocked_expansions']} | {c['soft_score']:.2f} |")
+            widths = ', '.join(f'{n} {w:.2f}' for n, w in c['widths'].items()) or f"{c['trace_width_mm']:.2f}"
+            margin = '—' if c['clearance_margin_mm'] is None else f"{c['clearance_margin_mm']:.3f}"
+            rows.append(f"| {r['fixture']} | {run} | {c['style']} | {'yes' if c['feasible'] else 'NO'} | {hard} | {c['unrouted']} | {c['length_mm']:.2f} | "
+                        f"{c['vias']} | {c['bends']} | {widths} | {margin} | {c['near_limit_pairs']} | {c['explored']} | {c['soft_score']:.2f} |")
     return '\n'.join(rows) + '\n'
 
 

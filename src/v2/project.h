@@ -100,6 +100,8 @@ typedef struct {
     ModelRegistry models;
     double max_aspect, mask_expansion, min_mask_web, courtyard_gap;
     double max_drop, max_current_density, power_derating, voltage_derating;
+    int octilinear;                     /* (routing (style octilinear)): 45-degree routing was used */
+    double net_width[CP_MAX_NETS];     /* (routing (width NET MM)): declared minimum trace width per net; 0 = rule minimum */
     int has_geometry;
     CpKeepout keepouts[CP_MAX_KEEPOUTS];
     size_t keepout_count;

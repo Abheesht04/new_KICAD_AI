@@ -126,7 +126,9 @@ which takes precedence over the part's data for that component only.
 replaces). No provider infers procurement data from KiCad geometry.
 
 Project fields: `version`, `name`, `nets`, `parts`, `components`, `board`, `rules`,
-`geometry`, `targets`. Unknown or duplicate structured fields are rejected.
+`geometry`, `targets`, `keepouts`, `routing`. Unknown or duplicate structured fields are rejected.
+`(routing (style manhattan|octilinear) (width NET MM) ...)` records how the board was routed and the nets
+routed wider than the minimum; each trace of such a net must be at least that wide (`net_width`).
 Maximum: 256 components, 256 nets, 64 pins per component, rectangular two-layer
 boards up to 500 mm. Integer copper predicates retain the original ±500 mm bound.
 

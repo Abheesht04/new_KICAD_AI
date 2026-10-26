@@ -454,8 +454,37 @@ def compile_spec(text, profile, answers, symdir, out, core):
 
 
 # --------------------------------------------------------------------------- pipeline
-def build_once(text, profile, answers, symdir, fpdir, out, core):
-    """Spec -> .copper -> placement -> KiCad project in `out`. Returns the stage record (no verification)."""
+def kicad_judge(problem, symdir, fpdir, cli, core):
+    """layout.second_judge's judge: the candidate's placed project built through the shipping export into a private
+    folder and checked by KiCad 9.x DRC (copper.native_gates, DRC only)."""
+    import copper, layout
+
+    def judge(candidate):
+        with tempfile.TemporaryDirectory() as d:
+            copper.write_tree(Path(d) / 'p.copper', layout.placed_project(candidate, problem))
+            args = argparse.Namespace(project=str(Path(d) / 'p.copper'), out=str(Path(d) / 'b'), core=core, symbol_dir=str(symdir),
+                                      footprint_dir=str(fpdir), no_route=False, draft=False)
+            with contextlib.redirect_stdout(io.StringIO()):
+                copper.export_project(args)
+            _, gates = copper.native_gates(Path(d) / 'b', cli, ('drc',))
+        return {k: gates[0].get(k) for k in ('status', 'message', 'counts')}
+    return judge
+
+
+def kicad9(cli):
+    """(True, version) when `cli` is a runnable KiCad 9.x kicad-cli, else (False, why)."""
+    if not cli:
+        return False, 'no kicad-cli'
+    try:
+        found = subprocess.run([cli, 'version'], capture_output=True, text=True, timeout=60).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f'kicad-cli could not run: {exc}'
+    return (True, found) if found.startswith('9.') else (False, f'KiCad {found or "?"}: the second judge needs KiCad 9.x')
+
+
+def build_once(text, profile, answers, symdir, fpdir, out, core, cli=None):
+    """Spec -> .copper -> placement -> KiCad project in `out`. Returns the stage record (no verification). With a
+    KiCad 9.x `cli`, KiCad DRC judges the best candidates after copper-core (layout.second_judge)."""
     import copper, layout, spec_ir
     out.mkdir(parents=True, exist_ok=True)
     with stage('compile'):
@@ -471,7 +500,13 @@ def build_once(text, profile, answers, symdir, fpdir, out, core):
     iterations = int(d.take('iterations', 'layout.iterations', 'annealing iterations', convert=lambda v: str(int(v))))
     with stage('placement_routing'):
         best, candidates, problem = layout.optimize(tree, fpdir, core, seeds, iterations)
-    record = dict(intent=intent, spec=spec, decisions=d, notes=notes + lower_notes, catalogue=catalogue, tree=tree,
+    ok, why = kicad9(cli)
+    if ok and best and best['feasible']:
+        with stage('kicad_judge'):
+            best, judged = layout.second_judge(candidates, kicad_judge(problem, symdir, fpdir, cli, core))
+    else:
+        judged = f'not run: {why}'
+    record = dict(kicad_judge=judged, intent=intent, spec=spec, decisions=d, notes=notes + lower_notes, catalogue=catalogue, tree=tree,
                   best=best, candidates=candidates, problem=problem, out=out)
     if not best or not best['feasible']:
         return record
@@ -555,7 +590,8 @@ def _run(text, out, profile_path, answers_text, symbol_dir, footprint_dir, kicad
         else:
             fpdir = found
     try:
-        rec = build_once(text, profile, answers, symdir, fpdir, out, core)
+        cli = copper.discover_cli(kicad_cli)
+        rec = build_once(text, profile, answers, symdir, fpdir, out, core, cli)
     except Stop as exc:
         report.update(status=exc.status, message=str(exc))
         if exc.decisions:
@@ -613,13 +649,12 @@ def _run(text, out, profile_path, answers_text, symbol_dir, footprint_dir, kicad
         report['layout'] = dict(chosen=c, candidates=[layout.brief(x) for x in rec['candidates']])
         report.update(status=worst([v['status'] for v in g.values()]), message='no feasible board was found')
         write_report(out, report); return report
-    report['layout'] = dict(chosen=layout.brief(best), candidates=[layout.brief(x) for x in rec['candidates']])
+    report['layout'] = dict(chosen=layout.brief(best), candidates=[layout.brief(x) for x in rec['candidates']], kicad_judge=rec['kicad_judge'])
     gate(6, 'routing', 'PASS', f"fully connected: {best['routing']['routed_connections']} connections, {best['routing']['length_mm']:.2f} mm, "
          f"{best['routing']['vias']} vias, trace {best['width_rounds'][-1]['trace_width_mm']:.2f} mm ({best['label']})")
     built = json.loads((out / 'build/report.json').read_text()); physical = copper.report_scopes(built)['physical']
     gate(7, 'internal_dfm', physical, [f"{i['severity']}:{i['rule']} {i['object']}" for i in built['issues'] if i['rule'] not in copper.ELECTRICAL_RULES]
          or 'all supported mandatory rules pass')
-    cli = copper.discover_cli(kicad_cli)
     with stage('verify'):
         v = verify_build(out / 'build', cli, core, out / 'placed.copper')
     report['verification'] = v; gates = {x['gate']: x for x in v['gates']}
@@ -639,7 +674,7 @@ def _run(text, out, profile_path, answers_text, symbol_dir, footprint_dir, kicad
         paused = globals()['PROFILE']; globals()['PROFILE'] = None  # the determinism re-run is timed as one stage
         try:
             with paused.stage('determinism_rerun') if paused else contextlib.nullcontext():
-                again = build_once(text, profile, answers, symdir, fpdir, Path(tmp) / 'run2', core)
+                again = build_once(text, profile, answers, symdir, fpdir, Path(tmp) / 'run2', core, cli)
         finally:
             globals()['PROFILE'] = paused
         first, second = artifact_hashes(out), artifact_hashes(Path(tmp) / 'run2') if again.get('manifest') else {}

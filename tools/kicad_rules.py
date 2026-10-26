@@ -48,6 +48,9 @@ def export(tree):
     pro = {'meta': {'filename': 'design.kicad_pro', 'version': 1}, 'board': {'design_settings': {'rules': rules}}}
     dru = '(version 1)\n' + ''.join(f'(rule "Copper_{f.removesuffix("_mm")}" (constraint {c} (min {value(tree, f):g}mm)))\n'
                                     for f, _, _, _, c, _ in LIMITS if c)
+    # Nets routed wider than the minimum (routing (width NET MM)): KiCad checks each one's width as copper-core does.
+    for w in direct(one(tree, 'routing'), 'width'):
+        dru += f'(rule "Copper_net_width_{w[1]}" (condition "A.NetName == \'/{w[1]}\'") (constraint track_width (min {float(w[2]):g}mm)))\n'
     return pro, dru, {s: value(tree, f) for f, _, _, _, _, s in LIMITS if s}
 
 

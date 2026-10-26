@@ -136,6 +136,24 @@ class Content(Base):
         self.assertEqual(copper.board_content(build)['status'], 'UNVERIFIED')
 
 
+class SecondJudge(Base):
+    """design.kicad_judge: a layout candidate is built through the shipping export and judged by KiCad DRC only."""
+    def test_candidates_are_judged_by_kicad_drc(self):
+        import design, layout
+        tree = copper.load(ROOT / 'tests/fixtures/layout/mixed_current.copper')
+        best, cands, problem = layout.optimize(tree, SNAP / 'footprints', CORE, (1,), 30)
+        os.environ['FAKE_TOOLS'] = str(ROOT / 'tools')
+        (self.dir / 'scenario.json').write_text('{}'); os.environ['FAKE_SCENARIO'] = str(self.dir / 'scenario.json')
+        judge = design.kicad_judge(problem, SNAP / 'symbols', SNAP / 'footprints', str(self.cli), CORE)
+        self.assertEqual(design.kicad9(str(self.cli)), (True, '9.0.6'))
+        for scenario, status in (({}, 'PASS'), ({'drc': [ERR]}, 'FAIL'), ({'drc': [WARN]}, 'UNVERIFIED')):
+            (self.dir / 'scenario.json').write_text(json.dumps(scenario)); os.environ['FAKE_SCENARIO'] = str(self.dir / 'scenario.json')
+            self.assertEqual(judge(best)['status'], status, scenario)
+        (self.dir / 'scenario.json').write_text(json.dumps({'drc': [ERR]}))
+        chosen, verdicts = layout.second_judge(cands, judge, limit=2)
+        self.assertEqual([v['status'] for v in verdicts], ['FAIL', 'FAIL']); self.assertIs(chosen, min((c for c in cands if c['feasible']), key=layout.candidate_key))
+
+
 class Placement(unittest.TestCase):
     """A project lowered from a spec has no placements: build places it instead of stacking footprints at (0, 0)."""
     def test_unplaced_project_is_placed_and_partial_is_refused(self):

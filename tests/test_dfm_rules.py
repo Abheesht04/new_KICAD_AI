@@ -60,6 +60,12 @@ def heights(t):
             c.append(parse_sexpr('(override (height_mm 0.55) (provenance "synthetic test height"))'))
 
 
+def routing(text):
+    def f(t):
+        t[:] = [x for x in t if not (isinstance(x, list) and str(x[0]) == 'routing')] + [parse_sexpr(text)]
+    return f
+
+
 def chain(*fns):
     def f(t):
         for fn in fns:
@@ -102,6 +108,9 @@ RULES = [
     ('keepout_violation', 'keepouts', 'board', add('(keepout R1 30 25 35 28 3 15)'), add('(keepout R1 10 11.8 12 12.2 3 15)'), {'keepout_violation'}, 'a rule area over the VIN trace'),
     ('current_density_budget', 'current', 'board', rule('max_current_density_a_mm2', 20), rule('max_current_density_a_mm2', 0.01), {'current_density_budget'}, '0.17 mA over 0.007 mm2 = 0.024 A/mm2; an estimate, not IPC-2152'),
     ('trace_drop_budget', 'current', 'board', rule('max_drop_v', 0.05), rule('max_drop_v', 1e-9), {'trace_drop_budget'}, 'I x rho x L / A per segment'),
+    ('net_width', 'current', 'board', routing('(routing (width VIN 0.2))'), routing('(routing (width VIN 0.25))'), {'net_width'}, 'VIN declared 0.25 mm wide, routed at 0.20 mm'),
+    ('acute_angle', 'copper', 'board', add('(trace VIN 12 12 13 12 0.2 0)', '(trace VIN 12 12 12 12.3 0.2 0)', '(trace VIN 12 12 12.5 12 0.2 0)'),
+     add('(trace VIN 12 12 13 12 0.2 0)', '(trace VIN 12 12 13 12.3 0.2 0)'), {'acute_angle'}, 'VIN segments meeting at 90 degrees (and one overlapping another: the same copper), then at 17 degrees, away from pads'),
     ('board_size', 'outline', 'load', nothing, board('(board 600 30 1.6 0.035 2)'), None, 'boards over 500 mm are refused at load (INVALID_INPUT)'),
     ('layer_count', 'stack-up', 'load', nothing, board('(board 40 30 1.6 0.035 4)'), None, 'only two-layer boards are supported; others are refused at load'),
     ('invalid_geometry', 'geometry', 'load', nothing, add('(trace VIN 12 12 13 12 0 0)'), None, 'a zero-width trace is refused at load'),
@@ -112,8 +121,8 @@ RULES = [
     ('keepout_unverified', 'keepouts', 'internal', None, None, None, 'a copper object could not be compared with a keepout; unsupported shapes are refused earlier'),
 ]
 NOT_IMPLEMENTED = ['zones, copper pours, planes and thermal relief', 'non-rectangular board outlines, cutouts, slots, castellations',
-                   'arcs and 45-degree tracks', 'more than two copper layers', 'silkscreen checks (only placement keeps silk apart)',
-                   'acute-angle (acid trap) and sliver checks, teardrops, via-in-pad, tenting',
+                   'arcs', 'more than two copper layers', 'silkscreen checks (only placement keeps silk apart)',
+                   'sliver checks, teardrops, via-in-pad, tenting',
                    'solder-mask slivers and mask-to-trace clearance', 'paste apertures, stencil ratio, fiducials, tooling holes, panel rails',
                    'creepage and voltage-dependent clearance', 'IPC-2152 ampacity and temperature rise (current checks are estimates)',
                    'impedance, differential pairs, length matching, return paths, EMC, RF, thermal',

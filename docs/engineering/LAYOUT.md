@@ -13,9 +13,42 @@ only that check decides whether a board is feasible. DFM rule ownership is uncha
 
 ## Router and instrumentation
 
-The router is the original candidate router, moved unchanged: 0.25 mm grid, two layers, Manhattan A*,
-via cost 20, nets in sorted order, each net grown from its first pad toward the nearest unconnected pad,
-bounded at 250 000 states per connection. Conservative obstacle envelopes; the exact kernel judges.
+0.25 mm grid, two layers, A*, via cost 20, nets in sorted order, each net grown from its first pad toward the
+nearest unconnected pad, bounded at 250 000 states per connection. Conservative obstacle envelopes; the exact
+kernel judges. Two styles, and every placement candidate is routed in both:
+
+* **manhattan**: the original four-direction router. With default options it is bit-identical to the router
+  before step 4 on every layout fixture: traces, vias and statistics.
+* **octilinear**: 45-degree steps (cost √2) and a turn cost of 0.5 per 45° and 1.5 per 90° turn. No turn
+  sharper than 90° is allowed, so the router never makes an acid trap. The turn is judged against the
+  direction the best path to a cell arrived from, which keeps the search at one state per cell as in Manhattan
+  routing. A diagonal step never cuts past a blocked corner. A goal-directed flood fill over the same moves
+  proves "no path" before the search starts. It is exact: with no corner cutting, the octilinear search
+  reaches exactly what the four-direction flood reaches.
+  The style also prefers clearance: each step that passes within 0.1 mm beyond the clearance of foreign
+  copper, the edge or a keepout costs 2 extra.
+
+**Per-net width from current.** copper-core bounds each net's DC current. Every MNA device is evaluated alone
+at the operating point; its residual on a node row is the current it carries out of that node. A net's bound
+is half the sum of those magnitudes, which no segment of any copper tree joining its pins can exceed. A net
+has no bound when it touches a connector, an MCU pin other than a driven output or pull, or a device with two
+terminals on that net; such a net is charged the whole-circuit current, as before.
+
+When a trace violates the current-density or drop budget, only its net is widened: by the reported ratio,
+rounded up to 0.05 mm, at most 3 mm and at most three rounds. Near a pad narrower than the net's width
+(within 0.5 mm), the trace necks down to the pad's smaller side. The neck never goes below the width the
+net's current needs or the rule minimum.
+
+A widened net is recorded as `(routing (width NET MM))`. copper-core then fails any trace of that net that is
+narrower (`net_width`), and the KiCad export adds a matching `A.NetName` custom rule.
+
+**Clearance margin** is measured for every candidate: the smallest distance between different-net copper
+objects involving a trace or via, minus the clearance. Pads are taken as full rectangles, so the margin is
+never overstated. Each pair within 0.05 mm of the limit is a soft cost (`near_limit_pairs`).
+
+**Speed.** Routed copper marks the cells it blocks per probe kind (width, via, margin) when it is committed,
+so each probe is one lookup instead of a neighbourhood scan. The test and its distances are the same, so
+results are bit-identical.
 
 It now reports, per net: connections, routed connections, explored states, length, bends, vias and failures
 (`pad_escape`, `no_path`, `state_limit`), plus wall time. Per board: unrouted connections with their pads,
@@ -37,8 +70,10 @@ Hard (a candidate with any of these is infeasible; no soft gain can buy one back
 * the selected profile's clearance, width, drill, annular, hole and mask rules;
 * supported geometry only: geometry copper-core cannot judge (`dfm_engine`, `keepout_unverified`) makes the
   candidate *unjudged*, which ranks below every judged candidate and is never a pass;
-* current-density and drop budgets from the circuit's explicit loads (copper-core's conservative
-  whole-circuit supply current applied to every segment).
+* current-density and drop budgets: each trace is charged its net's DC current bound, or the whole-circuit
+  supply current when the net has none;
+* each net's declared `(routing (width ...))`; no acute angle (`acute_angle`: two segments of one net meeting
+  at under 90° outside a pad of that net).
 
 Soft (reported separately, compared only between candidates with identical hard standing), with weights:
 
@@ -51,6 +86,7 @@ Soft (reported separately, compared only between candidates with identical hard 
 | placement area, bounding box of courtyards (mm²) | 0.01 |
 | decoupling distance: capacitor on an MCU supply/ground pair to that supply pin (mm) | 1.0 |
 | footprint keepout (e.g. antenna) distance from the board edge (mm) | 0.5 |
+| copper pairs within 0.05 mm of the clearance limit | 1.0 |
 
 Selection is lexicographic: `(judged, hard violations, unrouted connections, soft score, candidate index)`.
 Routing time is reported but never compared (it is not reproducible). Net classes for sensitive nets do not
@@ -68,11 +104,15 @@ exist yet, so "length of sensitive nets" is reported per net only.
 2. **Improvement**: seeded simulated annealing per seed (`random.Random(seed)`, fixed iterations, geometric
    cooling 0.997, moves shift / rotate / swap). Illegal states are rejected outright, never penalised. Cost:
    half-perimeter wirelength plus the weighted placement soft terms.
-3. **Routing** of every candidate with rip-up/reroute.
-4. **Exact post-check** with copper-core on the candidate's full geometry.
-5. **Feedback**: a current-density or drop-budget violation widens all traces by the reported ratio (rounded
-   up to 0.05 mm, at most 3 mm, at most three rounds) and the candidate is re-routed and re-checked. A widened
-   width is written into the placed project as its (stricter) `trace_width_mm`.
+3. **Routing** of every candidate in both styles with rip-up/reroute.
+4. **Exact post-check** with copper-core on the candidate's full geometry: the first judge.
+5. **Feedback**: a current-density or drop-budget violation widens the violating nets (above) and the
+   candidate is re-routed and re-checked. The placed project records `(routing (style ...) (width NET MM) ...)`,
+   so a build reproduces the proven copper exactly (tested).
+5a. **Second judge** (`pcba design` with a KiCad 9.x CLI): the top three feasible candidates, in copper-core's
+   order, are built through the shipping export and checked by KiCad DRC. The first that KiCad does not FAIL is
+   chosen. Every verdict is in `design.json` → `layout.kicad_judge`, and without KiCad 9.x that entry says
+   "not run".
 6. **Limits and snapshot**: candidates are the given placement (when every part has one), the constructive
    placement and one annealed placement per seed; the best candidate's full resolved geometry is kept.
 7. **Baseline comparison**: `layout_bench.py` measures the pre-optimizer pipeline (given placement, one
@@ -97,6 +137,10 @@ copper-core checks board keepouts exactly like footprint keepouts (`keepout_viol
 * Annealing has not beaten the constructive placement on the current fixtures (see the benchmark); it is kept
   as a deterministic candidate source, not claimed as an improvement.
 * Placement is grid-based (1 mm, four rotations); there is no analytic or global placer.
-* Trace width is uniform per board; per-net widths need net classes and a per-net current model.
-* The current budget is copper-core's whole-circuit bound, so widening is conservative for small branches.
+* A net touching a connector or MCU supply has no DC current bound and is charged the whole-circuit current;
+  declaring connector currents is not supported yet.
+* The via budget is a cost (20 grid steps per layer change, weight 2 per via), not a hard limit.
+* The octilinear router keeps one state per cell; it can miss a path that only a worse arrival direction would
+  allow. It is still checked exactly, and the Manhattan candidate is always judged next to it.
+* No teardrops, arcs or sliver checks yet.
 * Silkscreen spacing is a conservative estimate; KiCad DRC is the authority for silkscreen.

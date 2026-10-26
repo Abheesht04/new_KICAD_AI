@@ -308,6 +308,27 @@ static int load_rules(CpProject *p,const IRNode *n,char *e,size_t cap) {
 #undef RULE
     return 1;
 }
+/* (routing (style manhattan|octilinear) (width NET MM) ...): how the board was routed (recorded so a build reproduces
+ * the proven candidate) and nets routed wider than the rule minimum, e.g. for their current. Each trace of such a net
+ * must be at least that wide (rule net_width); the value can never undercut the profile's minimum trace width. */
+static int load_routing(CpProject *p,const IRNode *n,char *e,size_t cap) {
+    int styled=0;
+    for(size_t i=1;i<ir_list_length(n);i++) {
+        const IRNode *w=ir_child_at(n,i); size_t net=net_index(p,txt(w,1)); double mm=0;
+        if(!strcmp(txt(w,0),"style")) {
+            if(styled++ || ir_list_length(w)!=2 || (strcmp(txt(w,1),"manhattan") && strcmp(txt(w,1),"octilinear")))
+                return errorf(e,cap,"routing: expected one (style manhattan) or (style octilinear)");
+            p->octilinear=!strcmp(txt(w,1),"octilinear"); continue;
+        }
+        if(strcmp(txt(w,0),"width") || ir_list_length(w)!=3) return errorf(e,cap,"routing: expected (style ...) or (width NET MM)");
+        if(net==SIZE_MAX) return errorf(e,cap,"routing: unknown net %s",txt(w,1));
+        if(p->net_width[net]>0) return errorf(e,cap,"routing: net %s has two widths",txt(w,1));
+        if(!num(w,2,&mm) || mm<p->fab.min_trace_width_mm || mm>10)
+            return errorf(e,cap,"routing: width of %s must be from the minimum trace width (%g mm) to 10 mm",txt(w,1),p->fab.min_trace_width_mm);
+        p->net_width[net]=mm;
+    }
+    return 1;
+}
 static size_t pin_index(const CpComponent *c,const char *pin) {
     for(size_t k=0;k<c->pin_count;k++) if(!strcmp(c->pins[k],pin)) return k;
     return SIZE_MAX;
@@ -348,7 +369,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     if(!p->root) return errorf(e,cap,"Parse at %zu:%zu: %s",ie.line,ie.column,ie.message?ie.message:"I/O failure");
     const IRNode *root=p->root;
     if(strcmp(txt(root,0),"copper_project") || strcmp(field(root,"version"),"2")) return errorf(e,cap,"Expected (copper_project (version 2) ...)");
-    if(!fields(root,1,"|version||name||nets||parts||components||board||rules||geometry||targets||keepouts|",e,cap)) return 0;
+    if(!fields(root,1,"|version||name||nets||parts||components||board||rules||geometry||targets||keepouts||routing|",e,cap)) return 0;
     p->name=field(root,"name");
     const IRNode *nets=ir_list_find(root,"nets");
     if(ir_list_length(nets)<2 || strcmp(txt(nets,1),"GND")) return errorf(e,cap,"nets must begin with GND");
@@ -364,6 +385,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
     p->board.spec=(PcbBoardSpec){dims[0],dims[1],dims[2],dims[3],2};
     p->fab.max_board_width_mm=p->fab.max_board_height_mm=500;
     if(!load_rules(p,ir_list_find(root,"rules"),e,cap)) return 0;
+    if(!load_routing(p,ir_list_find(root,"routing"),e,cap)) return 0;
     const IRNode *parts=ir_list_find(root,"parts"), *cs=ir_list_find(root,"components");
     for(size_t i=1;i<ir_list_length(parts);i++) {
         const IRNode *part=ir_child_at(parts,i); PartInfo info;
@@ -682,6 +704,32 @@ static void physical(const CpProject *p,Report *r) {
         const PcbDfmIssue *d=pcb_dfm_issue_get(&dr,i); char ref[64]; snprintf(ref,sizeof ref,"%s:%u",pcb_dfm_object_kind_name(d->object_kind),d->object_id);
         issue(r,d->severity==PCB_DFM_ERROR?2:1,pcb_dfm_rule_name(d->rule),ref,d->measured,d->limit,d->message);
     } pcb_dfm_report_free(&dr);
+    for(size_t i=0;i<vec_len(b->traces);i++) {
+        const PcbTrace *t=&b->traces[i]; double want=p->net_width[t->net_id-1]; char ref[64]; snprintf(ref,sizeof ref,"trace:%zu",i);
+        if(want>0 && t->width_mm<want-1e-9) issue(r,2,"net_width",ref,t->width_mm,want,"Trace is narrower than its net's declared (routing (width ...)).");
+    }
+    /* Acid traps: two segments of one net and layer meeting at an end point at less than 90 degrees. A corner inside a
+     * pad of that net is filled by the pad's copper and is not a trap. */
+    for(size_t i=0;i<vec_len(b->traces);i++) for(size_t j=i+1;j<vec_len(b->traces);j++) {
+        const PcbTrace *s=&b->traces[i], *t=&b->traces[j];
+        if(s->net_id!=t->net_id || s->layer!=t->layer) continue;
+        double se[2][2]={{s->x1_mm,s->y1_mm},{s->x2_mm,s->y2_mm}}, te[2][2]={{t->x1_mm,t->y1_mm},{t->x2_mm,t->y2_mm}};
+        for(int a=0;a<2;a++) for(int c=0;c<2;c++) {
+            if(fabs(se[a][0]-te[c][0])>1e-6 || fabs(se[a][1]-te[c][1])>1e-6) continue;
+            double ux=se[1-a][0]-se[a][0], uy=se[1-a][1]-se[a][1], vx=te[1-c][0]-te[c][0], vy=te[1-c][1]-te[c][1];
+            double lu=hypot(ux,uy), lv=hypot(vx,vy);
+            double cosine=(ux*vx+uy*vy)/(lu*lv);
+            /* cos > 0: under 90 degrees. cos = 1: one segment lies along the other (the same copper), no wedge. */
+            if(lu<1e-9 || lv<1e-9 || cosine<=1e-9 || cosine>1-1e-12) continue;
+            int covered=0;
+            for(size_t k=0;k<vec_len(b->pads) && !covered;k++) {
+                const PcbPad *pd=&b->pads[k]; double w=pd->width_mm>0?pd->width_mm:pd->pad_diameter_mm, h=pd->height_mm>0?pd->height_mm:pd->pad_diameter_mm;
+                covered=pd->net_id==s->net_id && (pd->drill_mm>0 || pd->layer==s->layer) && fabs(se[a][0]-pd->x_mm)<=w/2 && fabs(se[a][1]-pd->y_mm)<=h/2;
+            }
+            if(!covered) { char ref[64]; snprintf(ref,sizeof ref,"trace:%zu",j);
+                issue(r,2,"acute_angle",ref,acos(cosine)*57.29577951308232,90,"Two segments of one net meet at under 90 degrees (acid trap)."); }
+        }
+    }
     for(size_t i=0;i<p->component_count;i++) {
         const CpComponent *c=&p->components[i]; if(c->kind=='V'||c->kind=='I') continue;
         if(!c->height_mm.known) issue(r,1,"height_unknown",c->ref,0,0,"Assembly height is not supplied by the part catalogue.");
@@ -926,6 +974,40 @@ static void mcu_checks(const CpProject *p,const MnaCircuit *m,const MnaResult *r
         }
     }
 }
+/* Per-net DC current bound for the trace budgets. Each MNA device is evaluated alone at the solved operating
+ * point: its residual on a node row is the current it carries out of that node (ground: minus the sum). A net's
+ * bound is half the sum of those magnitudes, which no segment of any copper tree joining its terminals can exceed
+ * (KCL: a segment carries the current of one side). Unknown (-1) where the analysis does not determine a pin's
+ * current: connectors, MCU pins other than driven outputs and pulls, a device with two terminals on one net. */
+static void net_current_bounds(const CpProject *p,const MnaCircuit *m,const MnaResult *res,const DcExtra *dx,double *bound) {
+    double sum[CP_MAX_NETS]={0}; unsigned char unknown[CP_MAX_NETS]={0};
+    for(size_t i=0;i<p->component_count;i++) {
+        const CpComponent *c=&p->components[i];
+        if(!c->model) {
+            for(size_t k=0;k<c->pin_count;k++) {
+                int driven=0;
+                for(size_t d=0;d<dx->drive_count;d++) if(dx->drive[d].component==i && dx->drive[d].pin==k) driven=1;
+                if(!driven) unknown[c->nodes[k]]=1;
+            }
+            continue;
+        }
+        size_t nodes[DEVICE_MODEL_MAX_TERMINALS]; terminal_nodes(c,nodes);
+        for(size_t a=0;a<c->model->terminal_count;a++) for(size_t b=a+1;b<c->model->terminal_count;b++)
+            if(nodes[a]==nodes[b]) unknown[nodes[a]]=1;
+    }
+    double *rows=calloc(m->unknown_count?m->unknown_count:1,sizeof *rows); Matrix scratch={0};
+    int ok=rows && matrix_create(&scratch,m->unknown_count,m->unknown_count);
+    for(size_t i=0;ok && i<m->device_count;i++) {
+        const MnaDevice *d=mna_device_at(m,i); double out=0;
+        memset(rows,0,m->unknown_count*sizeof *rows);
+        MnaAssembly a={res->x,&scratch,rows,m->node_count,m->unknown_count};
+        if(!d->ops->load(d->data,d,&a)) { ok=0; break; }
+        for(size_t n=1;n<=m->node_count && n<CP_MAX_NETS;n++) { sum[n]+=fabs(rows[n-1]); out+=rows[n-1]; }
+        sum[0]+=fabs(out);
+    }
+    for(size_t n=0;n<p->net_count;n++) bound[n]=ok && !unknown[n] ? sum[n]/2 : -1;
+    free(rows); if(scratch.data) matrix_free(&scratch);
+}
 int cp_analyze(const CpProject *p,FILE *f) {
     MnaCircuit m={0}; MnaResult result={0}; MnaOptions opt; MnaValidation valid={0}; mna_options_default(&opt);
     const char *rule="mna_failure"; char why[256]; DcExtra dx;
@@ -964,22 +1046,26 @@ int cp_analyze(const CpProject *p,FILE *f) {
             if(v<lo || v>hi) issue(&r,2,"voltage_target",txt(t,1),v,v<lo?lo:hi,"Solved node voltage is outside required interval.");
         }
     }
-    /* Conservative whole-circuit supply-current budget, not a routed-network solve.
-       Apply it to every segment: pessimistic but cannot understate DC branch demand
-       for the supported passive networks. No temperature rise is claimed. */
-    double budget=0; size_t source_index=0;
+    /* Trace current budgets, not a routed-network solve. A trace of a net with a known DC bound
+       (net_current_bounds) carries at most that; any other trace is charged the conservative
+       whole-circuit supply current. Neither understates DC demand for the supported networks.
+       No temperature rise is claimed. */
+    double budget=0, net_bound[CP_MAX_NETS]; size_t source_index=0;
+    for(size_t i=0;i<CP_MAX_NETS;i++) net_bound[i]=-1;
     if(solved) for(size_t i=0;i<p->component_count;i++) {
         const CpComponent *c=&p->components[i];
         if(c->kind=='V' || c->kind=='L') budget+=fabs(mna_voltage_source_current(&m,&result,source_index++));
         if(c->kind=='I') budget+=fabs(c->value);
     }
+    if(solved) net_current_bounds(p,&m,&result,&dx,net_bound);
+#define TRACE_CURRENT(t) (net_bound[(t)->net_id-1]>=0 ? net_bound[(t)->net_id-1] : budget)
     if(solved && p->has_geometry) for(size_t i=0;i<vec_len(p->board.traces);i++) {
-        const PcbTrace *t=&p->board.traces[i];
+        const PcbTrace *t=&p->board.traces[i]; double current=TRACE_CURRENT(t);
         double area=t->width_mm*p->board.spec.copper_thickness_mm;
         double resistance=.00001724*hypot(t->x2_mm-t->x1_mm,t->y2_mm-t->y1_mm)/area;
         char object[64];snprintf(object,sizeof object,"trace:%zu",i);
-        if(budget/area>p->max_current_density) issue(&r,2,"current_density_budget",object,budget/area,p->max_current_density,"Conservative DC supply-current / copper area exceeds user heuristic (not IPC thermal certification).");
-        if(budget*resistance>p->max_drop) issue(&r,2,"trace_drop_budget",object,budget*resistance,p->max_drop,"I_budget * rho_20C * length / copper area exceeds allowed segment drop.");
+        if(current/area>p->max_current_density) issue(&r,2,"current_density_budget",object,current/area,p->max_current_density,"DC current bound / copper area exceeds user heuristic (not IPC thermal certification).");
+        if(current*resistance>p->max_drop) issue(&r,2,"trace_drop_budget",object,current*resistance,p->max_drop,"I_bound * rho_20C * length / copper area exceeds allowed segment drop.");
     }
     double corner_lo[CP_MAX_NETS]={0},corner_hi[CP_MAX_NETS]={0};
     if(solved)for(size_t i=0;i<p->net_count;i++)corner_lo[i]=corner_hi[i]=mna_node_voltage(&result,i);
@@ -1001,9 +1087,15 @@ int cp_analyze(const CpProject *p,FILE *f) {
         const PcbTrace *t=&p->board.traces[i];double area=t->width_mm*p->board.spec.copper_thickness_mm;
         double resistance=.00001724*hypot(t->x2_mm-t->x1_mm,t->y2_mm-t->y1_mm)/area;
         if(i)fputc(',',f);
-        fprintf(f,"{\"trace\":%zu,\"current_budget_a\":%.12g,\"resistance_ohm_20c\":%.12g,\"drop_budget_v\":%.12g,\"loss_budget_w\":%.12g}",i,budget,resistance,budget*resistance,budget*budget*resistance);
+        double current=TRACE_CURRENT(t);
+        fprintf(f,"{\"trace\":%zu,\"net\":",i); js(f,p->nets[t->net_id-1]);
+        fprintf(f,",\"current_basis\":\"%s\",\"current_budget_a\":%.12g,\"resistance_ohm_20c\":%.12g,\"drop_budget_v\":%.12g,\"loss_budget_w\":%.12g}",net_bound[t->net_id-1]>=0?"net":"circuit",current,resistance,current*resistance,current*current*resistance);
     }
-    fputc(']',f); components_json(p,f);
+    fputs("],\"net_current_bounds\":[",f);
+    for(size_t i=0;i<p->net_count;i++) { if(i) fputc(',',f); fputs("{\"name\":",f); js(f,p->nets[i]);
+        if(net_bound[i]>=0) fprintf(f,",\"bound_a\":%.12g}",net_bound[i]); else fputs(",\"bound_a\":null}",f); }
+#undef TRACE_CURRENT
+    fprintf(f,"],\"circuit_current_a\":%.12g",budget); components_json(p,f);
     fprintf(f,",\"mna_residual\":%.12g,\"kcl_residual_a\":%.12g,\"errors\":%d,\"warnings\":%d,\"coverage\":\"DC R/C-open/L-short/D/V/I/Q/M, ideal connectors and MCU behavioral boundaries (DC constraints only; firmware and silicon not simulated); exact supported copper; rectangular footprint keepouts; rectangular assembly envelopes. AC and transient are separate analyses (simulate ac/transient). No thermal field, SI, EMC, zones or fabrication certification.\"}\n",solved?result.maximum_residual:0,solved?result.maximum_kcl_residual_a:0,r.errors,r.warnings);
     mna_result_free(&result);mna_circuit_free(&m);return ferror(f)?3:(r.errors?2:0);
 }

@@ -6,13 +6,14 @@ Exit status: 0 all ran and passed, 1 failure, 77 something was skipped (a fixtur
 Uses the committed KiCad 9 library snapshot (R_0603, PinHeader_1x03); the RC fixture also needs
 Capacitor_SMD and runs only with KICAD_FOOTPRINT_DIR.
 """
-import copy, json, os, sys, unittest
+import copy, json, os, subprocess, sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CORE = str(Path(sys.argv.pop(1)).resolve()) if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else str(ROOT / 'build-local/copper-core')
 os.environ['COPPER_CORE'] = CORE
 sys.path.insert(0, str(ROOT / 'tools'))
 import copper, layout
+from hwc_kicad import parse_sexpr as parse
 FP = ROOT / 'examples/generated/divider/libraries/footprints'
 FIX = ROOT / 'tests/fixtures/layout'
 SEEDS, ITER = (1, 2), 200
@@ -43,7 +44,7 @@ class Router(unittest.TestCase):
         self.assertEqual(stats['explored'], sum(n['explored'] for n in stats['nets']))
         self.assertGreater(stats['explored'], 0); self.assertIn('hotspots', stats['congestion'])
         for n in stats['nets']:
-            self.assertEqual(set(n), {'net', 'connections', 'routed', 'explored', 'length_mm', 'bends', 'vias', 'failures', 'time_s'})
+            self.assertEqual(set(n), {'net', 'connections', 'routed', 'explored', 'length_mm', 'bends', 'vias', 'failures', 'width_mm', 'time_s'})
     def test_deterministic(self):
         self.assertEqual(stable(self.route()), stable(self.route()))
     def test_failures_are_reported_not_raised(self):
@@ -58,6 +59,97 @@ class Router(unittest.TestCase):
         p = self.problem
         _, _, stats = layout.route_with_ripup(self.pads, p['width'], p['height'], p['trace_width'], p['clearance'], p['edge'], p['via'])
         self.assertEqual(len(stats['ripup_passes']), 1); self.assertEqual(stats['ripup_passes'][0]['unrouted'], 0)
+
+
+class Dfm(unittest.TestCase):
+    """The DFM-aware router: 45-degree routing without acute corners, per-net widths from DC current bounds,
+    neck-downs, clearance margin, and builds that reproduce the candidate copper-core proved."""
+    def placement(self, name):
+        tree = copper.load(FIX / f'{name}.copper'); problem = layout.problem_from(tree, FP)
+        return tree, problem, layout.initial_placement(problem)[0]
+
+    def test_octilinear_is_shorter_with_45_degree_steps_and_no_acute_corner(self):
+        tree, problem, pl = self.placement('multi_connector')
+        man = layout.evaluate(tree, problem, pl, FP, CORE, 0, 'm', style='manhattan')
+        octo = layout.evaluate(tree, problem, pl, FP, CORE, 1, 'o', style='octilinear')
+        self.assertTrue(man['feasible'] and octo['feasible'], (man['hard_by_rule'], octo['hard_by_rule']))
+        self.assertLess(octo['routing']['length_mm'], man['routing']['length_mm'])
+        self.assertNotIn('error:acute_angle', octo['findings_by_rule'])
+        segs = [tuple(map(float, t[2:6])) for t in copper.direct(copper.one(octo['resolved'], 'geometry'), 'trace')]
+        grid = lambda v: abs(v / layout.GRID - round(v / layout.GRID)) < 1e-9
+        routed = [s for s in segs if all(map(grid, s))]           # pad stubs end at pad centres, off the grid
+        self.assertTrue(any(abs(s[2] - s[0]) == abs(s[3] - s[1]) > 0 for s in routed), 'some 45-degree segments')
+        for x1, y1, x2, y2 in routed:
+            dx, dy = abs(x2 - x1), abs(y2 - y1)
+            self.assertTrue(dx == 0 or dy == 0 or abs(dx - dy) < 1e-9, (x1, y1, x2, y2))
+        self.assertEqual(copper.text_at(copper.one(octo['resolved'], 'routing'), 'style'), 'octilinear')
+
+    def test_octilinear_proves_no_path_exactly_where_manhattan_does(self):
+        tree = copper.load(FIX / 'unroutable.copper'); problem = layout.problem_from(tree, FP); pl = dict(problem['given'])
+        a, b = (layout.evaluate(tree, problem, pl, FP, CORE, 0, s, style=s)['routing']['unrouted'] for s in layout.STYLES)
+        self.assertEqual([(u['net'], u['connection']) for u in a], [(u['net'], u['connection']) for u in b])
+        self.assertEqual({u['reason'] for u in b}, {'no_path'})
+
+    def test_per_net_width_from_the_current_bound(self):
+        tree, problem, pl = self.placement('mixed_current')
+        report, _ = copper.core_run(FIX / 'mixed_current.copper', CORE)
+        bounds = {n['name']: n['bound_a'] for n in report['net_current_bounds']}
+        self.assertAlmostEqual(bounds['VIN'], 5 / 10 + 5 / 200000, places=12); self.assertAlmostEqual(bounds['SIG'], 2.5e-5, places=12)
+        self.assertAlmostEqual(bounds['GND'], bounds['VIN'], places=12)
+        best = layout.evaluate(tree, problem, pl, FP, CORE, 0, 'x', style='manhattan')
+        self.assertTrue(best['feasible'], best['hard_by_rule'])
+        self.assertEqual(set(best['widths']), {'VIN', 'GND'}); self.assertTrue(all(w >= 0.5 / (20 * 0.035) for w in best['widths'].values()))
+        geo = copper.one(best['resolved'], 'geometry')
+        self.assertEqual({float(t[6]) for t in copper.direct(geo, 'trace') if str(t[1]) == 'SIG'}, {0.2}, 'the 25 uA net stays at the rule width')
+        calc = copper.core_check(best['resolved'], CORE)['trace_calculations']
+        self.assertEqual({c['current_basis'] for c in calc}, {'net'})
+
+    def test_neck_down_never_below_the_current_floor(self):
+        pads = [dict(ref='A', pin='1', net='P', x=5, y=5, w=.3, h=.3, through=False),
+                dict(ref='B', pin='1', net='P', x=15, y=5, w=.3, h=.3, through=False)]
+        traces, _, stats = layout.route(pads, 20, 10, .2, .2, .3, widths={'P': .6}, min_widths={'P': .4})
+        self.assertEqual(stats['unrouted'], [])
+        widths = sorted({t[5] for t in traces}); self.assertEqual(widths, [.4, .6])
+        zone = .15 + layout.NECK_ZONE + 1e-9    # a necked segment touches a pad's neck-down zone
+        for t in traces:
+            if t[5] == .4:
+                self.assertTrue(any(abs(x - p['x']) <= zone and abs(y - p['y']) <= zone for x, y in ((t[1], t[2]), (t[3], t[4])) for p in pads), t)
+
+    def test_margin_metric(self):
+        resolved = copper.sx('copper_project', copper.sx('geometry',
+            *[parse('(trace A 0 0 10 0 0.2 0)'), parse('(trace B 0 0.7 10 0.7 0.2 0)'), parse('(trace C 0 0 0 5 0.2 2)')]))
+        worst, near = layout.clearance_margins(resolved, 0.2)
+        self.assertAlmostEqual(worst, 0.7 - 0.2 - 0.2, places=9); self.assertEqual(near, 0)   # C is on the other layer
+        self.assertEqual(layout.clearance_margins(resolved, 0.48), (round(0.5 - 0.48, 6), 1))
+
+    def test_kicad_is_the_second_judge(self):
+        cands = [dict(label=l, feasible=f, judged=True, hard_violations=0, unrouted=0, soft_score=s, index=i)
+                 for i, (l, f, s) in enumerate([('a', True, 3.0), ('b', True, 1.0), ('c', False, 0.0), ('d', True, 2.0)])]
+        script = {'b': 'FAIL', 'd': 'UNVERIFIED', 'a': 'PASS'}; asked = []
+        judge = lambda c: (asked.append(c['label']), dict(status=script[c['label']], message=c['label']))[1]
+        best, verdicts = layout.second_judge(cands, judge)
+        self.assertEqual(asked, ['b', 'd'], 'copper-core ranking order; infeasible candidates are never judged')
+        self.assertEqual(best['label'], 'd'); self.assertEqual([v['status'] for v in verdicts], ['FAIL', 'UNVERIFIED'])
+        best, verdicts = layout.second_judge(cands, lambda c: dict(status='FAIL'), limit=2)
+        self.assertEqual((best['label'], len(verdicts), best['kicad_drc']['status']), ('b', 2, 'FAIL'))
+
+    def test_a_build_reproduces_the_chosen_candidate(self):
+        tree = copper.load(FIX / 'mixed_current.copper')
+        best, _, problem = layout.optimize(tree, FP, CORE, (1,), 50)
+        self.assertTrue(best['feasible'])
+        placed = layout.placed_project(best, problem)
+        with tempfile.TemporaryDirectory() as d:
+            copper.write_tree(Path(d) / 'p.copper', placed)
+            r = subprocess.run([sys.executable, str(ROOT / 'tools/copper.py'), 'build', str(Path(d) / 'p.copper'), '--out', str(Path(d) / 'b'),
+                                '--core', CORE, '--symbol-dir', str(ROOT / 'examples/generated/divider/libraries/symbols'), '--footprint-dir', str(FP)],
+                               capture_output=True, text=True)
+            self.assertIn(r.returncode, (0, 2), r.stderr)
+            built = [x for x in copper.one(copper.load(Path(d) / 'b/resolved.copper'), 'geometry') if str(x[0]) in ('trace', 'via')]
+            proven = [x for x in copper.one(best['resolved'], 'geometry') if str(x[0]) in ('trace', 'via')]
+            self.assertEqual(copper.dump_sexpr(copper.sx('g', *built)), copper.dump_sexpr(copper.sx('g', *proven)))
+            dru = (Path(d) / 'b/design.kicad_dru').read_text()
+            for net, w in best['widths'].items():
+                self.assertIn(f"(condition \"A.NetName == '/{net}'\") (constraint track_width (min {w:g}mm))", dru)
 
 
 class Legality(unittest.TestCase):
@@ -138,8 +230,10 @@ class Fixtures(unittest.TestCase):
         tree = copper.load(FIX / 'high_current.copper'); base, best, cands, problem = self.run_fixture('high_current')
         self.assertIsNone(copper.one(tree, 'rules'), 'fixture has no (rules ...) block')
         placed = layout.placed_project(best, problem)
-        self.assertGreaterEqual(float(copper.text_at(copper.one(placed, 'rules'), 'trace_width_mm')), 0.7)
-        self.assertIsNone(copper.one(placed, 'geometry'))
+        widths = {str(w[1]): float(w[2]) for w in copper.direct(copper.one(placed, 'routing'), 'width')}
+        self.assertTrue(widths, 'the widened nets are recorded per net in (routing (width NET MM))')
+        self.assertTrue(all(w >= 0.7 for w in widths.values()), widths)
+        self.assertEqual(widths, best['widths']); self.assertIsNone(copper.one(placed, 'geometry'))
     def test_optimizer_is_deterministic(self):
         tree = copper.load(FIX / 'multi_connector.copper')
         a = layout.optimize(tree, FP, CORE, SEEDS, ITER); b = layout.optimize(tree, FP, CORE, SEEDS, ITER)

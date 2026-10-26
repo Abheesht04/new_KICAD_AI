@@ -299,12 +299,13 @@ def footprint_geometry(c,fpdir,netids,stem,ncnets=None):
     for k in keepouts:geo.append(sx('keepout',A(c['ref']),*map(number,[k['x1'],k['y1'],k['x2'],k['y2'],k['layers'],k['flags']])))
     return fp,pads,geo,keepouts
 
-def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6,keepouts=()):
-    """The build's router (tools/layout.py): deterministic 2-layer Manhattan A* with rip-up/reroute.
-    Conservative obstacle envelopes; C exact geometry and KiCad DRC judge the result. A connection that
-    cannot be routed fails the build: no partial route is claimed."""
+def route(pads,width,height,trace_width,clearance,edge,via_diameter=.6,keepouts=(),**options):
+    """The build's router (tools/layout.py): deterministic 2-layer A* with rip-up/reroute, in the style and with the
+    per-net widths the project's (routing ...) records (layout.routing_options). Conservative obstacle envelopes;
+    C exact geometry and KiCad DRC judge the result. A connection that cannot be routed fails the build: no
+    partial route is claimed."""
     import layout
-    traces,vias,stats=layout.route_with_ripup(pads,width,height,trace_width,clearance,edge,via_diameter,keepouts)
+    traces,vias,stats=layout.route_with_ripup(pads,width,height,trace_width,clearance,edge,via_diameter,keepouts,**options)
     if stats['unrouted']:
         u=stats['unrouted'][0]
         if u['reason']=='pad_escape':raise Failed(f"Cannot escape pad on net {u['net']}; edit placement or constraints")
@@ -334,7 +335,7 @@ def auto_place(tree,fpdir,core):
         c=layout.brief(best) if best else None
         raise Failed('no feasible placement was found for this unplaced project'+(f": best candidate has {c['hard_violations']} hard violation(s) {c['hard_by_rule']} and {c['unrouted']} unrouted connection(s)" if c else ': '+'; '.join(problem['placement_failures'])))
     record={'source':'generated: layout.optimize (seed 1, 300 iterations), exact copper-core re-check','candidate':best['label'],
-            'trace_width_mm':best['width_rounds'][-1]['trace_width_mm'],'positions':best['placement']}
+            'trace_width_mm':best['width_rounds'][-1]['trace_width_mm'],'style':best['style'],'widths':best['widths'],'positions':best['placement']}
     return layout.placed_project(best,problem),record
 def export_project(args):
     project=Path(args.project).resolve();tree=load(project);out=Path(args.out).resolve();out.mkdir(parents=True,exist_ok=True)
@@ -368,7 +369,8 @@ def export_project(args):
         if c['kind'] in ('V','I'):continue
         fp,pp,gg,kk=footprint_geometry(c,fpdir,netids,stem,ncnets);board.append(fp);pads.extend(pp);geometry.extend(gg);keepouts.extend(kk)
     traces=[];vias=[]
-    if not args.no_route:traces,vias=route(pads,w,h,rule(tree,'trace_width_mm',.2),rule(tree,'clearance_mm',.2),rule(tree,'edge_mm',.3),rule(tree,'via_diameter_mm',.6),keepouts)
+    import layout
+    if not args.no_route:traces,vias=route(pads,w,h,rule(tree,'trace_width_mm',.2),rule(tree,'clearance_mm',.2),rule(tree,'edge_mm',.3),rule(tree,'via_diameter_mm',.6),keepouts,**layout.routing_options(tree,report))
     for i,(net,x1,y1,x2,y2,width,layer) in enumerate(traces):
         board.append(sx('segment',sx('start',number(x1),number(y1)),sx('end',number(x2),number(y2)),sx('width',number(width)),sx('layer',Q('F.Cu' if layer==0 else 'B.Cu')),sx('net',A(str(netids[net]))),sx('uuid',Q(uid('track/'+str(i))))))
         geometry.append(sx('trace',A(net),*map(number,[x1,y1,x2,y2,width,layer])))
@@ -467,8 +469,9 @@ def board_content(out):
     ok=not missing and not wrong
     return {'check':'board_content','status':'PASS' if ok else 'FAIL','counts':{'footprints':len(footprints),'pads':pads,'nets':nets},
             'message':f'{len(footprints)} footprints, {pads} pads, {nets} named nets, as the electrical IR requires' if ok else f'missing footprints {missing}; pads not on their IR net {wrong[:10]}'}
-def native_gates(out,cli):
-    """KiCad 9.x ERC/DRC/netlist plus independent pin/net parity. Returns (version, gates)."""
+def native_gates(out,cli,labels=('erc','drc','netlist')):
+    """KiCad 9.x ERC/DRC/netlist plus independent pin/net parity (with the netlist). Returns (version, gates).
+    labels: the subset to run, e.g. ('drc',) for the layout optimizer's second judge."""
     version=None;error='KiCad CLI not found; set --kicad-cli'
     if cli:
         try:version=subprocess.run([cli,'version'],capture_output=True,text=True,timeout=30)
@@ -478,7 +481,7 @@ def native_gates(out,cli):
     found=version.stdout.strip()
     if not re.match(r'^9\.',found):return found,[{'gate':'kicad_version','status':'UNVERIFIED','message':f'Native validation targets KiCad 9.x only; found {found}'}]
     gates=[]
-    for label,cmd in [('erc',['sch','erc','--format','json','--exit-code-violations','-o',str(out/'erc.json'),str(out/'design.kicad_sch')]),('drc',['pcb','drc','--format','json','--all-track-errors','--schematic-parity','--exit-code-violations','-o',str(out/'drc.json'),str(out/'design.kicad_pcb')]),('netlist',['sch','export','netlist','--format','kicadxml','-o',str(out/'netlist.xml'),str(out/'design.kicad_sch')])]:
+    for label,cmd in [c for c in [('erc',['sch','erc','--format','json','--exit-code-violations','-o',str(out/'erc.json'),str(out/'design.kicad_sch')]),('drc',['pcb','drc','--format','json','--all-track-errors','--schematic-parity','--exit-code-violations','-o',str(out/'drc.json'),str(out/'design.kicad_pcb')]),('netlist',['sch','export','netlist','--format','kicadxml','-o',str(out/'netlist.xml'),str(out/'design.kicad_sch')])] if c[0] in labels]:
         report=out/('netlist.xml' if label=='netlist' else f'{label}.json')
         report.unlink(missing_ok=True)  # a stale report from an earlier run must never be read as this run's result
         try:r=subprocess.run([cli,*cmd],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
@@ -487,6 +490,7 @@ def native_gates(out,cli):
         gate={'gate':label,'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr}
         gate.update(native_status(label,r.returncode,report));gates.append(gate)
     # Compare all electrical physical-pin mappings against KiCad's own extracted netlist.
+    if 'netlist' not in labels:return found,gates
     if gates[-1]['status']=='PASS':
         import xml.etree.ElementTree as ET
         root=ET.parse(out/'netlist.xml').getroot();actual={}
