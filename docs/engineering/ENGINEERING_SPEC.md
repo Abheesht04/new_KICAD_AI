@@ -137,6 +137,7 @@ one of these forms (words in brackets are optional):
 | requirement | `OUT must be between 3.2 V and 3.4 V`, `the voltage at OUT should stay within 3.2 V and 3.4 V`, `OUT must be 3.3 V ± 3%`, `VIN must be at least 4.5 V`, `the current through R1 must be below 10 mA` |
 | board | `the board is 40 x 30 mm with 2 layers`, `board: 40 mm x 30 mm`, `two layers` |
 | analysis | `run a DC analysis`, `simulate dc`, `run an AC sweep from 10 Hz to 100 kHz with 50 points`, `transient with step 1 us for 1 ms using trapezoidal` |
+| block | `use block i2c_pullups: vdd=VDD scl=SCL sda=SDA mode=fast bus_capacitance=100pF`: one clause, `key=value` pairs; see [BLOCKS.md](BLOCKS.md) |
 | profile, name | `use catalogue my.parts`, `use dfm profile ../profiles/conservative.rules`, `name: divider` |
 
 * **Quantities**: SI prefixes `p n u µ m k K M meg G`, units `ohm Ω F H V A W Hz s mm cm mil %`,

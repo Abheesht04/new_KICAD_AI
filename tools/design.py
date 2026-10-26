@@ -203,7 +203,7 @@ def eseries_at_least(series, value, core):
 # --------------------------------------------------------------------------- compile: intent -> complete spec
 def compile_spec(text, profile, answers, symdir, out, core):
     """Returns (intent, complete spec, decisions, notes, catalogue path). Raises Stop for questions and errors."""
-    import copper, spec_ir, spec_nlp
+    import blocks, copper, spec_ir, spec_nlp
     from hwc_kicad import one, text_at, direct
     intent, parse_errors = spec_nlp.parse(text)
     errors, _ = spec_ir.validate(copy.deepcopy(intent))
@@ -372,18 +372,8 @@ def compile_spec(text, profile, answers, symdir, out, core):
         return pin_net[pin]
 
     reference = one(mcu, 'reference')
-    for entry in (reference or [None])[1:]:
-        kind = str(entry[0])
-        if kind == 'provenance':
-            continue
-        pin = str(entry[1]); why = f'{mcu_id} reference circuit: {text_at(reference, "provenance")}'
-        for value in (float(v) for v in entry[2:]):
-            if kind == 'decouple':
-                c = add('capacitor', value, None, f'decoupling on supply pin {pin}; {why}'); connect(c, '1', vdd); connect(c, '2', gnd)
-            elif kind == 'pull_up':
-                r = add('resistor', value, None, f'pull-up on pin {pin} ({names.get(pin, pin)}); {why}'); connect(r, '1', vdd); connect(r, '2', mcu_net(pin))
-            elif kind == 'cap_to_ground':
-                c = add('capacitor', value, None, f'capacitor to ground on pin {pin} ({names.get(pin, pin)}); {why}'); connect(c, '1', mcu_net(pin)); connect(c, '2', gnd)
+    blocks.reference_parts(reference, mcu_id, lambda role, value, why: add(role, value, None, why), connect, lambda pin: vdd, gnd,
+                           mcu_net, lambda pin: names.get(pin, pin))
     if not reference:
         notes.append(f'{mcu_id} has no reference circuit in the catalogue: no decoupling or reset network was added')
     program = pins_of(mcu, 'program')

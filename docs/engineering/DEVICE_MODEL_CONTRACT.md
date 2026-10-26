@@ -96,6 +96,7 @@ behaviour must come from the model's own charge or capacitance, never from a DC 
 | `ideal.current_source` | I | p, n | current A, [-1e12, 1e12], from `value` |
 | `ebers_moll.npn` / `.pnp` (v1) | Q | collector, base, emitter (explicit pin map) | is_a, beta_f, beta_r, nf, nr (SPICE defaults) |
 | `level1.nmos` / `.pmos` (v1) | M | drain, gate, source (explicit pin map) | vto (required), kp, w, l, lambda |
+| `ideal.ldo` (v1) | U | in, out, gnd (explicit pin map) | vout V from `value`; dropout_v V (required), iout_max_a A (required), iq_a A default 0. DC and transient; limits checked after the solve ([BLOCKS.md](BLOCKS.md)) |
 
 Q and M parts must name their model; see [NONLINEAR_MODELS.md](NONLINEAR_MODELS.md).
 
@@ -127,6 +128,7 @@ manufacturer mpn datasheet`:
 | `(pinmap (<terminal> <pin> [<pad>]) ...)` | Map every model terminal exactly once to a distinct symbol pin. A pad, if given, must equal the pin: KiCad pairs symbol pin N with footprint pad N, so a remap needs a dedicated symbol or footprint |
 | `(<param> <value>)` | Non-primary model parameters, e.g. `(is_a 1e-12)` on a diode. A parameter the bound model doesn't have is rejected |
 | `(provenance "...")` | Where the part's data comes from |
+| `(reference (KEY VALUE ...) ... (provenance "..."))` | Datasheet application data that circuit blocks use (pin roles, reference-circuit values); its provenance is mandatory. On an unmodelled U, `(supply ...)` makes it a declared DC boundary |
 | `(catalogue "...")` | Which catalogue the definition came from. `project new` writes it |
 
 Ratings and height (`power_w`, `voltage_v`, `height_mm`): an absent field, or `unknown`, is

@@ -1,0 +1,19 @@
+; TEST ONLY: stand-in parts for the circuit-block tests (tests/test_blocks.py). The symbols and footprints are
+; generic KiCad connectors and every number is synthetic; none of this describes a real component.
+(catalogue
+ (part test_usb_c (kind J)
+  (symbol "Connector_Generic:Conn_01x06") (footprint "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical")
+  (reference (vbus 1) (gnd 2) (cc1 3) (cc2 4) (nc 5 6) (provenance "TEST ONLY: synthetic pin roles"))
+  (provenance "TEST ONLY: stand-in for a USB-C receptacle"))
+ (part test_ldo (kind U) (model ideal.ldo) (dropout_v 0.3) (iout_max_a 0.2) (iq_a 5e-5) (pinmap (in 1) (out 2) (gnd 3))
+  (symbol "Connector_Generic:Conn_01x03") (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
+  (reference (in 1) (out 2) (gnd 3) (output_v 3.3) (input_cap 1e-6) (output_cap 1e-6) (provenance "TEST ONLY: synthetic regulator data"))
+  (provenance "TEST ONLY: synthetic regulator limits"))
+ (part test_sensor (kind U)
+  (symbol "Connector_Generic:Conn_01x05") (footprint "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical")
+  (reference (supply 1) (ground 2) (scl 3) (sda 4) (nc 5) (decouple 1 100e-9) (provenance "TEST ONLY: synthetic sensor pin roles"))
+  (provenance "TEST ONLY: stand-in for an I2C sensor"))
+ (part test_button (kind J)
+  (symbol "Connector_Generic:Conn_01x02") (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical")
+  (reference (a 1) (b 2) (provenance "TEST ONLY: synthetic push button"))
+  (provenance "TEST ONLY: stand-in for a push button")))

@@ -101,7 +101,8 @@ static void test_registry(void)
     char err[256];
     model_registry_init(&reg);
     assert(model_registry_register_builtin_devices(&reg, err, sizeof err));
-    assert(model_registry_device_count(&reg) == 10); /* 6 passives/sources/diode + NPN, PNP, NMOS, PMOS */
+    assert(model_registry_device_count(&reg) == 11); /* 6 passives/sources/diode + NPN, PNP, NMOS, PMOS + ideal LDO */
+    assert(model_registry_find_device(&reg, "ideal.ldo") && !strcmp(model_registry_find_device(&reg, "ideal.ldo")->family, "regulator"));
 
     /* Duplicate ids fail, whether built-in or user-supplied. */
     assert(!model_registry_register_builtin_devices(&reg, err, sizeof err));
@@ -131,6 +132,12 @@ static void test_registry(void)
         assert(m->terminal_count == (transistor ? 3u : 2u) && m->primary_param == (transistor || !strcmp(m->family, "diode") ? -1 : 0));
         assert(m->ac_branch_count == (size_t)(!strcmp(m->family, "voltage_source") || !strcmp(m->family, "inductor")));
     }
+    /* The ideal regulator: DC and transient only (no AC model), in/out/gnd, vout from (value ...), memoryless. */
+    const DeviceModelSpec *ldo = model_registry_device_at(&reg, 10);
+    assert(!strcmp(ldo->id, "ideal.ldo") && device_model_validate_spec(ldo, err, sizeof err));
+    assert(device_model_supports(ldo, DEVICE_ANALYSIS_DC) && device_model_supports(ldo, DEVICE_ANALYSIS_TRANSIENT));
+    assert(!device_model_supports(ldo, DEVICE_ANALYSIS_AC) && !ldo->stamp_ac && ldo->terminal_count == 3 && ldo->primary_param == 0);
+    assert(ldo->state_count == 0 && !ldo->needs_operating_point && !ldo->ac_excitation);
     assert(!device_model_supports(NULL, DEVICE_ANALYSIS_DC));
     model_registry_free(&reg);
 }

@@ -218,14 +218,14 @@ class Lowering(unittest.TestCase):
 class Independence(unittest.TestCase):
     RETIRED=('nlp_rules','transformer','Extras/','tokenizer')
     def test_frontend_shares_nothing_with_the_retired_nlp(self):
-        for name in ('spec_nlp.py','spec_ir.py'):
+        for name in ('spec_nlp.py','spec_ir.py','blocks.py'):
             source=(ROOT/'tools'/name).read_text(encoding='utf-8')
             imports=set()
             for node in ast.walk(ast.parse(source)):
                 if isinstance(node,ast.Import):imports|={a.name for a in node.names}
                 if isinstance(node,ast.ImportFrom):imports.add(node.module)
             self.assertLessEqual(imports,{'__future__','hashlib','json','math','re','unicodedata','dataclasses','pathlib','typing',
-                                          'hwc_kicad','spec_ir','copper'},name)
+                                          'hwc_kicad','spec_ir','copper','blocks','subprocess','copy'},name)
             code='\n'.join(l for l in source.splitlines() if not l.lstrip().startswith('#'))
             for word in self.RETIRED:self.assertNotIn(word,code.replace('retired NLP code',''),f'{name} mentions {word}')
 

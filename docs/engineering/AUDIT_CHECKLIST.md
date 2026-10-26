@@ -147,3 +147,17 @@ Measured on this 4-logical-core machine (1500 iterations, 3 seeds, wall clock):
 Each search's wall time is now bounded by its slowest single candidate. That is typically a congested given
 placement that needs rip-up passes, and those passes are sequential by nature.
 
+## Build plan, step 6: circuit blocks
+
+| Block in the plan | Status | Source of its values |
+|---|---|---|
+| LDO | **Done** (`ldo`) | the regulator part's datasheet data; copper-core's new `ideal.ldo` model and `regulator_dropout` / `regulator_current` / `regulator_reverse` / dissipation checks |
+| USB-C power | **Done** (`usb_c_sink`) | USB Type-C specification Rd = 5.1 kΩ; the receptacle part's pin roles |
+| I2C sensor | **Done** (`i2c_sensor`, `i2c_pullups`) | NXP UM10204 pull-up sizing (Rp min/max formulas, mode limits); the sensor part's pin roles and decoupling |
+| Decoupling | **Done** (`reference_circuit`) | the part's datasheet reference circuit (one implementation, also used by `pcba design`) |
+| Reset/boot | **Done** (`reset_boot`) | the MCU catalogue's reset pin and strapping notes |
+| Provenance for every value | **Done** | every added value is listed with `standard` / `part` / `param` and its text; `(reference ...)` without provenance is refused by copper-core |
+
+No regulator, receptacle, sensor or button is bundled: inventing one is not allowed, so a real board needs real
+parts with their datasheet data. Tests use TEST ONLY stand-ins. Details: [BLOCKS.md](BLOCKS.md).
+

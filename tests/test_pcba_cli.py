@@ -15,7 +15,7 @@ FIX_SYM=ROOT/'examples/generated/divider/libraries/symbols'
 FIX_FP=ROOT/'examples/generated/divider/libraries/footprints'
 ESC='\x1b'
 STABLE={'help','version','doctor','test','project new','project check','project build','project verify','project fabricate',
-        'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library env','library scan','library search','library pair','rules import','dfm check',
+        'simulate dc','simulate ac','simulate transient','parts search','parts add','parts remove','library env','library scan','library search','library pair','rules import','blocks','dfm check',
         'spec parse','spec check','spec lower','parts import','place','route','design'}
 PLANNED=set()  # every command is implemented; the NOT_IMPLEMENTED mechanism stays for future stages
 EXIT={'PASS':0,'FAIL':1,'INVALID_INPUT':2,'UNVERIFIED':3,'NOT_IMPLEMENTED':4,'USAGE':64,'ERROR':70}
@@ -90,7 +90,7 @@ class Usage(Base):
                 ['simulate','ac',rc,'--start','1','--stop','10','--points','0'],['simulate','ac',rc,'--start','1','--stop','10','--points','1'],
                 ['simulate','ac',rc,'--start','nan','--stop','10','--points','3','--sweep','lin'],['simulate','ac',rc,'--start','1','--stop','10','--points','3','--sweep','cubic'],
                 ['dfm','check'],['library','scan','extra'],['library','scan','--jobs','0'],['library','search'],
-                ['library','search','x','--kind','both'],['library','pair','Device:R','--limit','x'],['library','env','extra'],['rules','import'],['rules','import','x'],['rules','import','x','--out','y','--date','26-10-2026'],['doctor','extra'],['test','--quick','--full'],['test','--bogus'],
+                ['library','search','x','--kind','both'],['library','pair','Device:R','--limit','x'],['library','env','extra'],['rules','import'],['blocks','extra'],['rules','import','x'],['rules','import','x','--out','y','--date','26-10-2026'],['doctor','extra'],['test','--quick','--full'],['test','--bogus'],
                 ['version','extra'],['help','no-such-command'],['spec','parse'],['spec','parse','a 1k resistor','--file','f.txt'],
                 ['spec','check'],['spec','lower','x.espec'],['parts','import'],['parts','import','a.parts','--bogus']]
         for argv in cases:

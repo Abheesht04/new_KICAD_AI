@@ -91,6 +91,7 @@ typedef struct {
     CpQuantity power_w, voltage_v, height_mm;
     const char *family, *role;
     CpMcu *mcu;
+    int ic_boundary;
 } PartInfo;
 static int pin_listed(const char *const *pins,size_t count,const char *pin) {
     for(size_t i=0;i<count;i++) if(!strcmp(pins[i],pin)) return 1;
@@ -202,10 +203,12 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     out->kind=*kind;
     const IRNode *model=ir_list_find(part,"model");
     if(model) {
-        if(!kind_family(out->kind)) return errorf(e,cap,"part %s: kind %c has no device model; remove (model ...)",id,out->kind);
+        /* U is an unmodelled IC (an MCU boundary) unless it binds a regulator model. */
+        const char *family=out->kind=='U' ? "regulator" : kind_family(out->kind);
+        if(!family) return errorf(e,cap,"part %s: kind %c has no device model; remove (model ...)",id,out->kind);
         out->model=model_registry_find_device(&p->models,txt(model,1)); out->model_source="explicit";
         if(ir_list_length(model)!=2 || !out->model) return errorf(e,cap,"part %s: unknown device model '%s'",id,txt(model,1));
-        if(strcmp(out->model->family,kind_family(out->kind))) return errorf(e,cap,"part %s: model %s is a %s, not kind %c",id,out->model->id,out->model->family,out->kind);
+        if(strcmp(out->model->family,family)) return errorf(e,cap,"part %s: model %s is a %s, not kind %c",id,out->model->id,out->model->family,out->kind);
     } else if(kind_default_model(out->kind)) {
         out->model=model_registry_find_device(&p->models,kind_default_model(out->kind)); out->model_source="kind_default";
         if(!out->model) return errorf(e,cap,"built-in device model %s is not registered",kind_default_model(out->kind));
@@ -213,7 +216,7 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
         return errorf(e,cap,"part %s: kind %c needs an explicit (model ...); polarity is never inferred",id,out->kind);
     } else out->model_source="none";
     /* Identity and data fields, plus the bound model's non-primary parameters; anything else is rejected. */
-    char allowed[768]="|kind||symbol||footprint||power_w||voltage_v||tolerance||height_mm||manufacturer||mpn||datasheet||model||pinmap||provenance||catalogue||family||role||alternates||mcu|";
+    char allowed[768]="|kind||symbol||footprint||power_w||voltage_v||tolerance||height_mm||manufacturer||mpn||datasheet||model||pinmap||provenance||catalogue||family||role||alternates||mcu||reference|";
     for(size_t k=0;out->model && k<out->model->param_count;k++) if((int)k!=out->model->primary_param) {
         size_t used=strlen(allowed); snprintf(allowed+used,sizeof allowed-used,"|%s|",out->model->params[k].name);
     }
@@ -235,6 +238,18 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     for(size_t j=1;j<ir_list_length(alternates);j++) {
         if(!id_ok(txt(alternates,j)) || !strcmp(txt(alternates,j),id)) return errorf(e,cap,"part %s: invalid alternate '%s'",id,txt(alternates,j));
         for(size_t k=1;k<j;k++) if(!strcmp(txt(alternates,j),txt(alternates,k))) return errorf(e,cap,"part %s: alternate %s is listed twice",id,txt(alternates,j));
+    }
+    /* (reference (KEY VALUE ...) ... (provenance "...")): datasheet application data (pin roles, reference-circuit
+     * values) that circuit blocks use (tools/blocks.py). Recorded, never a model value; the source is mandatory. */
+    const IRNode *reference=ir_list_find(part,"reference");
+    if(reference) {
+        const IRNode *source_text=ir_list_find(reference,"provenance");
+        if(!source_text || ir_list_length(source_text)!=2 || !*txt(source_text,1)) return errorf(e,cap,"part %s: (reference ...) needs (provenance \"datasheet ...\")",id);
+        for(size_t k=1;k<ir_list_length(reference);k++) {
+            const IRNode *entry=ir_child_at(reference,k);
+            if(ir_list_length(entry)<2 || !id_ok(txt(entry,0))) return errorf(e,cap,"part %s: reference entries are (KEY VALUE ...)",id);
+        }
+        out->ic_boundary=out->kind=='U' && !out->model && ir_list_find(reference,"supply");
     }
     const IRNode *mcu=ir_list_find(part,"mcu");
     if(mcu && out->kind!='U') return errorf(e,cap,"part %s: (mcu ...) is only valid on kind U",id);
@@ -405,7 +420,7 @@ int cp_load(CpProject *p,const char *path,char *e,size_t cap) {
         c->provenance=field(part,"provenance"); c->catalogue=field(part,"catalogue"); c->override_provenance="";
         c->kind=info.kind; c->model=info.model; c->model_source=info.model_source; c->tolerance=info.tolerance;
         c->power_w=info.power_w; c->voltage_v=info.voltage_v; c->height_mm=info.height_mm;
-        c->family=info.family; c->role=info.role; c->mcu=info.mcu;
+        c->family=info.family; c->role=info.role; c->mcu=info.mcu; c->ic_boundary=info.ic_boundary;
         /* A model's primary parameter comes from (value ...); an omitted value is never defaulted. */
         int primary=c->model ? c->model->primary_param : -1;
         const IRNode *value=ir_list_find(n,"value");
@@ -535,6 +550,7 @@ typedef struct {
     struct { size_t component, pin, branch; int ideal; } drive[CP_MAX_DRIVES];
     size_t drive_count;
     unsigned char boundary[CP_MAX_NETS]; /* 1: only connectors, MCU pins or nothing touch this net */
+    size_t device_first[CP_MAX_COMPONENTS]; /* the component's first MNA device */
 } DcExtra;
 static size_t branch_count(const MnaCircuit *m) {
     size_t n=0, local;
@@ -571,7 +587,7 @@ static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why
     for(size_t i=0;i<p->component_count;i++) {
         const CpComponent *c=&p->components[i]; size_t nodes[DEVICE_MODEL_MAX_TERMINALS];
         if(!c->model) {
-            if(c->kind=='J' || c->mcu) continue; /* Ideal connector / MCU boundary: stamped below. */
+            if(c->kind=='J' || c->mcu || c->ic_boundary) continue; /* Ideal connector, MCU or declared-IC boundary. */
             *rule="unsupported_model"; snprintf(why,cap,"%s: part %s (kind %c) has no device model; analysis is blocked.",c->ref,c->part,c->kind);
             return 0; /* Never silently omit an active unmodelled device. */
         }
@@ -582,6 +598,7 @@ static int assemble(const CpProject *p,MnaCircuit *m,const char **rule,char *why
         }
         DeviceStampContext ctx={analysis,0.0,NULL,0};
         terminal_nodes(c,nodes);
+        if(x) x->device_first[i]=m->device_count;
         if(!c->model->stamp_dc(m,nodes,c->params,&ctx)) {
             *rule="model_stamp"; snprintf(why,cap,"%s: model %s could not be stamped (allocation failure).",c->ref,c->model->id);
             return 0;
@@ -1008,6 +1025,20 @@ static void net_current_bounds(const CpProject *p,const MnaCircuit *m,const MnaR
     for(size_t n=0;n<p->net_count;n++) bound[n]=ok && !unknown[n] ? sum[n]/2 : -1;
     free(rows); if(scratch.data) matrix_free(&scratch);
 }
+/* After the DC solve, an ideal regulator (ideal.ldo) is held to the datasheet limits it does not model: the input
+ * must exceed vout by the dropout, the load must not exceed iout_max_a, the output must source (a linear regulator
+ * does not sink), and the dissipation (Vin - Vout) * Iout + Vin * Iq must stay within the derated power rating. */
+static void regulator_checks(const CpComponent *c,const MnaCircuit *m,const MnaResult *res,size_t device,double derating,Report *r) {
+    double vin=mna_node_voltage(res,c->nodes[c->terminal_pin[0]])-mna_node_voltage(res,c->nodes[c->terminal_pin[2]]);
+    double vout=c->params[0], dropout=c->params[1], imax=c->params[2], iq=c->params[3]; size_t b;
+    if(!mna_device_unknown_index(mna_device_at(m,device),0,&b)) return;
+    double iout=-res->x[b], watts=(vin-vout)*fmax(iout,0)+vin*iq;
+    if(vin<vout+dropout) issue(r,2,"regulator_dropout",c->ref,vin,vout+dropout,"Input is below the output voltage plus the datasheet dropout: the regulator cannot regulate.");
+    if(iout>imax) issue(r,2,"regulator_current",c->ref,iout,imax,"Load current exceeds the regulator's datasheet maximum output current.");
+    if(iout<-1e-12) issue(r,2,"regulator_reverse",c->ref,iout,0,"The circuit drives current into the regulator output; a linear regulator does not sink current.");
+    if(!c->power_w.known) issue(r,1,"rating_unknown",c->ref,watts,0,"Regulator power rating is unknown; dissipation (Vin - Vout) * Iout + Vin * Iq not verified.");
+    else if(watts>c->power_w.value*derating) issue(r,2,"power_derating",c->ref,watts,c->power_w.value*derating,"Regulator dissipation exceeds its derated power rating.");
+}
 int cp_analyze(const CpProject *p,FILE *f) {
     MnaCircuit m={0}; MnaResult result={0}; MnaOptions opt; MnaValidation valid={0}; mna_options_default(&opt);
     const char *rule="mna_failure"; char why[256]; DcExtra dx;
@@ -1022,6 +1053,8 @@ int cp_analyze(const CpProject *p,FILE *f) {
     if(solved) for(size_t i=1;i<p->net_count;i++) if(dx.boundary[i] && degree[i]>=2)
         issue(&r,1,"boundary_net",p->nets[i],0,0,"Only connector, MCU or other boundary pins touch this net: its DC voltage is undefined (reported as null).");
     if(solved) mcu_checks(p,&m,&result,&dx,&r);
+    for(size_t i=0;i<p->component_count;i++) if(p->components[i].ic_boundary)
+        issue(&r,1,"ic_supply_current",p->components[i].ref,0,0,"Unmodelled IC (a DC boundary): its supply and pin currents are not modelled; rail drop and trace current budgets exclude it.");
     if(solved) {
         for(size_t i=0;i<p->component_count;i++) {
             const CpComponent *c=&p->components[i]; if(!c->model||c->kind=='V'||c->kind=='I') continue;
@@ -1033,6 +1066,7 @@ int cp_analyze(const CpProject *p,FILE *f) {
             }
             if(!c->voltage_v.known) issue(&r,1,"rating_unknown",c->ref,0,0,"Voltage rating not supplied by catalogue; not verified.");
             else if(fabs(v)>c->voltage_v.value*p->voltage_derating) issue(&r,2,"voltage_derating",c->ref,fabs(v),c->voltage_v.value*p->voltage_derating,"Operating voltage exceeds derated rating.");
+            if(!strcmp(c->model->family,"regulator")) regulator_checks(c,&m,&result,dx.device_first[i],p->power_derating,&r);
             if(c->kind=='R') {
                 double watts=v*v/c->value;
                 if(!c->power_w.known) issue(&r,1,"rating_unknown",c->ref,watts,0,"Resistor power rating is unknown.");

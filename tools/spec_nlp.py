@@ -249,6 +249,20 @@ class Frontend:
         if m:
             self.spec.name = ir.Attr(m.group(1).strip('"\' '))
             return True
+        m = re.match(r'^use (?:the )?block (\w+)(?:\s*:\s*|\s+with\s+|\s*$)(.*)$', clause, re.I)
+        if m:
+            import blocks
+            use = blocks.Use(m.group(1).lower()); rest = m.group(2)
+            pairs = re.findall(r'(\w+)\s*=\s*("[^"]*"|\S+)', rest)
+            if re.sub(r'(\w+)\s*=\s*("[^"]*"|\S+)', '', rest).strip(' ,'):
+                self.error(clause, 'block parameters are written key=value (e.g. use block i2c_pullups: vdd=3V3 scl=SCL ...)')
+                return True
+            for key, value in pairs:
+                value = value.strip('"'); q = QTY.fullmatch(value)
+                parts = decompose(q.group('suf'), bool(q.group('sp'))) if q and q.group('num') and q.group('suf') else None
+                use.params[key.lower()] = ir.Quantity(float(q.group('num')) * parts[0], parts[1]) if parts and parts[1] else ir.Attr(value)
+            self.spec.blocks.append(use)
+            return True
         m = re.match(r'^use (?:the )?(?:(?P<kind>parts catalogue|parts catalog|catalogue|catalog|dfm rules|dfm profile|dfm)'
                      r')(?: file)?\s+"?(?P<path>[^"]+?)"?$', clause, re.I)
         if m:

@@ -342,6 +342,14 @@ static int run_library(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs 
     return backend(ctx, cmd, &b);
 }
 
+/* blocks: the circuit blocks a spec can use (tools/blocks.py). */
+static int run_blocks(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    (void)a;
+    Bargs b = {{0}, 0};
+    push(&b, "blocks");
+    return backend(ctx, cmd, &b);
+}
+
 /* rules import: a KiCad project's design rules -> a (rules ...) profile (tools/kicad_rules.py). */
 static int run_rules_import(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     static const char *const map[][2] = {{"--out", "--out"}, {"--base", "--base"}, {"--date", "--date"},
@@ -667,6 +675,11 @@ static const PcbaCommand COMMANDS[] = {
      "feasible, DIR/routed.copper. An unroutable board is FAIL with its unrouted connections, never a partial "
      "pass.",
      "pcba route placed.copper --out out/route", OPTS(ROUTE_OPTIONS), NULL, run_layout},
+    {NULL, "blocks", "", 0, 0, "List the circuit blocks a spec can use and their parameters",
+     "Reusable circuits (I2C pull-ups, USB-C sink, LDO, I2C sensor, reset/boot, a part's reference circuit). A spec "
+     "declares one with 'use block NAME: key=value ...'; every value it adds comes from a cited standard, the bound "
+     "part's datasheet data or a stated parameter, and a missing one is a question.",
+     "pcba blocks\npcba blocks --json", NONE, NULL, run_blocks},
     {"rules", "import", "<project.kicad_pro|folder>", 1, 1, "Turn a KiCad project's design rules into a Copper profile",
      "Reads the board constraints and net classes (.kicad_pro), custom rules (.kicad_dru) and mask settings "
      "(.kicad_pcb setup). Each limit is the strictest KiCad applies to every object, recorded with its source and the "

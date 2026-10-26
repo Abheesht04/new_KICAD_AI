@@ -65,6 +65,7 @@ typedef struct {
     const char *ref, *part, *symbol, *footprint;
     const char *family, *role;       /* logical family and role from the part, or "" */
     const CpMcu *mcu;                /* MCU behavioral boundary, or NULL */
+    int ic_boundary;                 /* unmodelled IC whose (reference (supply ...)) declares it: a DC boundary */
     unsigned char drive[CP_MAX_PINS];/* CP_DRIVE_* per pin, MCU only */
     const char *nc[CP_MAX_PINS];     /* pins deliberately left unconnected */
     size_t nc_count;

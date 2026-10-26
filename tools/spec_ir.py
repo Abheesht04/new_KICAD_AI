@@ -11,6 +11,7 @@ a missing decision becomes a clarification question, an invalid explicit value a
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -45,6 +46,8 @@ ROLES = {
     'sensor':         dict(prefix='U', unit=None, required=False, positive=False, terminals=None, part=None),
     'mosfet':         dict(prefix='Q', unit=None, required=False, positive=False, terminals=None, part=None),
     'bjt':            dict(prefix='Q', unit=None, required=False, positive=False, terminals=None, part=None),
+    'regulator':      dict(prefix='U', unit='V', required=True, positive=True, terminals=None, part=None),
+    'switch':         dict(prefix='SW', unit=None, required=False, positive=False, terminals=None, part=None),
 }
 ATTRIBUTES = ('package', 'color', 'family', 'variant', 'part')
 OUTPUTS = ('kicad',)   # kicad: .kicad_sch, .kicad_pcb, .kicad_pro, BOM and reports
@@ -130,6 +133,7 @@ class Spec:
     unresolved: list = field(default_factory=list)
     no_connect: dict = field(default_factory=dict)   # ref -> sorted pins deliberately left unconnected
     outputs: list = field(default_factory=list)      # requested artifacts, e.g. 'kicad'; not engineering content
+    blocks: list = field(default_factory=list)       # blocks.Use: circuit blocks, expanded when lowered
 
     def component(self, ref):
         return next((c for c in self.components if c.ref == ref), None)
@@ -275,6 +279,11 @@ def validate(spec):
     for q in carried:
         if not any(x.field == q.field for x in questions):
             questions.append(q)
+    import blocks
+    block_errors, block_questions = blocks.check(spec.blocks)
+    errors.extend(block_errors)
+    for field_, text, options in block_questions:
+        ask(field_, text, options)
     return errors, questions
 
 
@@ -355,6 +364,8 @@ def semantic(spec):
                            for a in spec.analyses),
         'profiles': sorted([k, a.value] for k, a in spec.profiles.items()),
         'no_connect': sorted([r, list(p)] for r, p in spec.no_connect.items()),
+        **({'blocks': [[b.name, sorted((k, qv(v) if hasattr(v, 'unit') else v.value) for k, v in b.params.items())]
+                       for b in spec.blocks]} if spec.blocks else {}),
     }
 
 
@@ -478,6 +489,9 @@ def dumps(spec):
         root.append([A('no_connect')] + [[A('pins'), A(r)] + [A(p) for p in spec.no_connect[r]] for r in sorted(spec.no_connect)])
     if spec.outputs:
         root.append([A('outputs')] + [A(o) for o in spec.outputs])
+    if spec.blocks:
+        root.append([A('blocks')] + [[A('block'), A(b.name)] + [_q(k, v) if hasattr(v, 'unit') else _attr(k, v) for k, v in b.params.items()]
+                                     for b in spec.blocks])
     if spec.unresolved:
         root.append([A('unresolved')] + [[A('question'), A(q.id), Q(q.field), Q(q.text), [Q(o) for o in q.options]]
                                          for q in spec.unresolved])
@@ -547,7 +561,7 @@ def loads(text, origin='handwritten'):
     body = root[1:]
     _fields(body, {'version': 'one', 'name': 'one', 'source': 'one', 'components': 'one', 'connections': 'one',
                    'requirements': 'one', 'gpio': 'one', 'board': 'one', 'analyses': 'one', 'profiles': 'one',
-                   'unresolved': 'one', 'no_connect': 'one', 'outputs': 'one'}, 'engineering_spec')
+                   'unresolved': 'one', 'no_connect': 'one', 'outputs': 'one', 'blocks': 'one'}, 'engineering_spec')
     get = {head(n): n for n in body}
     if 'version' not in get or [str(x) for x in get['version'][1:]] != [str(SCHEMA_VERSION)]:
         raise SpecFormatError(f'unsupported schema version (this reader understands {SCHEMA_VERSION})')
@@ -618,6 +632,17 @@ def loads(text, origin='handwritten'):
             raise SpecFormatError('no_connect: expected (pins REF PIN ...)')
         spec.no_connect[str(node[1])] = sorted({str(x) for x in node[2:]}, key=_natural)
     spec.outputs = [str(x) for x in (get.get('outputs') or [None])[1:]]
+    import blocks
+    for node in (get.get('blocks') or [None])[1:]:
+        if head(node) != 'block' or len(node) < 2:
+            raise SpecFormatError('blocks: expected (block NAME (PARAM VALUE) ...)')
+        use = blocks.Use(str(node[1]))
+        for item in node[2:]:
+            if not isinstance(item, list) or len(item) < 2:
+                raise SpecFormatError(f'block {node[1]}: expected (PARAM VALUE [UNIT])')
+            numeric = re.fullmatch(r'-?[0-9.]+(?:[eE][+-]?[0-9]+)?', str(item[1])) and not isinstance(item[1], Q)
+            use.params[head(item)] = _quantity(item, f'block {node[1]} {head(item)}') if numeric and len(item) > 2 else _attribute(item, f'block {node[1]} {head(item)}')
+        spec.blocks.append(use)
     for node in (get.get('unresolved') or [None])[1:]:
         if head(node) != 'question' or len(node) != 5:
             raise SpecFormatError('unresolved: expected (question ID "FIELD" "TEXT" ("OPTION" ...))')
@@ -672,6 +697,16 @@ def lower(spec, catalogue_path=None, core=None, base=None):
     parts = {str(p[1]): p for p in copper.catalogue(catalogue_file, core)}
     sx = copper.sx
     components, notes = [], []
+    if spec.blocks:   # expanded on a copy into ordinary components and connections, each value with its source
+        import blocks
+        spec = copy.deepcopy(spec)
+        for r in blocks.expand(spec, parts, core):
+            value = '' if r['value'] is None else f" {r['value']:g} {r['unit']}"
+            notes.append(f"block {r['block']}: {r['ref']} {r['role']}{value} ({r['source']}: {r['provenance']})")
+        errors, _ = validate(spec)
+        if errors:
+            raise copper.InvalidInput('the expanded blocks are invalid: ' + '; '.join(errors))
+        nets = spec.nets()
     for c in sorted(spec.components, key=lambda c: c.ref):
         part_id = c.attrs['part'].value if 'part' in c.attrs else ROLES[c.role]['part']
         if part_id is None:

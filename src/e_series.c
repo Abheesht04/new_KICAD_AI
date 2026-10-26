@@ -87,6 +87,23 @@ double e_series_at_least(ESeries series, double value) {
   return 1.0 * pow(10.0, decade_exp + 1); // past the last mantissa: the next decade's first value
 }
 
+double e_series_at_most(ESeries series, double value) {
+  if (!(value > 0.0) || !isfinite(value))
+    return 0.0;
+
+  const int *base;
+  size_t count;
+  int scale;
+  series_table(series, &base, &count, &scale);
+
+  int decade_exp;
+  double scaled = normalize(value, &decade_exp) * scale;
+  for (size_t i = count; i-- > 0;)
+    if (base[i] <= scaled * (1.0 + 1e-6))
+      return (double)base[i] / scale * pow(10.0, decade_exp);
+  return (double)base[count - 1] / scale * pow(10.0, decade_exp - 1); // below the first mantissa: the previous decade's last
+}
+
 bool e_series_contains(ESeries series, double value, double tolerance_ppm) {
   double nearest = e_series_nearest(series, value);
   double rel_diff = fabs(value - nearest) / value;

@@ -166,7 +166,8 @@ class ModelContract(Base):
   r=subprocess.run([CORE,'models'],capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);d=json.loads(r.stdout)
   self.assertEqual(d['contract_version'],3);models={m['id']:m for m in d['models']}
   self.assertEqual(set(models),{'ideal.resistor','ideal.capacitor','ideal.inductor','shockley.diode','ideal.voltage_source','ideal.current_source',
-                                'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos'})
+                                'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos','ideal.ldo'})
+  ldo=models.pop('ideal.ldo');self.assertEqual((ldo['capabilities'],ldo['version'],ldo['family']),({'dc':True,'transient':True,'ac':False},1,'regulator'))
   transistors={'ebers_moll.npn','ebers_moll.pnp','level1.nmos','level1.pmos'}
   for i,m in models.items():self.assertEqual(m['capabilities'],{'dc':True,'transient':True,'ac':True});self.assertEqual(m['version'],1 if i in transistors else 3 if i in ('ideal.capacitor','ideal.inductor') else 2);self.assertTrue(m['assumptions'])
   self.assertEqual({i for i,m in models.items() if m['ac_excitation']},{'ideal.voltage_source','ideal.current_source'})

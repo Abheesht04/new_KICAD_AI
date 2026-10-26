@@ -547,7 +547,11 @@ ELECTRICAL_RULES={'unsupported_model','unsupported_analysis','model_stamp','mna_
                   'corner_capacity','corner_allocation','corner_solve','corner_power','corner_voltage','corner_target','boundary_net',
                   # MCU behavioral boundary (src/v2/project.c mcu_checks)
                   'mcu_supply_current','mcu_supply_unknown','mcu_supply_voltage','mcu_output_ideal','mcu_pin_current','mcu_strap_pin',
-                  'mcu_pull_unknown','mcu_input_undefined','mcu_reset','mcu_programming'}
+                  'mcu_pull_unknown','mcu_input_undefined','mcu_reset','mcu_programming',
+                  # ideal regulator limits (src/v2/project.c regulator_checks)
+                  'regulator_dropout','regulator_current','regulator_reverse',
+                  # unmodelled IC declared by its (reference (supply ...)) (tools/blocks.py)
+                  'ic_supply_current'}
 def scope_status(issues,incomplete=False):
     if any(i['severity']=='error' for i in issues):return 'FAIL'
     return 'UNVERIFIED' if incomplete or issues else 'PASS'
@@ -1068,6 +1072,14 @@ def run_command(args):
     if args.command=='library-pair':return library_pair(args)
     if args.command=='dfm':return dfm_check(args)
     if args.command=='rules-import':return rules_import(args)
+    if args.command=='blocks':
+        import blocks
+        listing=blocks.describe();args.outcome.update(status='PASS',data={'blocks':listing})
+        if args.format=='human':
+            for b in listing:
+                print(f"{b['name']}: {b['summary']}")
+                for prm in b['params']:print(f"    {prm['name']:<16} {'required' if prm['required'] else 'optional':<9} {prm['kind']:<9} {prm['meaning']}")
+        return 0
 
 def rules_import(args):
     """A KiCad project's design rules -> a (rules ...) profile with the source and date of every limit, accepted by
@@ -1117,6 +1129,7 @@ def main(argv=None):
     p=sub.add_parser('part-import',help='validate a catalogue against copper-core and the native KiCad libraries; --into merges it');p.add_argument('file');p.add_argument('--into');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
+    sub.add_parser('blocks',help='list the circuit blocks and their parameters (docs/engineering/BLOCKS.md)')
     p=sub.add_parser('rules-import',help='KiCad project design rules -> (rules ...) profile (docs/engineering/KICAD_RULES.md)');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--base');p.add_argument('--date');p.add_argument('--report');p.add_argument('--force',action='store_true');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
     p=sub.add_parser('library-scan',help='KiCad environment snapshot + SQLite library index (docs/engineering/KICAD_LIBRARY.md)');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--project');p.add_argument('--jobs',type=int)

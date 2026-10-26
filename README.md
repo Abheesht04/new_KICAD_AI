@@ -115,6 +115,10 @@ symbols and footprints of its library tables (global and project, `${VAR}` expan
 the source and date of every limit and listing what one global profile cannot express; builds write their profile
 back into KiCad's files so KiCad DRC checks the same limits. See [KICAD_RULES.md](docs/engineering/KICAD_RULES.md).
 
+Circuit blocks (`use block NAME: key=value ...` in a spec; `pcba blocks` lists them): I2C pull-ups sized by the
+I2C-bus specification, a USB-C sink, a linear regulator analysed with an ideal regulator model, an I2C sensor,
+reset/boot buttons and a part's reference circuit. Every value carries its source. See [BLOCKS.md](docs/engineering/BLOCKS.md).
+
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 
 ```sh
