@@ -139,6 +139,15 @@ class Compiler(Base):
         self.assertLessEqual(current, 0.005); self.assertGreater(current, 0.004)
         u1 = next(c for c in report['components'] if c['ref'] == 'U1'); self.assertEqual(u1['drive'], {'8': 'high'})
         self.assertIn('mcu_supply_current', [i['rule'] for i in report['issues']])
+    def test_profile_times_stages_and_counts_processes_without_changing_them(self):
+        import subprocess
+        with design.Profile() as p:
+            with p.stage('child'):
+                r = subprocess.run([sys.executable, '-c', 'print(7)'], capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), '7', 'the wrapped subprocess.run behaves as the real one')
+        rep = p.report(); exe = Path(sys.executable).stem
+        self.assertEqual(rep['processes'][exe]['count'], 1); self.assertIn('child', rep['stages_s'])
+        self.assertIs(subprocess.run, design.subprocess.run); self.assertEqual(subprocess.run.__module__, 'subprocess', 'restored on exit')
     def test_compilation_is_deterministic(self):
         a = self.compile(); b = self.compile()
         self.assertEqual(spec_ir.dumps(a[1]), spec_ir.dumps(b[1])); self.assertEqual(a[2].items, b[2].items)

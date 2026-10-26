@@ -11,7 +11,7 @@ copper-core judges the electrical design and every candidate board; KiCad 9.x ju
 """
 from __future__ import annotations
 
-import argparse, contextlib, copy, hashlib, io, json, math, re, shutil, subprocess, tempfile
+import argparse, contextlib, copy, hashlib, io, json, math, re, shutil, subprocess, tempfile, time
 from pathlib import Path
 
 LED_FUNCTIONS = ('gpio_indicator', 'external_load', 'addressable', 'driver')
@@ -21,6 +21,48 @@ RULE_DEFAULTS = {'resistor_series': ('E24', 'standard 5% resistor series (IEC 60
                  'seeds': ('1', 'one deterministic annealing seed'), 'iterations': ('300', 'bounded annealing effort')}
 GATES = ('spec', 'topology', 'parts', 'models', 'electrical', 'routing', 'internal_dfm', 'kicad_erc_drc',
          'connectivity', 'manifest', 'determinism')
+
+
+class Profile:
+    """Wall time per pipeline stage and child processes per executable (count and time). Measurement only:
+    nothing here feeds back into a result. Reported as design.json -> profile."""
+    def __init__(self):
+        self.stages = {}; self.spawns = {}; self._run = None
+
+    @contextlib.contextmanager
+    def stage(self, name):
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.stages[name] = round(self.stages.get(name, 0.0) + time.perf_counter() - t0, 3)
+
+    def __enter__(self):
+        self._run = real = subprocess.run
+
+        def run(argv, *a, **k):
+            exe = Path(str(argv[0])).stem if isinstance(argv, (list, tuple)) and argv else 'shell'
+            t0 = time.perf_counter()
+            try:
+                return real(argv, *a, **k)
+            finally:
+                entry = self.spawns.setdefault(exe, {'count': 0, 'seconds': 0.0})
+                entry['count'] += 1; entry['seconds'] = round(entry['seconds'] + time.perf_counter() - t0, 3)
+        subprocess.run = run
+        return self
+
+    def __exit__(self, *exc):
+        subprocess.run = self._run
+
+    def report(self):
+        return {'stages_s': self.stages, 'processes': dict(sorted(self.spawns.items())), 'total_s': round(sum(self.stages.values()), 3)}
+
+
+PROFILE = None
+
+
+def stage(name):
+    return PROFILE.stage(name) if PROFILE else contextlib.nullcontext()
 
 
 class Stop(Exception):
@@ -416,16 +458,19 @@ def build_once(text, profile, answers, symdir, fpdir, out, core):
     """Spec -> .copper -> placement -> KiCad project in `out`. Returns the stage record (no verification)."""
     import copper, layout, spec_ir
     out.mkdir(parents=True, exist_ok=True)
-    intent, spec, d, notes, catalogue = compile_spec(text, profile, answers, symdir, out, core)
+    with stage('compile'):
+        intent, spec, d, notes, catalogue = compile_spec(text, profile, answers, symdir, out, core)
     (out / 'intent.espec').write_text(spec_ir.dumps(intent), encoding='utf-8')
     (out / 'design.espec').write_text(spec_ir.dumps(spec), encoding='utf-8')
     if fpdir is None:
         raise copper.ToolUnavailable('KiCad footprint libraries are needed for placement: set KICAD_FOOTPRINT_DIR or pass --footprints')
-    tree, lower_notes = spec_ir.lower(spec, str(catalogue), core, base=out)
+    with stage('lower'):
+        tree, lower_notes = spec_ir.lower(spec, str(catalogue), core, base=out)
     copper.write_tree(out / 'design.copper', tree)
     seeds = tuple(int(x) for x in d.take('seeds', 'layout.seeds', 'annealing seeds', convert=lambda v: v).split(';') if x)
     iterations = int(d.take('iterations', 'layout.iterations', 'annealing iterations', convert=lambda v: str(int(v))))
-    best, candidates, problem = layout.optimize(tree, fpdir, core, seeds, iterations)
+    with stage('placement_routing'):
+        best, candidates, problem = layout.optimize(tree, fpdir, core, seeds, iterations)
     record = dict(intent=intent, spec=spec, decisions=d, notes=notes + lower_notes, catalogue=catalogue, tree=tree,
                   best=best, candidates=candidates, problem=problem, out=out)
     if not best or not best['feasible']:
@@ -434,7 +479,7 @@ def build_once(text, profile, answers, symdir, fpdir, out, core):
     copper.write_tree(out / 'placed.copper', placed)
     args = argparse.Namespace(project=str(out / 'placed.copper'), out=str(out / 'build'), core=core, symbol_dir=str(symdir),
                               footprint_dir=str(fpdir), no_route=False, draft=False)
-    with contextlib.redirect_stdout(io.StringIO()):
+    with contextlib.redirect_stdout(io.StringIO()), stage('kicad_export'):
         record['build_rc'] = copper.export_project(args)
     record['manifest'] = json.loads((out / 'build/manifest.json').read_text())
     return record
@@ -477,7 +522,20 @@ def worst(statuses):
 
 
 def run(text, out, profile_path=None, answers_text=None, symbol_dir=None, footprint_dir=None, kicad_cli=None, core=None):
-    """The acceptance workflow. Returns the report dict (also written to out/design.json)."""
+    """The acceptance workflow. Returns the report dict (also written to out/design.json, with its profile)."""
+    global PROFILE
+    PROFILE = Profile()
+    try:
+        with PROFILE:
+            report = _run(text, out, profile_path, answers_text, symbol_dir, footprint_dir, kicad_cli, core)
+        report['profile'] = PROFILE.report()
+        write_report(Path(out).resolve(), report)
+        return report
+    finally:
+        PROFILE = None
+
+
+def _run(text, out, profile_path, answers_text, symbol_dir, footprint_dir, kicad_cli, core):
     import copper, layout, spec_ir
     out = Path(out).resolve(); out.mkdir(parents=True, exist_ok=True)
     profile = load_profile(profile_path) if profile_path else None
@@ -485,11 +543,17 @@ def run(text, out, profile_path=None, answers_text=None, symbol_dir=None, footpr
     report = dict(request=text, profile=str(profile['path']) if profile else None, answers=answers, gates={}, decisions=[],
                   questions=[], notes=[], files={})
     # Libraries are needed only once every decision is settled: questions come first, wherever they are asked.
-    try:
-        symdir = copper.discover_symbol_dir(symbol_dir); fpdir = copper.discover_footprint_dir(footprint_dir)
-        report['libraries'] = dict(symbols=str(symdir), footprints=str(fpdir))
-    except FileNotFoundError as exc:
-        symdir = fpdir = None; report['libraries'] = dict(error=str(exc).splitlines()[0])
+    report['libraries'] = {}
+    symdir = fpdir = None
+    for key, find, explicit in (('symbols', copper.discover_symbol_dir, symbol_dir), ('footprints', copper.discover_footprint_dir, footprint_dir)):
+        try:
+            found = find(explicit); report['libraries'][key] = str(found)
+        except FileNotFoundError as exc:
+            found = None; report['libraries'][f'{key}_error'] = str(exc).splitlines()[0]
+        if key == 'symbols':
+            symdir = found
+        else:
+            fpdir = found
     try:
         rec = build_once(text, profile, answers, symdir, fpdir, out, core)
     except Stop as exc:
@@ -555,7 +619,9 @@ def run(text, out, profile_path=None, answers_text=None, symbol_dir=None, footpr
     built = json.loads((out / 'build/report.json').read_text()); physical = copper.report_scopes(built)['physical']
     gate(7, 'internal_dfm', physical, [f"{i['severity']}:{i['rule']} {i['object']}" for i in built['issues'] if i['rule'] not in copper.ELECTRICAL_RULES]
          or 'all supported mandatory rules pass')
-    cli = copper.discover_cli(kicad_cli); v = verify_build(out / 'build', cli, core, out / 'placed.copper')
+    cli = copper.discover_cli(kicad_cli)
+    with stage('verify'):
+        v = verify_build(out / 'build', cli, core, out / 'placed.copper')
     report['verification'] = v; gates = {x['gate']: x for x in v['gates']}
     erc_drc = [gates[k]['status'] for k in ('erc', 'drc') if k in gates]
     gate(8, 'kicad_erc_drc', worst(erc_drc) if len(erc_drc) == 2 else 'UNVERIFIED',
@@ -563,12 +629,19 @@ def run(text, out, profile_path=None, answers_text=None, symbol_dir=None, footpr
          (v['gates'][0].get('message') if v['gates'] else 'KiCad CLI not run'))
     gate(9, 'connectivity', gates['netlist_parity']['status'] if 'netlist_parity' in gates else 'UNVERIFIED',
          gates.get('netlist_parity', {}).get('message', 'KiCad netlist not exported: independent pin/net parity not compared'))
-    checks = {c['check']: c['status'] for c in v['checks']}; tamper = tamper_checks(out / 'build', cli, core, out / 'placed.copper')
+    checks = {c['check']: c['status'] for c in v['checks']}
+    with stage('tamper_checks'):
+        tamper = tamper_checks(out / 'build', cli, core, out / 'placed.copper')
     ok = checks.get('output_hashes') == 'PASS' and checks.get('source_freshness') == 'PASS' and tamper == {'modified_output': 'FAIL', 'stale_source': 'FAIL'}
     gate(10, 'manifest', 'PASS' if ok else 'FAIL', dict(output_hashes=checks.get('output_hashes'), source_freshness=checks.get('source_freshness'),
          rejects_modified_output=tamper['modified_output'] == 'FAIL', rejects_stale_source=tamper['stale_source'] == 'FAIL'))
     with tempfile.TemporaryDirectory() as tmp:
-        again = build_once(text, profile, answers, symdir, fpdir, Path(tmp) / 'run2', core)
+        paused = globals()['PROFILE']; globals()['PROFILE'] = None  # the determinism re-run is timed as one stage
+        try:
+            with paused.stage('determinism_rerun') if paused else contextlib.nullcontext():
+                again = build_once(text, profile, answers, symdir, fpdir, Path(tmp) / 'run2', core)
+        finally:
+            globals()['PROFILE'] = paused
         first, second = artifact_hashes(out), artifact_hashes(Path(tmp) / 'run2') if again.get('manifest') else {}
     differ = sorted(k for k in set(first) | set(second) if first.get(k) != second.get(k))
     gate(11, 'determinism', 'FAIL' if differ else 'PASS', f'differs on re-run: {differ}' if differ else

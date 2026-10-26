@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy, heapq, math, random, time
 
 GRID = .25
+PAD_BUCKET = 2.0  # mm: spatial bucket for pad obstacle lookup (a performance detail; results are unchanged)
 MAX_STATES = 250000
 # Soft objective weights (per unit). Applied only between candidates with equal hard feasibility.
 WEIGHTS = {'length_mm': 1.0, 'vias': 2.0, 'bends': .5, 'blocked_expansions': .001, 'placement_area_mm2': .01,
@@ -32,11 +33,28 @@ def route(pads, width, height, trace_width, clearance, edge, via_diameter=.6, ke
     nx = round(width / GRID); ny = round(height / GRID); traces = []; vias = []; occupied = [{}, {}]
     radius = trace_width / 2 + clearance
     blocked_at = {}
+    # Pads, keepouts and the board edge do not change while routing: their verdict per (cell, layer, net, via)
+    # is computed once. Pads are bucketed by their inflated extent so a probe only examines nearby pads.
+    r_max = max(radius, via_diameter / 2 + clearance)
+    buckets = {}
+    for p in pads:
+        x0, x1 = (p['x'] - p['w'] / 2 - r_max) / PAD_BUCKET, (p['x'] + p['w'] / 2 + r_max) / PAD_BUCKET
+        y0, y1 = (p['y'] - p['h'] / 2 - r_max) / PAD_BUCKET, (p['y'] + p['h'] / 2 + r_max) / PAD_BUCKET
+        for bx in range(math.floor(x0 - 1e-9), math.floor(x1 + 1e-9) + 1):
+            for by in range(math.floor(y0 - 1e-9), math.floor(y1 + 1e-9) + 1):
+                buckets.setdefault((bx, by), []).append(p)
+    static = {}
+    # Occupied cells within reach, for the exact test hypot(da, db) * GRID < r + trace_width / 2.
+    neighbours = {}
+    for via in (False, True):
+        r = (via_diameter / 2 + clearance) if via else radius; reach = math.ceil((r + trace_width / 2) / GRID)
+        neighbours[via] = [(da, db) for da in range(-reach, reach + 1) for db in range(-reach, reach + 1)
+                           if math.hypot(da, db) * GRID < r + trace_width / 2]
 
     def node(p):
         return (round(p['x'] / GRID), round(p['y'] / GRID), 0)
 
-    def blocked(x, y, z, net, via=False, count=False):
+    def static_blocked(x, y, z, net, via):
         xx, yy = x * GRID, y * GRID; r = (via_diameter / 2 + clearance) if via else radius
         if min(xx, yy, width - xx, height - yy) < edge + r:
             return True
@@ -44,7 +62,7 @@ def route(pads, width, height, trace_width, clearance, edge, via_diameter=.6, ke
             if k['flags'] & (2 if via else 1) and (k['layers'] & (3 if via else 1 << z)) and \
                     k['x1'] - r < xx < k['x2'] + r and k['y1'] - r < yy < k['y2'] + r:
                 return True
-        for p in pads:
+        for p in buckets.get((math.floor(xx / PAD_BUCKET), math.floor(yy / PAD_BUCKET)), ()):
             # A via never lands on a drilled pad, even of its own net: the holes would overlap.
             if via and p['through'] and abs(xx - p['x']) <= p['w'] / 2 + r and abs(yy - p['y']) <= p['h'] / 2 + r:
                 return True
@@ -52,14 +70,23 @@ def route(pads, width, height, trace_width, clearance, edge, via_diameter=.6, ke
                 continue
             if abs(xx - p['x']) <= p['w'] / 2 + r and abs(yy - p['y']) <= p['h'] / 2 + r:
                 return True
-        reach = math.ceil((r + trace_width / 2) / GRID)
-        for a in range(x - reach, x + reach + 1):
-            for b in range(y - reach, y + reach + 1):
-                other = occupied[z].get((a, b))
-                if other and other != net and math.hypot(a - x, b - y) * GRID < r + trace_width / 2:
-                    if count:
-                        blocked_at[x, y, z] = blocked_at.get((x, y, z), 0) + 1
-                    return True
+        return False
+
+    def blocked(x, y, z, net, via=False, count=False):
+        key = (x, y, z, net, via)
+        hit = static.get(key)
+        if hit is None:
+            hit = static[key] = static_blocked(x, y, z, net, via)
+        if hit:
+            return True
+        xx, yy = x * GRID, y * GRID; r = (via_diameter / 2 + clearance) if via else radius
+        cells = occupied[z]
+        for da, db in neighbours[via]:
+            other = cells.get((x + da, y + db))
+            if other and other != net:
+                if count:
+                    blocked_at[x, y, z] = blocked_at.get((x, y, z), 0) + 1
+                return True
         for vx, vy, vnet in vias:
             if vnet != net and math.hypot(xx - vx, yy - vy) < r + via_diameter / 2:
                 return True
@@ -184,8 +211,10 @@ class Footprints:
             _, pads, geo, keepouts = copper.footprint_geometry(c, self.fpdir, netids, 'layout')
             body = next(g for g in geo if str(g[0]) == 'body')
             cx, cy, w, h = (float(v) for v in body[2:6])
+            rects = [pad_rect(p) for p in pads]
+            env = (min(r[0] for r in rects), min(r[1] for r in rects), max(r[2] for r in rects), max(r[3] for r in rects)) if rects else None
             self.cache[key] = dict(pads=pads, body=(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), keepouts=keepouts,
-                                   silk=self.silk(c))
+                                   silk=self.silk(c), pad_rects=rects, pad_env=env)
         return self.cache[key]
 
     def silk(self, c):
@@ -227,6 +256,8 @@ class Footprints:
         return dict(body=(b[0] + x, b[1] + y, b[2] + x, b[3] + y),
                     silk=None if silk is None else (silk[0] + x, silk[1] + y, silk[2] + x, silk[3] + y),
                     pads=[dict(p, x=p['x'] + x, y=p['y'] + y) for p in loc['pads']],
+                    pad_rects=[(r[0] + x, r[1] + y, r[2] + x, r[3] + y) for r in loc['pad_rects']], pad_env=None if loc['pad_env'] is None else
+                    (loc['pad_env'][0] + x, loc['pad_env'][1] + y, loc['pad_env'][2] + x, loc['pad_env'][3] + y),
                     keepouts=[dict(k, x1=k['x1'] + x, y1=k['y1'] + y, x2=k['x2'] + x, y2=k['y2'] + y) for k in loc['keepouts']])
 
 
@@ -243,6 +274,41 @@ class Board:
     """Hard placement constraints: outline, copper-to-edge, courtyard gap, board and footprint keepouts."""
     def __init__(self, width, height, edge, gap, keepouts):
         self.width, self.height, self.edge, self.gap, self.keepouts = width, height, edge, gap + 1e-6, list(keepouts)
+
+    def legal(self, ref, shape, others):
+        """Exactly `not violations(...)`, stopping at the first violation; pad tests are skipped when the pads'
+        bounding envelope cannot touch the other object (no pad can touch what its envelope does not)."""
+        b = shape['body']; eps = 1e-6; rects = shape['pad_rects']; env = shape['pad_env']
+        if b[0] < -eps or b[1] < -eps or b[2] > self.width + eps or b[3] > self.height + eps:
+            return False
+        if env is not None and min(env[0], env[1], self.width - env[2], self.height - env[3]) < self.edge:
+            return False
+
+        def pads_touch(rs, e, area, gap):
+            return e is not None and overlap(e, area, gap) and any(overlap(r, area, gap) for r in rs)
+
+        for k in self.keepouts:
+            area = (k['x1'], k['y1'], k['x2'], k['y2'])
+            if (k['flags'] & 8 and overlap(b, area, 1e-6)) or (k['flags'] & 4 and pads_touch(rects, env, area, 1e-6)):
+                return False
+        for other, s in others.items():
+            if other == ref:
+                continue
+            if overlap(b, s['body'], self.gap):
+                return False
+            if shape['silk'] and ((s['silk'] and overlap(shape['silk'], s['silk'])) or pads_touch(s['pad_rects'], s['pad_env'], shape['silk'], 0.0)):
+                return False
+            if s['silk'] and pads_touch(rects, env, s['silk'], 0.0):
+                return False
+            for k in s['keepouts']:
+                area = (k['x1'], k['y1'], k['x2'], k['y2'])
+                if (k['flags'] & 8 and overlap(b, area, 1e-6)) or (k['flags'] & 4 and pads_touch(rects, env, area, 1e-6)):
+                    return False
+            for k in shape['keepouts']:
+                area = (k['x1'], k['y1'], k['x2'], k['y2'])
+                if (k['flags'] & 8 and overlap(s['body'], area, 1e-6)) or (k['flags'] & 4 and pads_touch(s['pad_rects'], s['pad_env'], area, 1e-6)):
+                    return False
+        return True
 
     def violations(self, ref, shape, others):
         """Reasons `shape` (Footprints.placed) cannot be where it is, given `others` {ref: shape}."""
@@ -377,7 +443,7 @@ def initial_placement(problem, step=1.0):
                     if b[0] + x < 0 or b[1] + y < 0 or b[2] + x > problem['width'] or b[3] + y > problem['height']:
                         continue
                     shape = fp.placed(ref, (x, y, rot))
-                    if board.violations(ref, shape, shapes):
+                    if not board.legal(ref, shape, shapes):
                         continue
                     trial = dict(shapes, **{ref: shape})
                     cost = hpwl(nets_of[ref], trial) + WEIGHTS['keepout_edge_mm'] * soft_placement_terms(problem, {ref: shape})['keepout_edge_mm']
@@ -422,7 +488,7 @@ def anneal(problem, placement, seed, iterations=1500, step=1.0):
         new_shapes = dict(shapes)
         for r in changed:
             new_shapes[r] = fp.placed(r, trial[r])
-        if any(board.violations(r, new_shapes[r], new_shapes) for r in changed):
+        if not all(board.legal(r, new_shapes[r], new_shapes) for r in changed):
             continue
         new = cost(new_shapes); delta = new - now
         if delta <= 0 or rng.random() < math.exp(-delta / temperature):

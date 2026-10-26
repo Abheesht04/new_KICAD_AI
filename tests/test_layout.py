@@ -60,6 +60,20 @@ class Router(unittest.TestCase):
         self.assertEqual(len(stats['ripup_passes']), 1); self.assertEqual(stats['ripup_passes'][0]['unrouted'], 0)
 
 
+class Legality(unittest.TestCase):
+    def test_fast_legality_equals_the_full_violation_list(self):
+        # Placement uses Board.legal (early exit, envelope pre-filter); it must agree with violations() exactly.
+        import random
+        for name in ('multi_connector', 'edge_keepout', 'tight_clearance'):
+            problem = layout.problem_from(copper.load(FIX / f'{name}.copper'), FP); fp = problem['footprints']
+            board = layout.Board(problem['width'], problem['height'], problem['edge'], problem['gap'], problem['keepouts'])
+            rng = random.Random(5); refs = sorted(c['ref'] for c in problem['components'])
+            for _ in range(400):
+                shapes = {r: fp.placed(r, (rng.uniform(-2, problem['width'] + 2), rng.uniform(-2, problem['height'] + 2), rng.choice((0, 90, 180, 270)))) for r in refs}
+                for r in refs:
+                    self.assertEqual(board.legal(r, shapes[r], shapes), not board.violations(r, shapes[r], shapes), name)
+
+
 class Selection(unittest.TestCase):
     def test_hard_violations_are_never_traded_for_soft_gains(self):
         cands = [dict(index=0, judged=True, hard_violations=1, unrouted=0, soft_score=0.0),

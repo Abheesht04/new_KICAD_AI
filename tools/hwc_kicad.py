@@ -37,77 +37,57 @@ class SExprError(ValueError):
     pass
 
 
+# One token per match: whitespace, a comment to end of line, '(', ')', a quoted string, or an atom. An atom runs
+# to whitespace or ( ) ; and may contain '"' (but cannot start with one: that is an unterminated string).
+_TOKEN = re.compile(r'(\s+|;[^\n]*\n?)|(\()|(\))|"((?:[^"\\]|\\.)*)"|((?!")[^\s();]+)', re.S)
+_ESCAPE = re.compile(r'\\(.)', re.S)
+_ESCAPES = {'n': '\n', 'r': '\r', 't': '\t'}
+
+
+def _unescape(body: str) -> str:
+    # KiCad strings use backslash escapes: \n \r \t; any other escaped character stands for itself.
+    return _ESCAPE.sub(lambda m: _ESCAPES.get(m.group(1), m.group(1)), body) if '\\' in body else body
+
+
 def parse_sexpr(text: str) -> SExpr:
-    """Small strict parser for KiCad's parenthesized S-expression files."""
-    n = len(text)
-    i = 0
-
-    def skip() -> None:
-        nonlocal i
-        while i < n:
-            if text[i].isspace():
-                i += 1
-            elif text[i] == ';':
-                j = text.find('\n', i)
-                i = n if j < 0 else j + 1
-            else:
-                break
-
-    def read_string() -> Quoted:
-        nonlocal i
-        assert text[i] == '"'
-        i += 1
-        out: list[str] = []
-        while i < n:
-            c = text[i]
-            i += 1
-            if c == '"':
-                return Quoted(''.join(out))
-            if c == '\\':
-                if i >= n:
-                    raise SExprError('backslash at end of quoted string')
-                esc = text[i]
-                i += 1
-                # KiCad strings use backslash escapes. Preserve escaped quote and
-                # backslash; for other escaped chars retain the character.
-                out.append({'n': '\n', 'r': '\r', 't': '\t'}.get(esc, esc))
-            else:
-                out.append(c)
-        raise SExprError('unterminated quoted string')
-
-    def read_node() -> SExpr:
-        nonlocal i
-        skip()
-        if i >= n:
-            raise SExprError('unexpected end of input')
-        c = text[i]
-        if c == '(':
-            i += 1
-            result: list[SExpr] = []
-            while True:
-                skip()
-                if i >= n:
-                    raise SExprError('unclosed list')
-                if text[i] == ')':
-                    i += 1
-                    return result
-                result.append(read_node())
-        if c == ')':
-            raise SExprError(f'unexpected closing parenthesis at byte {i}')
-        if c == '"':
-            return read_string()
-        start = i
-        while i < n and not text[i].isspace() and text[i] not in '();':
-            i += 1
-        if i == start:
-            raise SExprError(f'unexpected token at byte {i}')
-        return Atom(text[start:i])
-
-    node = read_node()
-    skip()
-    if i != n:
-        raise SExprError(f'extra content after expression at byte {i}')
-    return node
+    """Small strict parser for KiCad's parenthesized S-expression files (regex tokenizer, explicit stack:
+    multi-megabyte symbol libraries parse several times faster than character by character)."""
+    stack: list[list[SExpr]] = []
+    top: list[SExpr] = []
+    pos, n = 0, len(text)
+    match = _TOKEN.match
+    while pos < n:
+        m = match(text, pos)
+        if m is None:
+            if text[pos] == '"':
+                raise SExprError('backslash at end of quoted string' if text.endswith('\\') and '"' not in text[pos + 1:] else 'unterminated quoted string')
+            raise SExprError(f'unexpected token at byte {pos}')
+        space, opening, closing, string, atom = m.groups()
+        pos = m.end()
+        if space is not None:
+            continue
+        if opening:
+            stack.append([])
+            continue
+        if closing:
+            if not stack:
+                raise SExprError(f'unexpected closing parenthesis at byte {pos - 1}')
+            node: SExpr = stack.pop()
+        elif string is not None:
+            node = Quoted(_unescape(string))
+        else:
+            node = Atom(atom)
+        if stack:
+            stack[-1].append(node)
+        elif top:
+            raise SExprError(f'extra content after expression at byte {m.start()}')
+        else:
+            top.append(node)
+    if stack:
+        raise SExprError('unclosed list')
+    if not top:
+        raise SExprError('unexpected end of input')
+    return top[0]
 
 
 def quote_string(value: str) -> str:

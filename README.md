@@ -138,6 +138,9 @@ Acceptance: `python tools/prompt_acceptance.py --pcba build/pcba.exe [--native -
 English corpus and the English → KiCad path with honest outcomes; see
 [M0_ACCEPTANCE_EVIDENCE.md](docs/engineering/M0_ACCEPTANCE_EVIDENCE.md).
 
+The audit checklist results (profile, per-rule DFM table, triage) are in
+[AUDIT_CHECKLIST.md](docs/engineering/AUDIT_CHECKLIST.md) and [DFM_RULES.md](docs/engineering/DFM_RULES.md).
+
 Release readiness, the capability matrix by stage and all open issues are in
 [RELEASE_READINESS.md](docs/engineering/RELEASE_READINESS.md).
 

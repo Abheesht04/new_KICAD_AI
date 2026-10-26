@@ -35,6 +35,14 @@ def write_tree(path,tree):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_suffix(path.suffix+'.tmp');tmp.write_text(dump_sexpr(tree)+'\n',encoding='utf-8');tmp.replace(path)
 def load(path): return parse_sexpr(Path(path).read_text(encoding='utf-8'))
+_LIBRARY_TREES={}
+def library_tree(path):
+    """A KiCad library file parsed once per process (keyed by path, size and mtime), shared and read-only:
+    callers that modify what they get must deep-copy it. Symbol libraries are megabytes; re-parsing them per
+    symbol dominated design runs."""
+    path=Path(path);st=path.stat();key=(str(path.resolve()),st.st_size,st.st_mtime_ns)
+    if key not in _LIBRARY_TREES:_LIBRARY_TREES[key]=load(path)
+    return _LIBRARY_TREES[key]
 def core_path(explicit=None):
     choices=[explicit,os.environ.get('COPPER_CORE')]+[str(ROOT/x/y) for x in ['build','build/Debug','build/Release','build-local','build-desktop'] for y in ['copper-core','copper-core.exe']]
     for p in choices:
@@ -120,7 +128,7 @@ def safe_lib_id(value):
 def resolve_symbol(libdir,libid,cache,seen=()):
     if libid in cache:return copy.deepcopy(cache[libid])
     if libid in seen:raise ValueError('Cyclic symbol inheritance')
-    lib,name=safe_lib_id(libid);tree=load(libdir/f'{lib}.kicad_sym')
+    lib,name=safe_lib_id(libid);tree=library_tree(libdir/f'{lib}.kicad_sym')
     child=next((copy.deepcopy(s) for s in direct(tree,'symbol') if s[1]==name),None)
     if child is None:raise ValueError(f'Symbol not found: {libid}')
     parent=text_at(child,'extends')
@@ -218,7 +226,7 @@ def footprint_keepout(c,zone):
     if len(pts)!=4 or len(xs)!=2 or len(ys)!=2:raise Unverified(f"{c['ref']}: only rectangular footprint keepouts are supported")
     return dict(x1=xs[0],y1=ys[0],x2=xs[1],y2=ys[1],layers=layers,flags=flags)
 def footprint_geometry(c,fpdir,netids,stem,ncnets=None):
-    lib,name=safe_lib_id(c['footprint']);fp=load(fpdir/f'{lib}.pretty'/f'{name}.kicad_mod')
+    lib,name=safe_lib_id(c['footprint']);fp=copy.deepcopy(library_tree(fpdir/f'{lib}.pretty'/f'{name}.kicad_mod'))  # modified below
     if head(fp)!='footprint':raise ValueError('Expected KiCad footprint')
     if one(fp,'embedded_files'):raise Unverified('Footprint embedded files are outside V2 geometry coverage')
     keepouts=[footprint_keepout(c,z) for z in direct(fp,'zone')]
@@ -720,7 +728,7 @@ def library_parity(part,summary,symdir,fpdir):
     problems=[];lib,name=safe_lib_id(text_at(part,'footprint'));path=fpdir/f'{lib}.pretty'/f'{name}.kicad_mod'
     if not path.is_file():problems.append(f"footprint {text_at(part,'footprint')} not found in {fpdir}")
     else:
-        pads={str(p[1]) for p in direct(load(path),'pad') if str(p[1])}  # unnumbered pads are mechanical
+        pads={str(p[1]) for p in direct(library_tree(path),'pad') if str(p[1])}  # unnumbered pads are mechanical
         if pads!=numbers:problems.append(f'symbol/footprint pad parity: symbol pins without a pad {sorted(numbers-pads,key=natural)}, pads without a symbol pin {sorted(pads-numbers,key=natural)}')
     for terminal,pin in summary['terminals'].items():
         if pin not in numbers:problems.append(f'pin map: terminal {terminal} -> pin {pin}, which the symbol does not have')

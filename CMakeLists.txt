@@ -217,6 +217,7 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # The ESP32 LED acceptance run with KiCad 9.x libraries and CLI. Exit 77 = skipped (UNVERIFIED).
   add_test(NAME design_acceptance COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_design.py $<TARGET_FILE:copper-core> Native)
   set_tests_properties(design_acceptance PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME dfm_rules COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_dfm_rules.py $<TARGET_FILE:copper-core>)
   add_test(NAME native_gates COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_native_gates.py $<TARGET_FILE:copper-core>)
   add_test(NAME prompt_acceptance_harness COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_prompt_acceptance.py $<TARGET_FILE:pcba>)
   add_test(NAME numeric_oracles COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_numeric_oracles.py $<TARGET_FILE:copper-core> $<TARGET_FILE:numeric_bench>)
