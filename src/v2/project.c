@@ -269,8 +269,24 @@ static int read_part(CpProject *p,const IRNode *part,PartInfo *out,char *e,size_
     }
     return 1;
 }
+#define RULE_FIELDS "|trace_width_mm||clearance_mm||edge_mm||via_diameter_mm||drill_mm||annular_mm||hole_gap_mm||max_aspect||mask_expansion_mm||mask_web_mm||courtyard_gap_mm||max_drop_v||max_current_density_a_mm2||power_derating||voltage_derating||max_height_mm|"
+/* (provenance (FIELD "source" "YYYY-MM-DD") ...): where each limit came from and when. Recorded, never used as a
+ * value; each entry must name a limit the profile sets, once. */
+static int load_provenance(const IRNode *rules,const IRNode *n,char *e,size_t cap) {
+    if(!fields(n,1,RULE_FIELDS,e,cap)) return 0;
+    for(size_t i=1;i<ir_list_length(n);i++) {
+        const IRNode *a=ir_child_at(n,i); const char *key=txt(a,0), *date=txt(a,2);
+        if(ir_list_length(a)!=3 || !*txt(a,1)) return errorf(e,cap,"provenance %s: expected (%s \"source\" \"YYYY-MM-DD\")",key,key);
+        int ok=strlen(date)==10 && date[4]=='-' && date[7]=='-';
+        for(int k=0;k<10 && ok;k++) if(k!=4 && k!=7 && !isdigit((unsigned char)date[k])) ok=0;
+        if(!ok) return errorf(e,cap,"provenance %s: date must be YYYY-MM-DD (got '%s')",key,date);
+        if(!ir_list_find(rules,key)) return errorf(e,cap,"provenance %s: the profile sets no %s",key,key);
+    }
+    return 1;
+}
 static int load_rules(CpProject *p,const IRNode *n,char *e,size_t cap) {
-    if(n && !fields(n,1,"|trace_width_mm||clearance_mm||edge_mm||via_diameter_mm||drill_mm||annular_mm||hole_gap_mm||max_aspect||mask_expansion_mm||mask_web_mm||courtyard_gap_mm||max_drop_v||max_current_density_a_mm2||power_derating||voltage_derating||max_height_mm|",e,cap)) return 0;
+    if(n && !fields(n,1,RULE_FIELDS "|provenance|",e,cap)) return 0;
+    if(n && ir_list_find(n,"provenance") && !load_provenance(n,ir_list_find(n,"provenance"),e,cap)) return 0;
 #define RULE(k,d,lo,hi,f) if(!scalar(n,k,d,lo,hi,&(f))) return errorf(e,cap,"Invalid rule %s",k)
     RULE("trace_width_mm",.2,.05,10,p->fab.min_trace_width_mm);
     RULE("clearance_mm",.2,.01,10,p->fab.min_trace_clearance_mm);

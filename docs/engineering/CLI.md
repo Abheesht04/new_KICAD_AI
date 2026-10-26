@@ -39,6 +39,7 @@ reach the child unchanged.
 | `pcba library search <query> [--kind symbol\|footprint]` | stable | `copper.py library-search` |
 | `pcba library pair <LIB:SYMBOL>` | stable | `copper.py library-pair`: footprints with the symbol's exact pin-number set |
 | `pcba dfm check <file-or-build-dir>` | stable | `copper.py dfm` |
+| `pcba rules import <project> --out F.rules [--base F] [--date D]` | stable | `copper.py rules-import` → `tools/kicad_rules.py` (docs/engineering/KICAD_RULES.md) |
 | `pcba spec parse ["text"] [--file F] [--out F.espec]` | stable | `copper.py spec-parse` (`tools/spec_nlp.py`) |
 | `pcba spec check <file.espec>` | stable | `copper.py spec-check` (`tools/spec_ir.py`) |
 | `pcba spec lower <file.espec> --out F.copper` | stable | `copper.py spec-lower` → loaded by `copper-core analyze` before publishing |

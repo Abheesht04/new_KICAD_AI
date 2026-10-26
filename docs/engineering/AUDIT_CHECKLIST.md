@@ -94,3 +94,14 @@ KiCad 9.x install.
 Cold index of a full KiCad library set: 292 s for the first version, **33.8 s** after profiling (selective reader,
 bulk inserts, largest libraries first); warm re-scan 0.9 s. Details: [KICAD_LIBRARY.md](KICAD_LIBRARY.md).
 
+## Build plan, step 3: rules importer
+
+| Item | Status | Evidence |
+|---|---|---|
+| `.kicad_pro` board setup, `.kicad_dru` and net classes into the profile | **Done** | `pcba rules import`; the strictest global limit per field; `test_kicad_rules.Import` |
+| Source and date for each limit | **Done** | `(provenance (FIELD "source" "date"))`, checked by copper-core; file SHA-256 in the report; `test_kicad_rules.RoundTrip.test_copper_core_checks_provenance` |
+| What a global profile cannot express | **Reported** | conditional/layer rules, maximums, other constraint types, hole-to-copper clearance: listed, result UNVERIFIED |
+| Builds hand KiCad the same limits | **Done (found while testing)** | builds wrote no board constraints and exported `hole_gap_mm` as `hole_clearance` (hole-to-copper); now `.kicad_pro` rules, `hole_to_hole`, `via_diameter`, `courtyard_clearance` and mask web; `test_kicad_rules.RoundTrip` |
+
+Details: [KICAD_RULES.md](KICAD_RULES.md).
+

@@ -342,6 +342,26 @@ static int run_library(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs 
     return backend(ctx, cmd, &b);
 }
 
+/* rules import: a KiCad project's design rules -> a (rules ...) profile (tools/kicad_rules.py). */
+static int run_rules_import(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const map[][2] = {{"--out", "--out"}, {"--base", "--base"}, {"--date", "--date"},
+                                         {"--report", "--report"}, {"--force", "--force"}};
+    const char *date = pcba_opt(cmd, a, "--date"), *base = pcba_opt(cmd, a, "--base");
+    int rc;
+    if (date) {
+        int ok = strlen(date) == 10 && date[4] == '-' && date[7] == '-';
+        for (int i = 0; ok && i < 10; ++i) ok = i == 4 || i == 7 || (date[i] >= '0' && date[i] <= '9');
+        if (!ok) return pcba_usage_error(ctx, cmd, "--date must be YYYY-MM-DD (got '%s')", date);
+    }
+    if ((rc = missing_file(ctx, cmd, a->positional[0], 1)) >= 0) return rc;
+    if (base && (rc = missing_file(ctx, cmd, base, 0)) >= 0) return rc;
+    Bargs b = {{0}, 0};
+    push(&b, "rules-import");
+    push(&b, a->positional[0]);
+    pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    return backend(ctx, cmd, &b);
+}
+
 static int run_dfm(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     int rc = missing_file(ctx, cmd, a->positional[0], 1);
     if (rc >= 0) return rc;
@@ -454,6 +474,13 @@ static const PcbaOption SCAN_OPTIONS[] = {
     {"--project", "DIR", 0, "Also read this KiCad project's sym-lib-table and fp-lib-table (they override global names)"},
     {"--out", "DIR", 0, "Where to write index.sqlite and environment.json (default out/library)"},
     {"--jobs", "N", 0, "Parallel parser processes, 1..256 (default: CPU count)"},
+};
+static const PcbaOption RULES_IMPORT_OPTIONS[] = {
+    {"--out", "FILE", 1, "The .rules profile to write"},
+    {"--base", "FILE", 0, "Profile for limits KiCad does not set (current, deratings, height), e.g. profiles/conservative.rules"},
+    {"--date", "YYYY-MM-DD", 0, "Date recorded with every limit (default: today)"},
+    {"--report", "FILE", 0, "Write the import report (every value considered, what was not imported) as JSON"},
+    {"--force", NULL, 0, "Replace an existing --out file"},
 };
 static const PcbaOption ENV_OPTIONS[] = {
     {"--project", "DIR", 0, "KiCad project folder: its library tables and KIPRJMOD"},
@@ -640,6 +667,15 @@ static const PcbaCommand COMMANDS[] = {
      "feasible, DIR/routed.copper. An unroutable board is FAIL with its unrouted connections, never a partial "
      "pass.",
      "pcba route placed.copper --out out/route", OPTS(ROUTE_OPTIONS), NULL, run_layout},
+    {"rules", "import", "<project.kicad_pro|folder>", 1, 1, "Turn a KiCad project's design rules into a Copper profile",
+     "Reads the board constraints and net classes (.kicad_pro), custom rules (.kicad_dru) and mask settings "
+     "(.kicad_pcb setup). Each limit is the strictest KiCad applies to every object, recorded with its source and the "
+     "date; copper-core must accept the profile before it is written. KiCad limits one global profile cannot express "
+     "(conditional or layer rules, maximums, hole-to-copper clearance, text size) are listed and make the result "
+     "UNVERIFIED: KiCad DRC still checks them.",
+     "pcba rules import my_board --out my_board.rules\n"
+     "pcba rules import my_board/my_board.kicad_pro --out p.rules --base profiles/conservative.rules --report import.json",
+     OPTS(RULES_IMPORT_OPTIONS), NULL, run_rules_import},
     {"dfm", "check", "<file-or-build-dir>", 1, 1, "Run physical DFM checks on a board",
      "Runs the exact-geometry DFM rules on a .copper file with board geometry or on a build directory "
      "(resolved.copper). Without geometry the result is UNVERIFIED, never PASS.",

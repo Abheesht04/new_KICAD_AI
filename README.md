@@ -111,6 +111,10 @@ given placement with the same exact re-check. See [LAYOUT.md](docs/engineering/L
 symbols and footprints of its library tables (global and project, `${VAR}` expanded) into a regenerable SQLite cache;
 `pcba library search` and `pcba library pair` query it. See [KICAD_LIBRARY.md](docs/engineering/KICAD_LIBRARY.md).
 
+`pcba rules import PROJECT --out F.rules` turns a KiCad project's design rules into a Copper profile, recording
+the source and date of every limit and listing what one global profile cannot express; builds write their profile
+back into KiCad's files so KiCad DRC checks the same limits. See [KICAD_RULES.md](docs/engineering/KICAD_RULES.md).
+
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 
 ```sh

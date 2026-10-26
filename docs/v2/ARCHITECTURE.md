@@ -146,6 +146,10 @@ Rules not provided use the explicit defaults in `load_rules()`.
 | `power_derating`, `voltage_derating` | Fractions of supplied component ratings allowed |
 | `max_drop_v` | Per-segment conservative nominal DC drop budget |
 | `max_current_density_a_mm2` | User-defined nominal DC current-density heuristic |
+| `provenance` | `(FIELD "source" "YYYY-MM-DD")` per limit: where it came from; recorded, never a value (docs/engineering/KICAD_RULES.md) |
+
+`pcba rules import` builds a profile from a KiCad project's design rules, and every build writes its profile back
+into KiCad's `.kicad_pro`, `.kicad_dru` and board setup ([KICAD_RULES.md](../engineering/KICAD_RULES.md)).
 
 Trace calculations use copper resistivity at 20 °C, `R = 1.724e-5 * length_mm /
 (width_mm * copper_thickness_mm)`. The current budget is the sum of absolute ideal

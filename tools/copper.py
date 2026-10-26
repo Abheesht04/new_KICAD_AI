@@ -7,6 +7,7 @@ No shell execution, network requests, or LLM engineering decisions.
 from __future__ import annotations
 import argparse, contextlib, copy, csv, hashlib, io, json, math, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path
+import kicad_rules
 from hwc_kicad import (Atom as A, Quoted as Q, parse_sexpr, dump_sexpr, direct, one,
                       head, text_at, discover_symbol_dir, discover_footprint_dir, discover_cli)
 ROOT=Path(__file__).resolve().parents[1]
@@ -350,7 +351,7 @@ def export_project(args):
     for c in components:c['height']=resolved_rating(bindings[c['ref']],'height_mm') or 0  # 0 = not stated in geometry
     stem='design';sch=schematic(tree,components,symdir,stem,bindings,model_specs(args.core))
     dims=list(map(float,(one(tree,'board') or [None,40,30,1.6,.035,2])[1:]));w,h,thick,copper,layers=dims
-    board=sx('kicad_pcb',sx('version',A('20241229')),sx('generator',Q('copper_v2')),sx('general',sx('thickness',number(thick))),sx('paper',Q('A4')),sx('layers',*[sx(str(i),Q(name),A(kind)) for i,name,kind in [(0,'F.Cu','signal'),(2,'B.Cu','signal'),(3,'B.Adhes','user'),(5,'F.SilkS','user'),(7,'B.SilkS','user'),(9,'F.Mask','user'),(11,'B.Mask','user'),(13,'Dwgs.User','user'),(25,'Edge.Cuts','user'),(31,'F.CrtYd','user'),(33,'B.CrtYd','user'),(35,'F.Fab','user'),(37,'B.Fab','user'),(1,'F.Adhes','user'),(19,'F.Paste','user'),(21,'B.Paste','user')]]),sx('setup',sx('pad_to_mask_clearance',number(rule(tree,'mask_expansion_mm',.05)))),sx('net',A('0'),Q('')))
+    board=sx('kicad_pcb',sx('version',A('20241229')),sx('generator',Q('copper_v2')),sx('general',sx('thickness',number(thick))),sx('paper',Q('A4')),sx('layers',*[sx(str(i),Q(name),A(kind)) for i,name,kind in [(0,'F.Cu','signal'),(2,'B.Cu','signal'),(3,'B.Adhes','user'),(5,'F.SilkS','user'),(7,'B.SilkS','user'),(9,'F.Mask','user'),(11,'B.Mask','user'),(13,'Dwgs.User','user'),(25,'Edge.Cuts','user'),(31,'F.CrtYd','user'),(33,'B.CrtYd','user'),(35,'F.Fab','user'),(37,'B.Fab','user'),(1,'F.Adhes','user'),(19,'F.Paste','user'),(21,'B.Paste','user')]]),sx('setup',*[sx(k,number(v)) for k,v in kicad_rules.export(tree)[2].items()]),sx('net',A('0'),Q('')))
     board.extend(sx('net',A(str(i)),Q('/'+n)) for n,i in netids.items())
     # KiCad gives every unconnected schematic pin its own net, unconnected-(REF-PIN_NAME-PadN); the board uses
     # the same names so schematic parity holds. In the copper IR these pads stay net-less ('~').
@@ -393,12 +394,11 @@ def export_project(args):
             if lib==library:shutil.copyfile(fpdir/f'{lib}.pretty'/f'{foot}.kicad_mod',target/f'{foot}.kicad_mod')
         fptable.append(sx('lib',sx('name',Q(library)),sx('type',Q('KiCad')),sx('uri',Q('${KIPRJMOD}/libraries/footprints/'+library+'.pretty')),sx('options',Q('')),sx('descr',Q('Exact selected footprints'))))
     write_tree(out/'sym-lib-table',symtable);write_tree(out/'fp-lib-table',fptable)
-    (out/'design.kicad_pro').write_text(json.dumps({'meta':{'filename':'design.kicad_pro','version':1}},indent=2)+'\n')
+    # The profile's limits become KiCad's own board constraints and custom rules, so KiCad DRC checks what copper-core checks.
+    pro,dru,_=kicad_rules.export(tree)
+    (out/'design.kicad_pro').write_text(json.dumps(pro,indent=2)+'\n')
     (out/'libraries/NOTICE.txt').write_text('Library files are exact snapshots from the selected local KiCad libraries. KiCad official library content is licensed CC-BY-SA-4.0 with the KiCad libraries exception; https://www.kicad.org/libraries/license/ . Custom libraries retain their original authorship and licensing. No ownership transfer is implied.\n')
     shutil.copyfile(ROOT/'docs/v2/KICAD_LIBRARY_LICENSE.md',out/'libraries/KICAD_LIBRARY_LICENSE.md')
-    dru='(version 1)\n'
-    for rule_name,constraint,limit in [('clearance','clearance',rule(tree,'clearance_mm',.2)),('width','track_width',rule(tree,'trace_width_mm',.2)),('edge','edge_clearance',rule(tree,'edge_mm',.3)),('drill','hole_size',rule(tree,'drill_mm',.3)),('annular','annular_width',rule(tree,'annular_mm',.15)),('hole_gap','hole_clearance',rule(tree,'hole_gap_mm',.25))]:
-        dru+=f'(rule "Copper_{rule_name}" (constraint {constraint} (min {limit}mm)))\n'
     (out/'design.kicad_dru').write_text(dru)
 
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
@@ -1063,6 +1063,31 @@ def run_command(args):
     if args.command=='library-search':return library_search(args)
     if args.command=='library-pair':return library_pair(args)
     if args.command=='dfm':return dfm_check(args)
+    if args.command=='rules-import':return rules_import(args)
+
+def rules_import(args):
+    """A KiCad project's design rules -> a (rules ...) profile with the source and date of every limit, accepted by
+    copper-core before it is written (tools/kicad_rules.py)."""
+    out=Path(args.out)
+    if out.exists() and not args.force:raise InvalidInput(f'{out} exists; pass --force to replace it')
+    if args.base:existing(args.base,'Base profile')
+    rules,report=kicad_rules.import_project(args.project,args.base,args.date)
+    probe=load(ROOT/'examples/v2/divider.copper');probe=[x for x in probe if not (isinstance(x,list) and head(x)=='rules')]+[rules]
+    tmp=out.with_name(out.name+'.check.copper')
+    try:write_tree(tmp,probe);core_run(tmp,args.core)   # copper-core must accept the profile as written
+    finally:tmp.unlink(missing_ok=True)
+    out.parent.mkdir(parents=True,exist_ok=True)
+    out.write_text(f'; Imported from {Path(report["project"]).name} on {report["date"]} by pcba rules import. These are the KiCad\n'
+                   f'; project\'s limits (see each provenance entry), not a supplier capability claim.\n'+dump_sexpr(rules)+'\n',encoding='utf-8')
+    if args.report:Path(args.report).write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    kicad_only=[n for n in report['not_imported'] if n.get('enforced_by_kicad')]
+    args.outcome.update(status=report['status'],data={**report,'out':str(out.resolve())},
+                        message=f'{len(kicad_only)} KiCad limits cannot be expressed in the profile; KiCad DRC still checks them' if kicad_only else '')
+    if args.format=='human':
+        for f,l in report['limits'].items():print(f"  {f:<20} {l['value']:<8g} {l['source']}")
+        for n in report['not_imported']:print(f"  not imported: {n['source']}: {n['reason']}")
+        print(f'Wrote {out}')
+    return 0 if report['status']=='PASS' else 2
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
@@ -1088,6 +1113,7 @@ def main(argv=None):
     p=sub.add_parser('part-import',help='validate a catalogue against copper-core and the native KiCad libraries; --into merges it');p.add_argument('file');p.add_argument('--into');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
+    p=sub.add_parser('rules-import',help='KiCad project design rules -> (rules ...) profile (docs/engineering/KICAD_RULES.md)');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--base');p.add_argument('--date');p.add_argument('--report');p.add_argument('--force',action='store_true');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')
     p=sub.add_parser('library-scan',help='KiCad environment snapshot + SQLite library index (docs/engineering/KICAD_LIBRARY.md)');p.add_argument('--out',default='out/library');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--project');p.add_argument('--jobs',type=int)
     p=sub.add_parser('library-env');p.add_argument('--project');p.add_argument('--out')
