@@ -1,0 +1,10 @@
+{"id":"load-divider","prompt":"Load examples/generated/divider/design.kicad_pcb and tell me how many footprints and pads it has.","expect":{"tools":["board.load"],"answer_contains":["3","7"]}}
+{"id":"dfm-divider-jlc","prompt":"Check examples/generated/divider/design.kicad_pcb against JLCPCB's limits in fab_profiles/jlcpcb_2layer.json. Can they make it?","expect":{"tools":["dfm.check"],"answer_contains":["FAIL"]}}
+{"id":"dfm-r0603x5","prompt":"Run a DFM check of tests/golden/board/r0603x5.kicad_pcb with fab_profiles/jlcpcb_2layer.json.","expect":{"tools":["dfm.check"],"answer_contains":["UNVERIFIED"]}}
+{"id":"drill-matches","prompt":"Does manufacturing_audit/drill_test/design.drl drill every hole of examples/generated/divider/design.kicad_pcb?","expect":{"tools":["excellon.check"],"answer_contains":["PASS"]}}
+{"id":"drill-broken","prompt":"Check tests/golden/findings/broken.drl against examples/generated/divider/design.kicad_pcb.","expect":{"tools":["excellon.check"],"answer_contains":["FAIL"]}}
+{"id":"outline-r0603x5","prompt":"Load tests/golden/board/r0603x5.kicad_pcb and say whether its board outline is closed.","expect":{"tools":["board.load"],"answer_contains":["closed"]}}
+{"id":"dfm-failures","prompt":"Run DFM on tests/golden/findings/board.kicad_pcb using fab_profiles/jlcpcb_2layer.json and list what fails.","expect":{"tools":["dfm.check"],"answer_contains":["track_width","clearance","drill"]}}
+{"id":"missing-board","prompt":"Load no/such/board.kicad_pcb.","expect":{"tools":["board.load"],"answer_contains":["not found"]}}
+{"id":"what-tools","prompt":"What tools do you have?","expect":{"tools":[],"answer_contains":["board.load","dfm.check","excellon.check","export.fab"]}}
+{"id":"load-then-dfm","prompt":"Load examples/generated/divider/design.kicad_pcb, then check it for manufacturing problems with fab_profiles/jlcpcb_2layer.json.","expect":{"tools":["board.load","dfm.check"],"answer_contains":["FAIL"]}}

@@ -17,3 +17,6 @@ __pycache__/
 *.pyc
 imgui.ini
 /out*.zip
+
+# LLM eval output (scripts/run_llm_eval.*)
+/eval_out/

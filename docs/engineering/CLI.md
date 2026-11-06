@@ -164,6 +164,13 @@ one JSON message per line: `initialize`, `tools/list`, `tools/call`, `shutdown`,
 `dfm.check`, `export.fab`, `excellon.check`. Errors carry a kind and a hint; `--log` appends a JSONL session log.
 See [TOOL_SERVER.md](TOOL_SERVER.md).
 
+## copper-core agent-eval
+
+`copper-core agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] [--url U] [--root DIR]` runs every prompt
+through the agent loop against a fresh tool server and writes `OUT/results.jsonl`, `OUT/summary.txt` and per-prompt
+logs (OUT must not exist). The mock backend is the default and needs no model. `scripts/run_llm_eval.sh` / `.ps1`
+pick `eval_out/<date>`. See [LLM_BRIDGE.md](LLM_BRIDGE.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

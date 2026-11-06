@@ -1,0 +1,10 @@
+root ::= "{" ws "\"action\"" ws ":" ws ("\"tool\"" | "\"final\"") ws "," ws "\"tool\"" ws ":" ws string ws "," ws "\"arguments\"" ws ":" ws object ws "," ws "\"answer\"" ws ":" ws string ws "}"
+ws ::= [ \t\n]*
+string ::= "\"" ( [^"\\\x7F\x00-\x1F] | "\\" ( ["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] ) )* "\""
+integer ::= "-"? ( "0" | [1-9] [0-9]* )
+number ::= integer ( "." [0-9]+ )? ( [eE] [-+]? [0-9]+ )?
+boolean ::= "true" | "false"
+null ::= "null"
+value ::= object | array | string | number | boolean | null
+object ::= "{" ws ( string ws ":" ws value ( ws "," ws string ws ":" ws value )* )? ws "}"
+array ::= "[" ws ( value ( ws "," ws value )* )? ws "]"

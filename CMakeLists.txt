@@ -83,6 +83,11 @@ add_library(copper_v2 STATIC
     src/v2_src/gerber.c
     src/v2_src/finding.c
     src/v2_src/tool_server.c
+    src/v2_src/llm.c
+    src/v2_src/llm_mock.c
+    src/v2_src/llm_ollama.c
+    src/v2_src/schema_gbnf.c
+    src/v2_src/agent_loop.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 target_link_libraries(copper_v2 PUBLIC hwcore)
@@ -92,6 +97,7 @@ else()
     target_compile_options(copper_v2 PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 if(WIN32)
+    target_link_libraries(copper_v2 PUBLIC ws2_32)  # llm_ollama.c: HTTP to an Ollama server
     target_link_libraries(copper_v2 PUBLIC ole32)  # CoCreateGuid for native KiCad project UUIDs (copper_project.c)
 endif()
 # Sanitizers for the V2 engine and its tests. MinGW has no libasan: UBSan runs in trap mode there and ASan is
@@ -152,6 +158,7 @@ if(HWCOMPILER_BUILD_TESTS)
         gerber
         finding
         tool_server
+        llm
     )
 
     # A stand-in for kicad-cli for tests/kicad_cli_test.c (records its argv; modes for each failure path).
@@ -161,7 +168,7 @@ if(HWCOMPILER_BUILD_TESTS)
     endif()
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -209,6 +216,10 @@ if(HWCOMPILER_BUILD_TESTS)
                 TS_WORK="${CMAKE_CURRENT_BINARY_DIR}/tool_server_work" FAKE_KICAD_CLI="$<TARGET_FILE:fake_kicad_cli>")
             add_dependencies(${test_name}_test fake_kicad_cli)
         endif()
+        if(test_name STREQUAL "llm")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" LLM_ROOT)
+            target_compile_definitions(${test_name}_test PRIVATE LLM_ROOT="${LLM_ROOT}")
+        endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
             target_compile_definitions(${test_name}_test PRIVATE IR_TEST_FIXTURE_DIR="${IR_FIXTURE_PATH}")
@@ -232,6 +243,12 @@ if(HWCOMPILER_BUILD_TESTS)
     # The tool server over real stdio: copper-core serve with a scripted transcript (tests/golden/tool_server).
     add_test(NAME tool_server_stdio COMMAND ${CMAKE_COMMAND} "-DCORE=$<TARGET_FILE:copper-core>" "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/tool_server_stdio" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/tool_server_stdio.cmake")
+    # The same LLM test against a live Ollama server (OLLAMA_URL, OLLAMA_MODEL). Exit 77 = skipped (UNVERIFIED).
+    add_test(NAME llm_ollama_live COMMAND llm_test --live)
+    set_tests_properties(llm_ollama_live PROPERTIES SKIP_RETURN_CODE 77)
+    # The eval pipeline end to end with the mock backend (eval/prompts.jsonl): every prompt must PASS.
+    add_test(NAME llm_eval_mock COMMAND ${CMAKE_COMMAND} "-DCORE=$<TARGET_FILE:copper-core>" "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+             "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/llm_eval_mock" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/llm_eval_mock.cmake")
     add_test(NAME v2_src_shared_in_sync COMMAND ${CMAKE_COMMAND} "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/v2_src_sync.cmake")
 endif()

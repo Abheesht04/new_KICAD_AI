@@ -14,6 +14,15 @@
 
 # Changelog
 
+## V2 track G: LLM bridge (2026-11-07)
+
+- `src/v2_src/llm.h` backend interface; `llm_mock.c` (default: scripted or rule planner), `llm_ollama.c`
+  (POST /api/chat, stream false, think false, schema as format, plain HTTP sockets), `schema_gbnf.c` (JSON Schema
+  subset to GBNF), `agent_loop.c` (tools through the track F server, 12-turn limit, JSONL turn log, scoring).
+- `eval/prompts.jsonl` (10 prompts), `scripts/run_llm_eval.sh` / `.ps1`, `copper-core agent-eval` writing
+  eval_out/<date>/results.jsonl and summary.txt. With the mock: 10/10 PASS. No model is needed for any test; the
+  live Ollama test was not run here (no server): UNVERIFIED.
+
 ## V2 track F: JSON-RPC tool server (2026-11-07)
 
 - `src/v2_src/tool_server.{c,h}`, `copper-core serve`: JSON-RPC 2.0 over line-delimited stdio; tools board.load,
