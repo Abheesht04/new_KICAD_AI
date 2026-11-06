@@ -1127,7 +1127,10 @@ static ExcStatus parse_body_line(ExcFile *file, const char *line,
     }
   }
 
+  /* EXC_SELECTED_TOOL_UNDEFINED is not an index: its coordinate lines returned above, and any other line is
+   * reported below without touching a tool. */
   if (*selected_tool != EXC_SELECTED_TOOL_NONE &&
+      *selected_tool != EXC_SELECTED_TOOL_UNDEFINED &&
       *selected_tool >= file->tool_count) {
     return EXC_ERR_ARGUMENT;
   }

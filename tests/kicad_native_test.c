@@ -60,6 +60,10 @@ static void test_excellon_refuses_what_it_cannot_read(void)
     /* A hit with no tool selected, and a tool used but never defined: content errors, never silently dropped. */
     assert(parse("M48\nMETRIC\nT1C0.800\n%\nG90\nX1.0Y1.0\nT2\nX2.0Y2.0\nM30\n", &f, &arena) == EXC_ERR_CONTENT);
     assert(has_issue(&f, EXC_ISSUE_HIT_BEFORE_TOOL) && has_issue(&f, EXC_ISSUE_UNDEFINED_TOOL));
+    /* Regression: a non-coordinate line after an undefined tool used to return EXC_ERR_ARGUMENT and stop reading. */
+    assert(parse("M48\nMETRIC\nT1C0.800\n%\nG90\nT1\nX1.0Y1.0\nT2\nX2.0Y2.0\nM77\n", &f, &arena) == EXC_ERR_CONTENT);
+    assert(has_issue(&f, EXC_ISSUE_UNDEFINED_TOOL) && has_issue(&f, EXC_ISSUE_UNKNOWN_COMMAND) && has_issue(&f, EXC_ISSUE_MISSING_END));
+    assert(f.hit_count == 1);
     /* No M48 header and no units: refused. */
     assert(parse("T1C0.8\nT1\nX1.0Y1.0\nM30\n", &f, &arena) == EXC_ERR_CONTENT && has_issue(&f, EXC_ISSUE_MISSING_HEADER));
     /* Implicit-decimal coordinates (zero suppression) are not guessed. */
