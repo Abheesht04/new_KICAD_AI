@@ -89,6 +89,7 @@ add_library(copper_v2 STATIC
     src/v2_src/schema_gbnf.c
     src/v2_src/agent_loop.c
     src/v2_src/dfm_cpu_ref.c
+    src/v2_src/rest_server.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 # Track H: the CUDA clearance kernel is opt-in (-DCOPPER_CUDA=ON, needs nvcc and CUDA 11.5+). Without it a stub
@@ -175,6 +176,7 @@ if(HWCOMPILER_BUILD_TESTS)
         tool_server
         llm
         dfm_gpu
+        rest_server
     )
 
     # A stand-in for kicad-cli for tests/kicad_cli_test.c (records its argv; modes for each failure path).
@@ -184,7 +186,7 @@ if(HWCOMPILER_BUILD_TESTS)
     endif()
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm" OR test_name STREQUAL "dfm_gpu")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm" OR test_name STREQUAL "dfm_gpu" OR test_name STREQUAL "rest_server")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -235,6 +237,10 @@ if(HWCOMPILER_BUILD_TESTS)
         if(test_name STREQUAL "llm")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" LLM_ROOT)
             target_compile_definitions(${test_name}_test PRIVATE LLM_ROOT="${LLM_ROOT}")
+        endif()
+        if(test_name STREQUAL "rest_server")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" REST_ROOT)
+            target_compile_definitions(${test_name}_test PRIVATE REST_ROOT="${REST_ROOT}")
         endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
@@ -390,6 +396,8 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # Track C clearance against a brute-force oracle on KiCad 9.0-saved boards (KICAD_DEMOS_DIR). Exit 77 = UNVERIFIED.
   add_test(NAME dfm_kicad_demos COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_dfm_demos.py $<TARGET_FILE:copper-core>)
   set_tests_properties(dfm_kicad_demos PROPERTIES SKIP_RETURN_CODE 77)
+  # The REST front end over real HTTP: copper-core serve-http on a free port, driven with urllib.
+  add_test(NAME rest_server_http COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_rest_server.py $<TARGET_FILE:copper-core>)
   add_test(NAME bridge_regression COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_hwc_kicad.py)
 endif()
 option(COPPER_BUILD_DESKTOP "Build GLFW + Vulkan Copper Studio" OFF)

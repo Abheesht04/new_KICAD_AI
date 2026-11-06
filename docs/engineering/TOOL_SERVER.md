@@ -79,6 +79,42 @@ The test also checks:
 
 **Regenerating the goldens:** `tool_server_test --write-golden`, and `cmake -DWRITE_GOLDEN=1 … -P tests/tool_server_stdio.cmake`. Review the diff before committing.
 
+## REST front end
+
+`src/v2_src/rest_server.{c,h}` serves the same tools over HTTP/1.1, in C (CHARTER §3.1: REST serving is C).
+
+```
+copper-core serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--log FILE]
+```
+
+**Binding:** the default is `127.0.0.1:8765`; `--port 0` picks a free port. It prints `listening on port N` once ready. There is **no authentication**, so keep it on a trusted host.
+
+| Route | Does |
+|---|---|
+| `GET /v1/health` | `{"status":"ok","server":"copper-core"}` |
+| `GET /v1/tools` | the tool list with input schemas |
+| `POST /v1/tools/{name}` | the body is the tool's arguments (a JSON object). Success: `200 {"result": …}`. Failure: `{"error": …}` with a status from the error's kind (below). |
+| `POST /v1/rpc` | one JSON-RPC 2.0 message: 200 with its response, or 204 for a notification |
+| `POST /v1/shutdown` | stops the server after answering |
+
+**Error statuses by kind:**
+
+| Status | Kinds |
+|---|---|
+| 400 | bad request, bad params |
+| 404 | unknown tool, input not found, unknown `board_id` |
+| 409 | output exists |
+| 422 | invalid input |
+| 502 | kicad-cli failed |
+| 503 | kicad-cli unavailable |
+
+Other paths are 404, other methods 405, and bodies over 16 MiB are 413. The server is single-threaded, and every response closes the connection.
+
+**Tests:**
+- `rest_server` drives the pure `rest_handle` through every route and error status.
+- `rest_server_http` (`tests/test_rest_server.py`) starts the real process on a free port, drives it with urllib, and expects a clean exit after `/v1/shutdown`.
+- UBSan is clean.
+
 ## Not yet
 
 - **Batches:** JSON-RPC batch requests and positional (array) params are refused with a hint, not supported.

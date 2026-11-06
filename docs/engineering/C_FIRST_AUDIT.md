@@ -31,6 +31,8 @@ This audit records:
 | `train_intent.py` | Python (PyTorch) | Python (learning) | **allowed** |
 | `prompt_acceptance.py`, `numeric_bench.py`, `layout_bench.py` | Python | test and benchmark harnesses | **allowed as harnesses**: they drive the C binaries and judge them; no product logic |
 | CLI front ends | C (`apps/pcba`, `apps/hwc.c`, `apps/copper_core.c`) | C | **compliant** |
+| Tool serving (JSON-RPC stdio, REST over HTTP) | C (`src/v2_src/tool_server.c`, `rest_server.c`) | C | **compliant** (tracks F and REST) |
+| LLM client and agent loop | C (`src/v2_src/llm*.c`, `agent_loop.c`) | C (client), Python only to host a model | **compliant** (track G) |
 
 **In short:** the physics, the CLI, the V2 geometry and CAM readers, and placement are C. Routing, project build and KiCad export, the library index, rules import, blocks, spec lowering and orchestration are still deterministic Python. That Python is legacy:
 - it is fixed but not extended;

@@ -164,6 +164,12 @@ one JSON message per line: `initialize`, `tools/list`, `tools/call`, `shutdown`,
 `dfm.check`, `export.fab`, `excellon.check`. Errors carry a kind and a hint; `--log` appends a JSONL session log.
 See [TOOL_SERVER.md](TOOL_SERVER.md).
 
+## copper-core serve-http
+
+`copper-core serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--log FILE]`: the tools over HTTP
+(`/v1/health`, `/v1/tools`, `/v1/tools/{name}`, `/v1/rpc`, `/v1/shutdown`); 127.0.0.1:8765 by default, no
+authentication. See [TOOL_SERVER.md](TOOL_SERVER.md).
+
 ## copper-core agent-eval
 
 `copper-core agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] [--url U] [--root DIR]` runs every prompt

@@ -14,6 +14,12 @@
 
 # Changelog
 
+## REST serving in C (2026-11-07)
+
+- `src/v2_src/rest_server.{c,h}`, `copper-core serve-http`: the tool server's tools over HTTP/1.1 (health, tool
+  list, POST /v1/tools/{name}, JSON-RPC passthrough, shutdown), error kinds mapped to HTTP statuses, localhost by
+  default. Tested in-process and over real HTTP.
+
 ## V2 track H: CUDA DFM kernel and its CPU reference (2026-11-07)
 
 - `src/v2_src/dfm_kernel.h` (exact integer clearance predicate shared by CPU and GPU), `dfm_cpu_ref.c`,
