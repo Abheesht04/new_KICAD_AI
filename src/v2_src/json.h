@@ -89,9 +89,14 @@ typedef struct JsonWriter {
     size_t members[JSON_WRITER_MAX_DEPTH];
     bool key_pending;
     bool failed;
+    bool compact;                         /* one line, no spaces: for line-delimited protocols */
 } JsonWriter;
 
 void json_writer_init(JsonWriter *w, Arena *arena);
+/* The same writer producing a single line ("{"a":1}"); json_writer_finish then adds no newline. */
+void json_writer_init_compact(JsonWriter *w, Arena *arena);
+/* Insert an already-serialized JSON value as the next value (the caller vouches that it is valid JSON). */
+void json_write_raw(JsonWriter *w, const char *json, size_t len);
 void json_write_begin_object(JsonWriter *w);
 void json_write_end_object(JsonWriter *w);
 void json_write_begin_array(JsonWriter *w);

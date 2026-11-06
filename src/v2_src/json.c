@@ -383,8 +383,15 @@ static void put(JsonWriter *w, const char *s, size_t n)
 
 static void puts_(JsonWriter *w, const char *s) { put(w, s, strlen(s)); }
 
+void json_writer_init_compact(JsonWriter *w, Arena *arena)
+{
+    json_writer_init(w, arena);
+    w->compact = true;
+}
+
 static void newline(JsonWriter *w)
 {
+    if (w->compact) return;
     put(w, "\n", 1);
     for (int i = 0; i <= w->depth; i++) put(w, "  ", 2);
 }
@@ -454,8 +461,15 @@ void json_write_key(JsonWriter *w, const char *key)
     if (w->members[w->depth]++) put(w, ",", 1);
     newline(w);
     quoted(w, key);
-    put(w, ": ", 2);
+    if (w->compact) put(w, ":", 1); else put(w, ": ", 2);
     w->key_pending = true;
+}
+
+void json_write_raw(JsonWriter *w, const char *json, size_t len)
+{
+    if (!json || !len) { w->failed = true; return; }
+    before_value(w);
+    put(w, json, len);
 }
 
 void json_write_string(JsonWriter *w, const char *s)
@@ -487,7 +501,7 @@ void json_write_null(JsonWriter *w) { before_value(w); puts_(w, "null"); }
 const char *json_writer_finish(JsonWriter *w, size_t *len)
 {
     if (w->failed || w->depth != -1 || !w->len || w->key_pending) { if (len) *len = 0; return NULL; }
-    put(w, "\n", 1);
+    if (!w->compact) put(w, "\n", 1);
     if (w->failed) return NULL;
     if (len) *len = w->len;
     return w->buf;

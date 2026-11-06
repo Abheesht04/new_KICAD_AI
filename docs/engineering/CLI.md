@@ -157,6 +157,13 @@ DFM against the profile, its model issues, and every given drill (`.drl`) and Ge
 INVALID_INPUT, UNVERIFIED or PASS; findings sorted. Exit 0 for PASS or UNVERIFIED, 2 for FAIL or INVALID_INPUT, 1 when
 the board or profile cannot be read. See [FINDINGS.md](FINDINGS.md).
 
+## copper-core serve
+
+`copper-core serve [--root DIR] [--kicad-cli PATH] [--log FILE]` is the JSON-RPC 2.0 tool server on stdin/stdout,
+one JSON message per line: `initialize`, `tools/list`, `tools/call`, `shutdown`, `exit`, and the tools `board.load`,
+`dfm.check`, `export.fab`, `excellon.check`. Errors carry a kind and a hint; `--log` appends a JSONL session log.
+See [TOOL_SERVER.md](TOOL_SERVER.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

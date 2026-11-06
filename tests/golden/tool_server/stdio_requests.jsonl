@@ -1,0 +1,9 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"board.load","params":{"path":"tests/golden/board/r0603x5.kicad_pcb"}}
+{"jsonrpc":"2.0","id":3,"method":"dfm.check","params":{"board_id":"board-1","profile":"fab_profiles/jlcpcb_2layer.json"}}
+{"jsonrpc":"2.0","id":4,"method":"excellon.check","params":{"path":"manufacturing_audit/drill_test/design.drl"}}
+{"jsonrpc":"2.0","id":5,"method":"board.load","params":{"path":"missing.kicad_pcb"}}
+not json
+{"jsonrpc":"2.0","id":7,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}
+{"jsonrpc":"2.0","id":9,"method":"tools/list"}

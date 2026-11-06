@@ -100,6 +100,8 @@ FindingVerdict finding_verdict(const FindingList *list);
 
 /* The report as JSON ("copper.findings/1"): verdict, counts by status, one summary per source, and every finding. */
 const char *finding_report_json(FindingList *list, Arena *arena, size_t *len);
+/* The same report as the next value of an existing writer (e.g. inside a tool-server response). */
+void finding_report_write(FindingList *list, JsonWriter *writer);
 
 #ifdef __cplusplus
 }

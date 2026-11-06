@@ -298,66 +298,71 @@ FindingVerdict finding_verdict(const FindingList *l)
 
 /* ------------------------------------------------------------------------------------------------ report */
 
-const char *finding_report_json(FindingList *l, Arena *arena, size_t *len)
+void finding_report_write(FindingList *l, JsonWriter *w)
 {
-    JsonWriter w;
     finding_sort(l);
-    json_writer_init(&w, arena);
-    json_write_begin_object(&w);
-    json_write_key(&w, "format"); json_write_string(&w, "copper.findings/1");
-    json_write_key(&w, "verdict"); json_write_string(&w, finding_verdict_name(finding_verdict(l)));
-    json_write_key(&w, "complete"); json_write_bool(&w, !l->failed);
-    json_write_key(&w, "counts");
-    json_write_begin_object(&w);
+    json_write_begin_object(w);
+    json_write_key(w, "format"); json_write_string(w, "copper.findings/1");
+    json_write_key(w, "verdict"); json_write_string(w, finding_verdict_name(finding_verdict(l)));
+    json_write_key(w, "complete"); json_write_bool(w, !l->failed);
+    json_write_key(w, "counts");
+    json_write_begin_object(w);
     for (int s = 0; s < 5; s++) {
         size_t n = 0;
         for (size_t i = 0; i < l->count; i++) n += l->items[i].status == (FindingStatus)s;
-        json_write_key(&w, STATUS[s]); json_write_uint(&w, n);
+        json_write_key(w, STATUS[s]); json_write_uint(w, n);
     }
-    json_write_end_object(&w);
-    json_write_key(&w, "sources");
-    json_write_begin_array(&w);
+    json_write_end_object(w);
+    json_write_key(w, "sources");
+    json_write_begin_array(w);
     for (size_t i = 0; i < l->source_count; i++) {
         const FindingSourceSummary *s = &l->sources[i];
-        json_write_begin_object(&w);
-        json_write_key(&w, "source"); json_write_string(&w, s->source);
-        json_write_key(&w, "file"); json_write_string(&w, s->file);
-        json_write_key(&w, "verdict"); json_write_string(&w, finding_verdict_name(s->verdict));
-        json_write_key(&w, "findings"); json_write_uint(&w, s->findings);
-        if (!strcmp(s->source, "dfm")) { json_write_key(&w, "rules_passed"); json_write_uint(&w, s->checks_passed); }
-        json_write_end_object(&w);
+        json_write_begin_object(w);
+        json_write_key(w, "source"); json_write_string(w, s->source);
+        json_write_key(w, "file"); json_write_string(w, s->file);
+        json_write_key(w, "verdict"); json_write_string(w, finding_verdict_name(s->verdict));
+        json_write_key(w, "findings"); json_write_uint(w, s->findings);
+        if (!strcmp(s->source, "dfm")) { json_write_key(w, "rules_passed"); json_write_uint(w, s->checks_passed); }
+        json_write_end_object(w);
     }
-    json_write_end_array(&w);
-    json_write_key(&w, "findings");
-    json_write_begin_array(&w);
+    json_write_end_array(w);
+    json_write_key(w, "findings");
+    json_write_begin_array(w);
     for (size_t i = 0; i < l->count; i++) {
         const Finding *f = &l->items[i];
-        json_write_begin_object(&w);
-        json_write_key(&w, "source"); json_write_string(&w, f->source);
-        json_write_key(&w, "rule"); json_write_string(&w, f->rule);
-        json_write_key(&w, "status"); json_write_string(&w, finding_status_name(f->status));
-        json_write_key(&w, "severity"); json_write_string(&w, finding_severity_name(f->severity));
-        json_write_key(&w, "file"); json_write_string(&w, f->file);
-        if (f->line) { json_write_key(&w, "line"); json_write_uint(&w, f->line); }
+        json_write_begin_object(w);
+        json_write_key(w, "source"); json_write_string(w, f->source);
+        json_write_key(w, "rule"); json_write_string(w, f->rule);
+        json_write_key(w, "status"); json_write_string(w, finding_status_name(f->status));
+        json_write_key(w, "severity"); json_write_string(w, finding_severity_name(f->severity));
+        json_write_key(w, "file"); json_write_string(w, f->file);
+        if (f->line) { json_write_key(w, "line"); json_write_uint(w, f->line); }
         if (f->has_point) {
-            json_write_key(&w, "at_nm");
-            json_write_begin_array(&w); json_write_int(&w, f->at.x); json_write_int(&w, f->at.y); json_write_end_array(&w);
+            json_write_key(w, "at_nm");
+            json_write_begin_array(w); json_write_int(w, f->at.x); json_write_int(w, f->at.y); json_write_end_array(w);
         }
-        if (f->layers) { json_write_key(&w, "layers"); json_write_uint(&w, f->layers); }
-        if (f->has_limit) { json_write_key(&w, "limit_nm"); json_write_int(&w, f->limit_nm); }
-        if (f->has_measured) { json_write_key(&w, "measured_nm"); json_write_int(&w, f->measured_nm); }
+        if (f->layers) { json_write_key(w, "layers"); json_write_uint(w, f->layers); }
+        if (f->has_limit) { json_write_key(w, "limit_nm"); json_write_int(w, f->limit_nm); }
+        if (f->has_measured) { json_write_key(w, "measured_nm"); json_write_int(w, f->measured_nm); }
         if (f->items[0]) {
-            json_write_key(&w, "items");
-            json_write_begin_array(&w);
-            json_write_string(&w, f->items[0]);
-            if (f->items[1]) json_write_string(&w, f->items[1]);
-            json_write_end_array(&w);
+            json_write_key(w, "items");
+            json_write_begin_array(w);
+            json_write_string(w, f->items[0]);
+            if (f->items[1]) json_write_string(w, f->items[1]);
+            json_write_end_array(w);
         }
-        json_write_key(&w, "message"); json_write_string(&w, f->message);
-        if (f->quote) { json_write_key(&w, "fabricator_says"); json_write_string(&w, f->quote); }
-        json_write_end_object(&w);
+        json_write_key(w, "message"); json_write_string(w, f->message);
+        if (f->quote) { json_write_key(w, "fabricator_says"); json_write_string(w, f->quote); }
+        json_write_end_object(w);
     }
-    json_write_end_array(&w);
-    json_write_end_object(&w);
+    json_write_end_array(w);
+    json_write_end_object(w);
+}
+
+const char *finding_report_json(FindingList *l, Arena *arena, size_t *len)
+{
+    JsonWriter w;
+    json_writer_init(&w, arena);
+    finding_report_write(l, &w);
     return json_writer_finish(&w, len);
 }

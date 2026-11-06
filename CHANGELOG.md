@@ -14,6 +14,15 @@
 
 # Changelog
 
+## V2 track F: JSON-RPC tool server (2026-11-07)
+
+- `src/v2_src/tool_server.{c,h}`, `copper-core serve`: JSON-RPC 2.0 over line-delimited stdio; tools board.load,
+  dfm.check, export.fab (kicad-cli export, read back, holes compared with the board), excellon.check (with a board:
+  missing / extra / wrong-diameter holes); structured errors with kind and hint; JSONL session log.
+- json.c: compact (one-line) writer mode and raw values; finding_report_write embeds a report in a response.
+- Scripted transcripts: 25 messages through the library, and the real process over stdio, both compared line for
+  line with golden responses.
+
 ## V2 track E: findings and one report (2026-11-07)
 
 - `src/v2_src/finding.{c,h}`: one Finding for DFM violations and undecided rules, Excellon, Gerber and board-model

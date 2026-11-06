@@ -8,6 +8,7 @@
 #include "kicad_cli.h"
 #include "gerber.h"
 #include "finding.h"
+#include "tool_server.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -245,14 +246,48 @@ static int report_json(int argc,char **argv) {
     arena_destroy(&arena);
     return v==FINDING_VERDICT_FAIL||v==FINDING_VERDICT_INVALID_INPUT?2:0;
 }
+/* serve [--root DIR] [--kicad-cli PATH] [--log FILE]: the JSON-RPC 2.0 tool server (src/v2_src/tool_server.c) on
+ * stdin/stdout, one JSON message per line. The session log (JSONL, every message in and out) is appended to FILE.
+ * Ends at end of input or after "exit". */
+static void serve_log(void *ctx,const char *line,size_t len) { FILE *f=ctx; fwrite(line,1,len,f); fputc('\n',f); fflush(f); }
+static int serve(int argc,char **argv) {
+    ToolServerConfig cfg; memset(&cfg,0,sizeof cfg); cfg.version="2.0.0-dev"; FILE *log=NULL;
+    for(int i=2;i<argc;i++) {
+        if(i+1<argc && !strcmp(argv[i],"--root")) cfg.root=argv[++i];
+        else if(i+1<argc && !strcmp(argv[i],"--kicad-cli")) cfg.kicad_cli=argv[++i];
+        else if(i+1<argc && !strcmp(argv[i],"--log")) { log=fopen(argv[++i],"ab"); if(!log) { fprintf(stderr,"serve: cannot open the log %s\n",argv[i]); return 64; } }
+        else { fprintf(stderr,"copper-core serve [--root DIR] [--kicad-cli PATH] [--log FILE]\n"); return 64; }
+    }
+    if(log) { cfg.log=serve_log; cfg.log_ctx=log; }
+    ToolServer s; tool_server_init(&s,&cfg);
+    size_t cap=1<<16,n=0; char *buf=malloc(cap); int c;
+    if(!buf) return 1;
+    for(;;) {
+        c=fgetc(stdin);
+        if(c==EOF||c=='\n') {
+            if(n||c=='\n') {
+                size_t rl; const char *resp=n?tool_server_handle(&s,buf,n,&rl):NULL;
+                if(resp) { fwrite(resp,1,rl,stdout); fputc('\n',stdout); fflush(stdout); }
+            }
+            n=0;
+            if(c==EOF||s.exited) break;
+            continue;
+        }
+        if(n+1>=cap) { char *more=realloc(buf,cap*2); if(!more) { free(buf); return 1; } buf=more; cap*=2; }
+        buf[n++]=(char)c;
+    }
+    free(buf); tool_server_destroy(&s); if(log) fclose(log);
+    return 0;
+}
 int main(int argc,char **argv) {
+    if(argc>=2 && !strcmp(argv[1],"serve")) return serve(argc,argv);
     if(argc>=4 && !strcmp(argv[1],"report")) return report_json(argc,argv);
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
     if(argc==3 && !strcmp(argv[1],"board")) return board_json(argv[2]);
     if(argc==3 && !strcmp(argv[1],"gerber")) return gerber_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
     if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);
