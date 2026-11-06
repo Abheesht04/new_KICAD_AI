@@ -89,6 +89,15 @@
   re-save, the real KiCad 9.0.6 drill file of the divider, and 13 KiCad 9.0-saved demo boards against KiCad's drill
   export (4,294 holes). See docs/engineering/BOARD_MODEL.md.
 - IR: quoted strings no longer reserve the rest of the input (memory was quadratic in file size).
+## C-first language split; placement in C (2026-11-06)
+
+- Owner hard rule: deterministic work in C17 (CUDA opt-in), Python only for NLP, transformers, learning and model
+  hosting (`CHARTER.md` 3.1, `CLAUDE.md`). Audit and port order: `docs/engineering/C_FIRST_AUDIT.md`.
+- `src/v2_src/` restored as the V2 engine folder (`copper_v2` library; files back where the
+  v2-native-kicad-integration branch put them); `g2_types.h` gained its include guard.
+- Placement ported to C: `src/v2_src/placement.c`, `copper-core place`; `layout.optimize` uses it. Integer nm
+  legality, integer objective, seeded annealing with median-pull moves and half-step refinement. On the seven
+  layout fixtures it matches the Python constructive start and beats the Python annealer on six.
 
 ## Connected C CLI / prompt-to-schematic milestone (2026-10-11)
 

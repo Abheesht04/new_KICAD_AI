@@ -176,6 +176,16 @@ authentication. See [TOOL_SERVER.md](TOOL_SERVER.md).
 through the agent loop against a fresh tool server and writes `OUT/results.jsonl`, `OUT/summary.txt` and per-prompt
 logs (OUT must not exist). The mock backend is the default and needs no model. `scripts/run_llm_eval.sh` / `.ps1`
 pick `eval_out/<date>`. See [LLM_BRIDGE.md](LLM_BRIDGE.md).
+## copper-core place
+
+`copper-core place PROBLEM ITERATIONS SEEDS` runs the C placer (`src/v2_src/placement.c`) on a version-1
+placement problem (format in `src/v2_src/placement.h`; `tools/layout.py c_problem_text` writes it). It prints
+JSON with `status`, `constructive` (`placement` {REF: [x_mm, y_mm, rotation]}, `failures`, `cost_nm`) and
+`annealed` (one entry per comma-separated seed, with `placement`, `cost_nm` and move counts). Exit codes:
+- 0: placed;
+- 2: some part has no legal position;
+- 1: unreadable problem (`status`, `line`, `item`, `message`);
+- 64: bad arguments.
 
 ## Backend protocol (`tools/copper.py`)
 

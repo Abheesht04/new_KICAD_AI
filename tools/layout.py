@@ -9,7 +9,7 @@ explored search states and iteration counts; elapsed time is reported but never 
 """
 from __future__ import annotations
 
-import copy, heapq, math, random, time
+import copy, heapq, json, math, random, time
 from pathlib import Path
 
 GRID = .25
@@ -623,6 +623,66 @@ def anneal(problem, placement, seed, iterations=1500, step=1.0):
     return best[1]
 
 
+# --------------------------------------------------------------------------- the C placer
+# Placement is deterministic work, so it belongs to C (CHARTER 3.1): copper-core's placer (src/v2_src/placement.c)
+# replaces initial_placement and anneal in optimize. The functions above are the legacy reference, used only when the
+# C placer cannot take the problem (an older copper-core, or a part at a rotation that is not a multiple of 90).
+def c_problem_text(problem):
+    """The placement problem in the C placer's format (src/v2_src/placement.h, version 1): every footprint's local
+    geometry at 0/90/180/270 degrees, lengths in mm to 6 decimals (exact nm in C)."""
+    from hwc_kicad import quote_string as q
+    fp = problem['footprints']; nets = list(problem['nets']); idx = {n: i for i, n in enumerate(nets)}
+    mm = lambda v: f'{float(v):.6f}'
+    rect = lambda r: ' '.join(mm(v) for v in r)
+    keep = lambda k: f'(keepout {rect((k["x1"], k["y1"], k["x2"], k["y2"]))} {int(k["flags"])})'
+    out = ['(placement_problem (version 1)',
+           f'  (board {mm(problem["width"])} {mm(problem["height"])}) (edge {mm(problem["edge"])}) (gap {mm(problem["gap"])}) (step {mm(1.0)})',
+           f'  (weights (placement_area_mm2 {mm(WEIGHTS["placement_area_mm2"])}) (decoupling_mm {mm(WEIGHTS["decoupling_mm"])})'
+           f' (keepout_edge_mm {mm(WEIGHTS["keepout_edge_mm"])}))',
+           '  (nets ' + ' '.join(q(str(n)) for n in nets) + ')']
+    out += ['  ' + keep(k) for k in problem['keepouts']]
+    for c in sorted(problem['components'], key=lambda c: c['ref']):
+        ref = c['ref']; head = f'  (part {q(ref)}' + (' (fixed)' if ref in problem['fixed'] else '')
+        if ref in problem['given']:
+            x, y, rot = problem['given'][ref]
+            if float(rot) % 90:
+                raise ValueError(f'{ref}: rotation {rot} is not a multiple of 90 degrees')
+            head += f' (at {mm(x)} {mm(y)} {int(float(rot)) % 360})'
+        shapes = []
+        for rot in (0, 90, 180, 270):
+            loc = fp.local(ref, rot); items = [f'(body {rect(loc["body"])})']
+            if loc['silk']:
+                items.append(f'(silk {rect(loc["silk"])})')
+            items += [f'(pad {idx.get(p["net"], -1)} {mm(p["x"])} {mm(p["y"])} {rect(r)})' for p, r in zip(loc['pads'], loc['pad_rects'])]
+            items += [keep(k) for k in loc['keepouts']]
+            shapes.append(f'    (shape {rot} ' + ' '.join(items) + ')')
+        out.append(head + '\n' + '\n'.join(shapes) + ')')
+    out += [f'  (decoupling {q(cap)} {idx[supply]} {q(problem["mcu_of"][(cap, supply)])})' for cap, supply, _ in problem['decoupling']]
+    return '\n'.join(out) + ')\n'
+
+
+def c_placements(problem, core, seeds, iterations):
+    """(constructive placement, failures, [annealed placement per seed]) from copper-core's C placer, or None when it
+    cannot take the problem (then optimize uses the legacy Python placer and says so)."""
+    import os, subprocess, tempfile
+    try:
+        text = c_problem_text(problem)
+    except ValueError:
+        return None
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'placement.problem')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text)
+        r = subprocess.run([str(core), 'place', path, str(int(iterations)), ','.join(str(int(s)) for s in seeds)],
+                           capture_output=True, text=True, encoding='utf-8', timeout=3600)
+    if r.returncode not in (0, 2):
+        return None
+    data = json.loads(r.stdout)
+    as_placement = lambda pl: {ref: (float(v[0]), float(v[1]), int(v[2])) for ref, v in pl.items()}
+    failures = [f'{ref}: no legal position on the board' for ref in data['constructive']['failures']]
+    return as_placement(data['constructive']['placement']), failures, [as_placement(a['placement']) for a in data['annealed']]
+
+
 # --------------------------------------------------------------------------- evaluation
 OCTILINEAR_MARGIN = .1   # mm beyond the clearance that the octilinear router prefers to keep from foreign copper
 
@@ -864,10 +924,16 @@ def optimize(tree, fpdir, core=None, seeds=(1, 2, 3), iterations=1500, styles=ST
     starts = []
     if problem['components'] and all(c['ref'] in problem['given'] for c in problem['components']):
         starts.append(('given placement', dict(problem['given'])))
-    initial, failures = initial_placement(problem)
+    placed = c_placements(problem, core, seeds, iterations) if core else None
+    problem['placer'] = 'copper-core (C, src/v2_src/placement.c)' if placed else 'legacy Python (tools/layout.py)'
+    if placed:
+        initial, failures, annealed = placed
+    else:
+        initial, failures = initial_placement(problem)
     if not failures:
         starts.append(('constructive placement', initial))
-        annealed = run_jobs(_anneal_job, [(text, str(fpdir), initial, seed, iterations) for seed in seeds], jobs)
+        if not placed:
+            annealed = run_jobs(_anneal_job, [(text, str(fpdir), initial, seed, iterations) for seed in seeds], jobs)
         starts += [(f'annealed (seed {seed}, {iterations} iterations)', a) for seed, a in zip(seeds, annealed)]
     work = [(label if style == 'manhattan' else f'{label}, octilinear', placement, style) for label, placement in starts for style in styles]
     if jobs <= 1 or len(work) <= 1:

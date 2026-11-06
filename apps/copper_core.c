@@ -13,6 +13,7 @@
 #include "rest_server.h"
 #include "filesystem.h"
 #include "json.h"
+#include "placement.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -388,6 +389,64 @@ static int serve_http(int argc,char **argv) {
     if(st!=REST_OK) { fprintf(stderr,"serve-http: %s on %s:%d\n",st==REST_BIND_FAILED?"cannot listen":"socket error",host,port); return 1; }
     return 0;
 }
+/* nm as decimal mm, exact (at most 6 decimals, trailing zeros dropped). */
+static void mm_text(FILE *f,int64_t nm) {
+    uint64_t a=(uint64_t)(nm<0?-nm:nm); unsigned long long w=(unsigned long long)(a/1000000u),r=(unsigned long long)(a%1000000u);
+    if(nm<0) fputc('-',f);
+    if(!r) { fprintf(f,"%llu",w); return; }
+    char d[8]; snprintf(d,sizeof d,"%06llu",r); for(int i=5;i>0&&d[i]=='0';i--) d[i]=0;
+    fprintf(f,"%llu.%s",w,d);
+}
+static void placement_json(const PlProblem *P,const PlPlacement *pl) {
+    fputc('{',stdout);
+    for(size_t i=0,first=1;i<P->part_count;i++) {
+        if(!pl->placed[i]) continue;
+        if(!first) fputc(',',stdout); first=0;
+        json_string(stdout,P->parts[i].ref); fputs(":[",stdout); mm_text(stdout,pl->x[i]); fputc(',',stdout);
+        mm_text(stdout,pl->y[i]); printf(",%d]",pl->rot[i]*90);
+    }
+    fputc('}',stdout);
+}
+/* place PROBLEM ITERATIONS SEEDS: the C placer (src/v2_src/placement.c) on a placement problem file. Constructive
+ * start, then one annealed placement per comma-separated seed, as JSON. Exit 0; 2 when a part has no legal
+ * position (listed under "failures"); 1 for an unreadable problem (status, line, item, message). */
+static int place(const char *path,const char *iters,const char *seeds) {
+    Arena arena; arena_init(&arena,1<<20); PlProblem P; PlError e={0}; PlPlacement start; int rc=0;
+    char *end=NULL; unsigned long n=strtoul(iters,&end,10);
+    if(!*iters||*end||n>10000000ul) { fprintf(stderr,"place: ITERATIONS must be an integer 0..10000000\n"); arena_destroy(&arena); return 64; }
+    PlStatus st=pl_problem_load(&arena,path,&P,&e);
+    if(st!=PL_OK) {
+        printf("{\"status\":\"%s\",\"line\":%zu,\"item\":%zu,\"message\":",pl_status_name(st),e.line,e.item);
+        json_string(stdout,e.message?e.message:""); puts("}"); arena_destroy(&arena); return 1;
+    }
+    if((st=pl_placement_alloc(&arena,&P,&start))==PL_OK) st=pl_constructive(&arena,&P,&start);
+    printf("{\"status\":\"%s\",\"engine\":\"copper_v2 placement\",\"constructive\":{\"placement\":",pl_status_name(st));
+    placement_json(&P,&start); fputs(",\"failures\":[",stdout);
+    for(size_t i=0,first=1;i<P.part_count;i++) if(!start.placed[i]) { if(!first) fputc(',',stdout); first=0; json_string(stdout,P.parts[i].ref); }
+    fputc(']',stdout);
+    if(st==PL_OK) printf(",\"cost_nm\":%lld",(long long)pl_cost(&P,&start));
+    fputs("},\"annealed\":[",stdout);
+    if(st==PL_OK) {
+        const char *s=seeds; int first=1;
+        while(*s) {
+            unsigned long long seed=strtoull(s,&end,10);
+            if(end==s||(*end&&*end!=',')) { rc=64; fprintf(stderr,"place: SEEDS is a comma-separated list of integers\n"); break; }
+            PlPlacement out; PlStats stats; PlStatus a=pl_placement_alloc(&arena,&P,&out);
+            if(a==PL_OK) a=pl_anneal(&arena,&P,&start,seed,(uint32_t)n,&out,&stats);
+            if(!first) fputc(',',stdout); first=0;
+            printf("{\"seed\":%llu,\"status\":\"%s\"",seed,pl_status_name(a));
+            if(a==PL_OK) {
+                fputs(",\"placement\":",stdout); placement_json(&P,&out);
+                printf(",\"cost_nm\":%lld,\"start_cost_nm\":%lld,\"moves\":%llu,\"legal_moves\":%llu,\"accepted\":%llu,\"improved\":%llu,\"refine_moves\":%llu",
+                       (long long)stats.best_cost,(long long)stats.start_cost,(unsigned long long)stats.moves,(unsigned long long)stats.legal_moves,
+                       (unsigned long long)stats.accepted,(unsigned long long)stats.improved,(unsigned long long)stats.refine_moves);
+            } else rc=1;
+            fputc('}',stdout);
+            s=*end?end+1:end;
+        }
+    } else rc=st==PL_NO_LEGAL_POSITION?2:1;
+    puts("]}"); arena_destroy(&arena); return rc;
+}
 int main(int argc,char **argv) {
     if(argc>=2 && !strcmp(argv[1],"serve-http")) return serve_http(argc,argv);
     if(argc>=4 && !strcmp(argv[1],"agent-eval")) return agent_eval(argc,argv);
@@ -398,7 +457,8 @@ int main(int argc,char **argv) {
     if(argc==3 && !strcmp(argv[1],"gerber")) return gerber_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
     if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] | serve-http [--port N] [--root DIR] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] | serve-http [--port N] [--root DIR] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR | place PROBLEM ITERATIONS SEEDS\n");return 64;}
+    if(argc==5 && !strcmp(argv[1],"place")) return place(argv[2],argv[3],argv[4]);
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);

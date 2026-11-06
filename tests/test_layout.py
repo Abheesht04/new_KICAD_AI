@@ -268,6 +268,51 @@ class Fixtures(unittest.TestCase):
 
 
 
+class CPlacer(unittest.TestCase):
+    """The C placer (src/v2_src/placement.c via copper-core place) replaces initial_placement and anneal in optimize.
+    Judged by the Python rules it replaces: the same constructive start, placements that tools/layout.py Board finds
+    no fault with, and annealed results no worse than the start (CHARTER 3.1: retire Python only on the same tests)."""
+    CASES = ['divider', 'edge_keepout', 'high_current', 'mixed_current', 'multi_connector', 'tight_clearance', 'unroutable']
+
+    def problem(self, name):
+        path = ROOT / 'examples/v2/divider.copper' if name == 'divider' else FIX / f'{name}.copper'
+        return layout.problem_from(copper.load(path), FP)
+
+    def cost(self, problem, placement):
+        fp = problem['footprints']; shapes = {r: fp.placed(r, a) for r, a in placement.items()}
+        terms = layout.soft_placement_terms(problem, shapes)
+        return layout.hpwl(problem['nets'], shapes) + sum(layout.WEIGHTS[k] * terms[k] for k in ('placement_area_mm2', 'decoupling_mm', 'keepout_edge_mm'))
+
+    def faults(self, problem, placement):
+        fp = problem['footprints']; shapes = {r: fp.placed(r, a) for r, a in placement.items()}
+        board = layout.Board(problem['width'], problem['height'], problem['edge'], problem['gap'], problem['keepouts'])
+        return {r: board.violations(r, s, shapes) for r, s in shapes.items() if r not in problem['fixed'] and board.violations(r, s, shapes)}
+
+    def test_same_start_legal_and_no_worse(self):
+        for name in self.CASES:
+            problem = self.problem(name)
+            initial, failures, annealed = layout.c_placements(problem, CORE, SEEDS, ITER)
+            py_initial, py_failures = layout.initial_placement(problem)
+            self.assertEqual((failures, py_failures), ([], []), name)
+            self.assertAlmostEqual(self.cost(problem, initial), self.cost(problem, py_initial), places=6, msg=name)
+            self.assertEqual(len(annealed), len(SEEDS))
+            for placement in [initial] + annealed:
+                self.assertEqual(set(placement), {c['ref'] for c in problem['components']}, name)
+                self.assertEqual(self.faults(problem, placement), {}, name)
+                self.assertLessEqual(self.cost(problem, placement), self.cost(problem, initial) + 1e-9, name)
+
+    def test_deterministic_and_used_by_optimize(self):
+        problem = self.problem('mixed_current')
+        self.assertEqual(layout.c_placements(problem, CORE, SEEDS, ITER), layout.c_placements(problem, CORE, SEEDS, ITER))
+        _, _, used = layout.optimize(copper.load(FIX / 'mixed_current.copper'), FP, CORE, (1,), 50, ('manhattan',))
+        self.assertEqual(used['placer'], 'copper-core (C, src/v2_src/placement.c)')
+
+    def test_problem_the_c_placer_cannot_take_falls_back(self):
+        problem = self.problem('divider'); ref = sorted(problem['given'])[0]
+        x, y, _ = problem['given'][ref]; problem['given'][ref] = (x, y, 45.0)
+        self.assertIsNone(layout.c_placements(problem, CORE, SEEDS, ITER))
+
+
 class Libraries(unittest.TestCase):
     """Fixtures whose footprints are not in the committed snapshot (installed KiCad 9.x libraries)."""
     assert_selection = Fixtures.assert_selection

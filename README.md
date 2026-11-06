@@ -5,6 +5,29 @@ English proposes a component category. A typed S-expression project owns parts, 
 connections, requirements and process rules. Deterministic solvers and native KiCad
 checks decide whether the result meets the implemented constraints.
 
+**Language split (owner rule, [CHARTER.md](CHARTER.md) §3.1):** everything deterministic (physics, geometry and
+DFM, placement and routing, KiCad I/O, CAM checks, the tool server and model client) is C17, with CUDA opt-in.
+Python is only for NLP, transformers, learning and hosting a model server. The remaining deterministic Python in
+`tools/` is legacy and is being ported in the order in
+[C_FIRST_AUDIT.md](docs/engineering/C_FIRST_AUDIT.md). Placement is done; routing is next. The V2 strict-C engine
+is `src/v2_src/` (the `copper_v2` library).
+
+**V2 strict-C engine (`src/v2_src`, the `copper_v2` library).** It exists as library modules and as these `copper-core` commands:
+
+| Area | Commands | Docs |
+|---|---|---|
+| board model | `board` | [BOARD_MODEL.md](docs/engineering/BOARD_MODEL.md) |
+| DFM against cited fab profiles | `dfm` | [DFM_V2.md](docs/engineering/DFM_V2.md) |
+| kicad-cli runner | `kicad` | [KICAD_CLI.md](docs/engineering/KICAD_CLI.md) |
+| Gerber reader | `gerber` | [GERBER.md](docs/engineering/GERBER.md) |
+| one findings report | `report` | [FINDINGS.md](docs/engineering/FINDINGS.md) |
+| JSON-RPC tool server and REST | `serve`, `serve-http` | [TOOL_SERVER.md](docs/engineering/TOOL_SERVER.md) |
+| LLM agent and eval (mock by default) | `agent-eval` | [LLM_BRIDGE.md](docs/engineering/LLM_BRIDGE.md) |
+| C placer | `place` | [C_FIRST_AUDIT.md](docs/engineering/C_FIRST_AUDIT.md) |
+| CUDA clearance kernel (opt-in) | — | [CUDA_DFM.md](docs/engineering/CUDA_DFM.md) |
+
+What is done and what is not is in [V2_STATUS.md](docs/engineering/V2_STATUS.md).
+
 **Start with [START_HERE.txt](START_HERE.txt).** The executable examples are in
 `examples/v2`. A complete generated divider project and its native validation reports
 are in `examples/generated/divider`.
@@ -101,8 +124,8 @@ silicon are not simulated. See [PART_REGISTRY.md](docs/engineering/PART_REGISTRY
 (request, answers, design profile, catalogue or design rule), asks when a decision is open, builds the KiCad
 project and reports 11 quality gates. See [DESIGN.md](docs/engineering/DESIGN.md).
 
-`pcba place FILE --out placed.copper` searches placements deterministically (constructive placement, seeded
-annealing, rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core
+`pcba place FILE --out placed.copper` searches placements deterministically (constructive placement and seeded
+annealing in C via `copper-core place`, then rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core
 finds no hard violation; otherwise it reports why no feasible board exists. `pcba route FILE --out DIR` routes a
 given placement with the same exact re-check. See [LAYOUT.md](docs/engineering/LAYOUT.md) and the measured
 [LAYOUT_BENCHMARK.md](docs/engineering/LAYOUT_BENCHMARK.md).
