@@ -14,6 +14,14 @@
 
 # Changelog
 
+## V2 track B: the board model in C (2026-11-06)
+
+- `src/v2_src/board.{c,h}` and `copper-core board`: KiCad boards (nets, footprints, absolute pads, tracks, vias, zones,
+  Edge.Cuts loops with bounds and measured gaps) in exact integer nm. Checked against hand-computed pads, a KiCad 10
+  re-save, the real KiCad 9.0.6 drill file of the divider, and 13 KiCad 9.0-saved demo boards against KiCad's drill
+  export (4,294 holes). See docs/engineering/BOARD_MODEL.md.
+- IR: quoted strings no longer reserve the rest of the input (memory was quadratic in file size).
+
 ## Connected C CLI / prompt-to-schematic milestone (2026-10-11)
 
 - Added `apps/hwc.c` and root `hwc.cmd` for interactive and one-shot deterministic CLI use.

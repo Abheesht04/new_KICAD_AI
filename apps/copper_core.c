@@ -3,6 +3,7 @@
 #include "e_series.h"
 #include "copper_project.h"
 #include "excellon.h"
+#include "board.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -57,9 +58,63 @@ static int kicad_project(int create,const char *a,const char *b) {
     else fprintf(stderr,"PROJECT ERROR: %s: %s\n",copper_project_status_name(st),copper_project_status_message(st));
     arena_destroy(&arena); return st==COPPER_PROJECT_OK?0:2;
 }
+static const char *const PAD_TYPES[]={"smd","thru_hole","np_thru_hole","connect"};
+static const char *const PAD_SHAPES[]={"rect","roundrect","circle","oval","trapezoid","custom","other"};
+static void net_json(const Board *b,int32_t net) { if(net<0) fputs("null",stdout); else json_string(stdout,b->nets[net].name); }
+/* board FILE: a .kicad_pcb read by the C board model (src/v2_src/board.c), lengths as exact integer nm and angles in
+ * micro-degrees. Exit 0; 2 with {"status","line","column","item","context","message"} when it cannot be read. */
+static int board_json(const char *path) {
+    Arena arena; arena_init(&arena,1<<20); Board b; BoardError e={0};
+    BoardStatus st=board_load(&arena,path,&b,&e);
+    if(st!=BOARD_OK) {
+        printf("{\"status\":\"%s\",\"line\":%zu,\"column\":%zu,\"item\":%zu,\"context\":",board_status_name(st),e.line,e.column,e.item);
+        json_string(stdout,e.context?e.context:""); fputs(",\"message\":",stdout); json_string(stdout,e.message?e.message:""); puts("}");
+        arena_destroy(&arena); return 2;
+    }
+    printf("{\"status\":\"OK\",\"version\":%lld,\"generator\":",(long long)b.version); json_string(stdout,b.generator?b.generator:"");
+    fputs(",\"generator_version\":",stdout); json_string(stdout,b.generator_version?b.generator_version:"");
+    printf(",\"thickness_nm\":%lld,\"copper_layers\":%zu,\"nets\":[",(long long)b.thickness,b.copper_layers);
+    for(size_t i=0;i<b.net_count;i++) { if(i) fputc(',',stdout); json_string(stdout,b.nets[i].name); }
+    fputs("],\"footprints\":[",stdout);
+    for(size_t i=0;i<b.footprint_count;i++) { const BoardFootprint *f=&b.footprints[i];
+        if(i) fputc(',',stdout);
+        fputs("{\"ref\":",stdout); json_string(stdout,f->reference); fputs(",\"lib_id\":",stdout); json_string(stdout,f->lib_id);
+        printf(",\"x_nm\":%lld,\"y_nm\":%lld,\"angle_udeg\":%lld,\"back\":%s,\"pads\":[",(long long)f->at.x,(long long)f->at.y,(long long)f->angle_udeg,f->back?"true":"false");
+        for(size_t k=0;k<f->pad_count;k++) { const BoardPad *p=&b.pads[f->first_pad+k];
+            if(k) fputc(',',stdout);
+            fputs("{\"number\":",stdout); json_string(stdout,p->number);
+            printf(",\"type\":\"%s\",\"shape\":\"%s\",\"x_nm\":%lld,\"y_nm\":%lld,\"exact\":%s,\"angle_udeg\":%lld,\"size_nm\":[%lld,%lld]",
+                   PAD_TYPES[p->type],PAD_SHAPES[p->shape],(long long)p->at.x,(long long)p->at.y,p->exact?"true":"false",(long long)p->angle_udeg,(long long)p->size_x,(long long)p->size_y);
+            if(p->has_drill) printf(",\"drill_nm\":[%lld,%lld],\"drill_oval\":%s",(long long)p->drill_x,(long long)p->drill_y,p->drill_oval?"true":"false");
+            fputs(",\"net\":",stdout); net_json(&b,p->net); fputc('}',stdout); }
+        fputs("]}",stdout); }
+    printf("],\"tracks\":%zu,\"vias\":[",b.track_count);
+    for(size_t i=0;i<b.via_count;i++) { const BoardVia *v=&b.vias[i];
+        printf("%s{\"x_nm\":%lld,\"y_nm\":%lld,\"size_nm\":%lld,\"drill_nm\":%lld,\"type\":\"%s\",\"net\":",i?",":"",(long long)v->at.x,(long long)v->at.y,
+               (long long)v->size,(long long)v->drill,v->type==BOARD_VIA_BLIND?"blind":v->type==BOARD_VIA_MICRO?"micro":"through");
+        net_json(&b,v->net); fputc('}',stdout); }
+    size_t keepouts=0; for(size_t i=0;i<b.zone_count;i++) keepouts+=b.zones[i].keepout;
+    printf("],\"zones\":%zu,\"keepout_zones\":%zu,\"outline\":{\"edges\":%zu,\"loops\":%zu,\"open_loops\":%zu,\"closed\":%s,\"dangling_ends\":%zu,\"max_gap_nm\":%lld",
+           b.zone_count,keepouts,b.edge_count,b.outline.loop_count,b.outline.open_loops,b.outline.closed?"true":"false",b.outline.dangling_ends,(long long)b.outline.max_gap);
+    if(b.outline.has_bounds) printf(",\"bounds_nm\":[%lld,%lld,%lld,%lld]",(long long)b.outline.bounds.min.x,(long long)b.outline.bounds.min.y,
+                                    (long long)b.outline.bounds.max.x,(long long)b.outline.bounds.max.y);
+    fputs(",\"items\":[",stdout);   /* [kind, start x, y, mid x, y, end x, y, loop, from_footprint] in nm */
+    for(size_t i=0;i<b.edge_count;i++) { const BoardEdge *g=&b.edges[i];
+        printf("%s[\"%s\",%lld,%lld,%lld,%lld,%lld,%lld,%lld,%s]",i?",":"",g->kind==BOARD_EDGE_ARC?"arc":g->kind==BOARD_EDGE_CIRCLE?"circle":"line",
+               (long long)g->start.x,(long long)g->start.y,(long long)g->mid.x,(long long)g->mid.y,(long long)g->end.x,(long long)g->end.y,
+               g->loop==SIZE_MAX?-1LL:(long long)g->loop,g->from_footprint?"true":"false"); }
+    fputc(']',stdout);
+    fputs("},\"issues\":[",stdout);
+    for(size_t i=0;i<b.issue_count;i++) { if(i) fputc(',',stdout);
+        printf("{\"code\":\"%s\",\"item\":%zu,\"context\":",board_issue_name(b.issues[i].code),b.issues[i].item);
+        json_string(stdout,b.issues[i].context?b.issues[i].context:""); fputc('}',stdout); }
+    puts("]}");
+    arena_destroy(&arena); return 0;
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc==3 && !strcmp(argv[1],"board")) return board_json(argv[2]);
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);

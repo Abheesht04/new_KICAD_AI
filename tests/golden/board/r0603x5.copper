@@ -1,0 +1,19 @@
+(copper_project
+  (version 2)
+  (name "r0603x5")
+  (nets GND VIN A B C OUT)
+  (board 40 30 1.6 0.035 2)
+  (parts
+    (part resistor (kind R) (symbol "Device:R") (footprint "Resistor_SMD:R_0603_1608Metric"))
+    (part voltage (kind V))
+    (part header3 (kind J) (symbol "Connector_Generic:Conn_01x03")
+      (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")))
+  (components
+    (component V1 (part voltage) (value 5) (pins (1 VIN) (2 GND)) (at 0 0 0))
+    (component J1 (part header3) (value 0) (pins (1 VIN) (2 OUT) (3 GND)) (at 6 12 0))
+    (component R1 (part resistor) (value 1000) (pins (1 VIN) (2 A)) (at 14 8 0))
+    (component R2 (part resistor) (value 1000) (pins (1 A) (2 B)) (at 20 8 90))
+    (component R3 (part resistor) (value 1000) (pins (1 B) (2 C)) (at 26 8 180))
+    (component R4 (part resistor) (value 1000) (pins (1 C) (2 OUT)) (at 26 16 270))
+    (component R5 (part resistor) (value 1000) (pins (1 OUT) (2 GND)) (at 20 16 0)))
+  (targets (voltage OUT 0.95 1.05)))

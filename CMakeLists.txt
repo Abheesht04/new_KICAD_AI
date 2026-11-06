@@ -76,6 +76,7 @@ add_library(copper_v2 STATIC
     src/v2_src/kicad_library_table.c
     src/v2_src/filesystem.c
     src/v2_src/copper_project.c
+    src/v2_src/board.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 target_link_libraries(copper_v2 PUBLIC hwcore)
@@ -138,11 +139,12 @@ if(HWCOMPILER_BUILD_TESTS)
         transient
         g2_types
         kicad_native
+        board
     )
 
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -151,6 +153,15 @@ if(HWCOMPILER_BUILD_TESTS)
             # Real KiCad 9.0.6 CAM output of the divider board (manufacturing_audit/{gerber_test,drill_test}).
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/manufacturing_audit" KICAD9_CAM_PATH)
             target_compile_definitions(${test_name}_test PRIVATE KICAD9_CAM_DIR="${KICAD9_CAM_PATH}")
+        endif()
+        if(test_name STREQUAL "board")
+            # r0603x5: Copper-generated, plus its KiCad 10.0.5 re-save (development preview); the divider board is
+            # checked against the real KiCad 9.0.6 drill export in manufacturing_audit/drill_test.
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" BOARD_ROOT)
+            target_compile_definitions(${test_name}_test PRIVATE
+                BOARD_GOLDEN_DIR="${BOARD_ROOT}/tests/golden/board"
+                DIVIDER_BOARD="${BOARD_ROOT}/examples/generated/divider/design.kicad_pcb"
+                KICAD9_DRILL="${BOARD_ROOT}/manufacturing_audit/drill_test/design.drl")
         endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
@@ -278,6 +289,10 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   add_test(NAME pcba_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_pcba_cli.py
            $<TARGET_FILE:pcba> $<TARGET_FILE:hwc> $<TARGET_FILE:copper-core>)
   set_tests_properties(pcba_cli PROPERTIES SKIP_RETURN_CODE 77)
+  # Track B on KiCad 9.0-saved boards from a KiCad install (KICAD_DEMOS_DIR; KICAD_CLI for the drill cross-check).
+  # Exit 77 = skipped (UNVERIFIED) when no install is configured.
+  add_test(NAME board_kicad_demos COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_board_demos.py $<TARGET_FILE:copper-core>)
+  set_tests_properties(board_kicad_demos PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME bridge_regression COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_hwc_kicad.py)
 endif()
 option(COPPER_BUILD_DESKTOP "Build GLFW + Vulkan Copper Studio" OFF)

@@ -45,7 +45,7 @@ Each step gets its own branch, with new files in `src/v2_src/`. Each is done whe
 |---|---|---|---|
 | 1 | `layout.py` placement (`initial_placement`, `anneal`) | `placement.c` | — **done** |
 | 2 | `layout.py` routing (`route`, `route_with_ripup`, `clearance_margins`) | `router.c` on g2 geometry and the BVH | track B |
-| 3 | `copper.py` footprint geometry, `resolved` copper | `board.c` (track B), `footprint.c` | IR |
+| 3 | `copper.py` footprint geometry, `resolved` copper | `board.c` (track B, **done**: reading boards), `footprint.c` (footprint libraries) | IR |
 | 4 | `copper.py` KiCad schematic and PCB export | `kicad_write.c`, the existing `kicad_pcb.c` and `kicad_schematic.c` | 3 |
 | 5 | `kicad_library.py` (table reading, symbol and footprint parsing) | `kicad_library_table.c` and a C indexer; Python keeps only learning over the index | IR |
 | 6 | `kicad_rules.py` | `kicad_rules.c` | IR |
@@ -117,7 +117,7 @@ What existed before this audit, and what exists now.
 | Track | Before | Now |
 |---|---|---|
 | **A** Gerber reader | **not implemented**. The CAM re-read checks the Gerber job file, not the images. | not started; test oracle ready: `manufacturing_audit/gerber_test` (real KiCad 9.0.6) |
-| **B** Board model (`board.c`) | **not implemented in C**. Boards are read by Python (`copper.py`), and `kicad_pcb.c` only writes. | not started; next (blocks placement-from-board and routing) |
+| **B** Board model (`board.c`) | **not implemented in C**. Boards are read by Python (`copper.py`), and `kicad_pcb.c` only writes. | **done** (branch `v2/track-b-board`): `src/v2_src/board.{c,h}`, `copper-core board`; checked against 13 KiCad 9.0-saved boards and KiCad's drill export ([BOARD_MODEL.md](BOARD_MODEL.md)) |
 | **C** DFM rules and fab profiles | **partly**. C DFM exists (`dfm.c`, `dfm_pcb.c`) in `double` mm with profiles in `profiles/*.rules`. No nm checks and no BVH. JLCPCB values are not sourced. | not started; JLCPCB limits must be cited from the fab's published capabilities, with a date, or the profile is marked as not a capability claim |
 | **D** kicad-cli runner | **partly**. Python runs `kicad-cli` (`copper.py native_gates`); C finds it (`copper_project.c`); `apps/pcba/cli_os.c` launches without a shell. There is no C runner with a timeout or a never-overwrite rule. | not started |
 | **E** Findings and report | **not implemented** as one struct; findings are Python dicts | not started |

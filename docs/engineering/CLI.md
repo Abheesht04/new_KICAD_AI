@@ -121,6 +121,13 @@ file, or `PASS` with a non-zero backend exit, becomes `ERROR` (70).
   `--no-color`, `NO_COLOR`, `TERM=dumb` or `--json`. `PCBA_FORCE_COLOR=1` forces it on, for
   tests; `NO_COLOR` and `--no-color` still win.
 
+## copper-core board
+
+`copper-core board FILE` reads a `.kicad_pcb` with the C board model (`src/v2_src/board.c`) and prints JSON: nets,
+footprints with absolute pads (exact nm, micro-degrees, `exact` false for non-90-degree rotations), track count, vias,
+zone counts, the Edge.Cuts outline (loops, exact closure, `max_gap_nm`, bounds, items) and issues. Exit 0, or 2 with
+`status`, `line`, `column`, `item`, `context` and `message`. See [BOARD_MODEL.md](BOARD_MODEL.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes
