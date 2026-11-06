@@ -121,6 +121,17 @@ file, or `PASS` with a non-zero backend exit, becomes `ERROR` (70).
   `--no-color`, `NO_COLOR`, `TERM=dumb` or `--json`. `PCBA_FORCE_COLOR=1` forces it on, for
   tests; `NO_COLOR` and `--no-color` still win.
 
+## copper-core place
+
+`copper-core place PROBLEM ITERATIONS SEEDS` runs the C placer (`src/v2_src/placement.c`) on a version-1
+placement problem (format in `src/v2_src/placement.h`; `tools/layout.py c_problem_text` writes it). It prints
+JSON with `status`, `constructive` (`placement` {REF: [x_mm, y_mm, rotation]}, `failures`, `cost_nm`) and
+`annealed` (one entry per comma-separated seed, with `placement`, `cost_nm` and move counts). Exit codes:
+- 0: placed;
+- 2: some part has no legal position;
+- 1: unreadable problem (`status`, `line`, `item`, `message`);
+- 64: bad arguments.
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

@@ -14,6 +14,16 @@
 
 # Changelog
 
+## C-first language split; placement in C (2026-11-06)
+
+- Owner hard rule: deterministic work in C17 (CUDA opt-in), Python only for NLP, transformers, learning and model
+  hosting (`CHARTER.md` 3.1, `CLAUDE.md`). Audit and port order: `docs/engineering/C_FIRST_AUDIT.md`.
+- `src/v2_src/` restored as the V2 engine folder (`copper_v2` library; files back where the
+  v2-native-kicad-integration branch put them); `g2_types.h` gained its include guard.
+- Placement ported to C: `src/v2_src/placement.c`, `copper-core place`; `layout.optimize` uses it. Integer nm
+  legality, integer objective, seeded annealing with median-pull moves and half-step refinement. On the seven
+  layout fixtures it matches the Python constructive start and beats the Python annealer on six.
+
 ## Connected C CLI / prompt-to-schematic milestone (2026-10-11)
 
 - Added `apps/hwc.c` and root `hwc.cmd` for interactive and one-shot deterministic CLI use.

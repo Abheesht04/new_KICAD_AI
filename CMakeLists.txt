@@ -76,6 +76,7 @@ add_library(copper_v2 STATIC
     src/v2_src/kicad_library_table.c
     src/v2_src/filesystem.c
     src/v2_src/copper_project.c
+    src/v2_src/placement.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 target_link_libraries(copper_v2 PUBLIC hwcore)
@@ -138,11 +139,12 @@ if(HWCOMPILER_BUILD_TESTS)
         transient
         g2_types
         kicad_native
+        placement
     )
 
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "placement")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -151,6 +153,11 @@ if(HWCOMPILER_BUILD_TESTS)
             # Real KiCad 9.0.6 CAM output of the divider board (manufacturing_audit/{gerber_test,drill_test}).
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/manufacturing_audit" KICAD9_CAM_PATH)
             target_compile_definitions(${test_name}_test PRIVATE KICAD9_CAM_DIR="${KICAD9_CAM_PATH}")
+        endif()
+        if(test_name STREQUAL "placement")
+            # Copper-generated (tools/layout.py c_problem_text) from the divider board and KiCad 9 library footprints.
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/placement" PLACEMENT_GOLDEN_PATH)
+            target_compile_definitions(${test_name}_test PRIVATE PLACEMENT_GOLDEN_DIR="${PLACEMENT_GOLDEN_PATH}")
         endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
@@ -257,7 +264,7 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # ESP32 module and MOSFET variant through PCB generation and KiCad 9.x gates. Exit 77 = skipped (UNVERIFIED).
   add_test(NAME parts_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_parts.py $<TARGET_FILE:copper-core> Native)
   set_tests_properties(parts_native PROPERTIES SKIP_RETURN_CODE 77)
-  add_test(NAME layout_optimizer COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_layout.py $<TARGET_FILE:copper-core> Router Dfm Parallel Selection Fixtures)
+  add_test(NAME layout_optimizer COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_layout.py $<TARGET_FILE:copper-core> Router Dfm Parallel Selection Fixtures CPlacer)
   # Fixtures needing footprints outside the committed snapshot. Exit 77 = skipped (UNVERIFIED).
   add_test(NAME layout_native COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_layout.py $<TARGET_FILE:copper-core> Libraries)
   set_tests_properties(layout_native PROPERTIES SKIP_RETURN_CODE 77)

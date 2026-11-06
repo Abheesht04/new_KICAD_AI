@@ -5,6 +5,13 @@ English proposes a component category. A typed S-expression project owns parts, 
 connections, requirements and process rules. Deterministic solvers and native KiCad
 checks decide whether the result meets the implemented constraints.
 
+**Language split (owner rule, [CHARTER.md](CHARTER.md) §3.1):** everything deterministic (physics, geometry and
+DFM, placement and routing, KiCad I/O, CAM checks, the tool server and model client) is C17, with CUDA opt-in.
+Python is only for NLP, transformers, learning and hosting a model server. The remaining deterministic Python in
+`tools/` is legacy and is being ported in the order in
+[C_FIRST_AUDIT.md](docs/engineering/C_FIRST_AUDIT.md). Placement is done; routing is next. The V2 strict-C engine
+is `src/v2_src/` (the `copper_v2` library).
+
 **Start with [START_HERE.txt](START_HERE.txt).** The executable examples are in
 `examples/v2`. A complete generated divider project and its native validation reports
 are in `examples/generated/divider`.
@@ -101,8 +108,8 @@ silicon are not simulated. See [PART_REGISTRY.md](docs/engineering/PART_REGISTRY
 (request, answers, design profile, catalogue or design rule), asks when a decision is open, builds the KiCad
 project and reports 11 quality gates. See [DESIGN.md](docs/engineering/DESIGN.md).
 
-`pcba place FILE --out placed.copper` searches placements deterministically (constructive placement, seeded
-annealing, rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core
+`pcba place FILE --out placed.copper` searches placements deterministically (constructive placement and seeded
+annealing in C via `copper-core place`, then rip-up/reroute, current-driven trace widening) and writes the best candidate only if copper-core
 finds no hard violation; otherwise it reports why no feasible board exists. `pcba route FILE --out DIR` routes a
 given placement with the same exact re-check. See [LAYOUT.md](docs/engineering/LAYOUT.md) and the measured
 [LAYOUT_BENCHMARK.md](docs/engineering/LAYOUT_BENCHMARK.md).

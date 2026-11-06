@@ -94,6 +94,11 @@ exist yet, so "length of sensitive nets" is reported per net only.
 
 ## Staged search
 
+Placement (steps 1 and 2) runs in C: `copper-core place` (`src/v2_src/placement.c`, owner rule CHARTER 3.1). It
+works in exact integer nm and is never less strict than the Python rules it replaced (`layout.Board`, kept as the
+reference and as the fallback when the C placer cannot take a problem, such as a rotation that is not a multiple
+of 90 degrees). `problem['placer']` says which ran. See [C_FIRST_AUDIT.md](C_FIRST_AUDIT.md) section 3.
+
 1. **Constructive placement** (deterministic): `(fixed)` parts stay; parts with keepouts first, then by
    connectivity to what is placed; each at the legal 1 mm grid position and rotation (0/90/180/270) with the
    least half-perimeter wirelength to placed neighbours. Legal means: courtyard inside the outline, pads at
@@ -101,9 +106,12 @@ exist yet, so "length of sensitive nets" is reported per net only.
    keepout (both directions), and a conservative silkscreen envelope (F.SilkS graphics plus an over-estimated
    reference-text box) kept off other parts' silkscreen and pads — KiCad DRC remains the judge of silkscreen.
    A part with no legal position is reported, and no constructive or annealed candidate is produced.
-2. **Improvement**: seeded simulated annealing per seed (`random.Random(seed)`, fixed iterations, geometric
-   cooling 0.997, moves shift / rotate / swap). Illegal states are rejected outright, never penalised. Cost:
-   half-perimeter wirelength plus the weighted placement soft terms.
+2. **Improvement**: seeded simulated annealing per seed (splitmix64, `iterations` temperature steps with one move
+   per movable part each, integer cooling x0.997, a fixed-point exp table). Moves: shift (span shrinking from 8
+   grid steps to 1), rotate, swap, and a pull of the part toward the median of its nets' bounding boxes. Illegal
+   states are rejected outright, never penalised; nets touched by a move are re-measured incrementally. The best
+   state is then refined greedily at half the grid step over all rotations. Cost: half-perimeter wirelength plus
+   the weighted placement soft terms, all integer nm.
 3. **Routing** of every candidate in both styles with rip-up/reroute.
 4. **Exact post-check** with copper-core on the candidate's full geometry: the first judge.
 5. **Feedback**: a current-density or drop-budget violation widens the violating nets (above) and the
@@ -142,9 +150,10 @@ copper-core checks board keepouts exactly like footprint keepouts (`keepout_viol
 
 ## Known limits
 
-* Annealing has not beaten the constructive placement on the current fixtures (see the benchmark); it is kept
-  as a deterministic candidate source, not claimed as an improvement.
-* Placement is grid-based (1 mm, four rotations); there is no analytic or global placer.
+* The C annealer improves on the constructive start on 6 of the 7 layout fixtures (by 0.4 to 2.1 mm of cost) and
+  ties on `unroutable`; the legacy Python annealer improved on 2 of 7 (C_FIRST_AUDIT.md section 3). Placement
+  improvement does not always change the routed winner; the routed candidates are ranked as before.
+* Placement starts on a 1 mm grid and refines on 0.5 mm, four rotations; there is no analytic or global placer.
 * A net touching a connector or MCU supply has no DC current bound and is charged the whole-circuit current;
   declaring connector currents is not supported yet.
 * The via budget is a cost (20 grid steps per layer change, weight 2 per via), not a hard limit.
