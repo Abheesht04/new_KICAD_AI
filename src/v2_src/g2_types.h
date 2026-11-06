@@ -1,3 +1,6 @@
+#ifndef COPPER_V2_G2_TYPES_H
+#define COPPER_V2_G2_TYPES_H
+
 
 #include "arena.h"
 #include "u128.h"
@@ -313,3 +316,5 @@ G2Status g2_bvh_build_shapes(Arena *arena, const G2Shape *shapes, size_t count,
 
 G2Status g2_bvh_query_shape(const G2Bvh *tree, G2Shape query, size_t *out_ids,
                             size_t capacity, size_t *out_count);
+
+#endif /* COPPER_V2_G2_TYPES_H */
