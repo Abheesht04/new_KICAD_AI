@@ -77,6 +77,8 @@ add_library(copper_v2 STATIC
     src/v2_src/filesystem.c
     src/v2_src/copper_project.c
     src/v2_src/board.c
+    src/v2_src/json.c
+    src/v2_src/dfm.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 target_link_libraries(copper_v2 PUBLIC hwcore)
@@ -140,11 +142,13 @@ if(HWCOMPILER_BUILD_TESTS)
         g2_types
         kicad_native
         board
+        json
+        dfm_v2
     )
 
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -162,6 +166,10 @@ if(HWCOMPILER_BUILD_TESTS)
                 BOARD_GOLDEN_DIR="${BOARD_ROOT}/tests/golden/board"
                 DIVIDER_BOARD="${BOARD_ROOT}/examples/generated/divider/design.kicad_pcb"
                 KICAD9_DRILL="${BOARD_ROOT}/manufacturing_audit/drill_test/design.drl")
+        endif()
+        if(test_name STREQUAL "dfm_v2")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" DFM_ROOT)
+            target_compile_definitions(${test_name}_test PRIVATE DFM_ROOT="${DFM_ROOT}")
         endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
@@ -293,6 +301,9 @@ if(HWCOMPILER_BUILD_TESTS AND Python3_Interpreter_FOUND)
   # Exit 77 = skipped (UNVERIFIED) when no install is configured.
   add_test(NAME board_kicad_demos COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_board_demos.py $<TARGET_FILE:copper-core>)
   set_tests_properties(board_kicad_demos PROPERTIES SKIP_RETURN_CODE 77)
+  # Track C clearance against a brute-force oracle on KiCad 9.0-saved boards (KICAD_DEMOS_DIR). Exit 77 = UNVERIFIED.
+  add_test(NAME dfm_kicad_demos COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_dfm_demos.py $<TARGET_FILE:copper-core>)
+  set_tests_properties(dfm_kicad_demos PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME bridge_regression COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_hwc_kicad.py)
 endif()
 option(COPPER_BUILD_DESKTOP "Build GLFW + Vulkan Copper Studio" OFF)

@@ -208,6 +208,10 @@ int32_t board_find_net(const Board *board, const char *name);
 /* Pads on net `net`, in board order: writes up to `capacity` pad indices and returns the total count. */
 size_t board_pads_on_net(const Board *board, int32_t net, size_t *out, size_t capacity);
 
+/* A box containing the arc start -> mid -> end (its circle's extremes where the arc sweeps them, +1 nm): never
+ * smaller than the arc. Collinear points give the points' box. BOARD_RANGE_ERROR without 128-bit integers. */
+BoardStatus board_arc_bounds(G2Point start, G2Point mid, G2Point end, G2Aabb *out);
+
 /* Rotate (x, y) by `udeg` micro-degrees the way KiCad turns a footprint (y down): x' = x cos + y sin,
  * y' = -x sin + y cos. Exact for multiples of 90 degrees (*exact = true); otherwise rounded to the nearest nm.
  * Returns BOARD_RANGE_ERROR if the result leaves int64 or the platform cannot rotate inexactly. */

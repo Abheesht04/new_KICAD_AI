@@ -128,6 +128,14 @@ footprints with absolute pads (exact nm, micro-degrees, `exact` false for non-90
 zone counts, the Edge.Cuts outline (loops, exact closure, `max_gap_nm`, bounds, items) and issues. Exit 0, or 2 with
 `status`, `line`, `column`, `item`, `context` and `message`. See [BOARD_MODEL.md](BOARD_MODEL.md).
 
+## copper-core dfm
+
+`copper-core dfm BOARD PROFILE` checks a `.kicad_pcb` (C board model) against a fab profile
+(`fab_profiles/NAME.json`) with the V2 DFM module and prints JSON: the profile and its source, a verdict per rule
+(PASS, FAIL, UNVERIFIED, NOT_IMPLEMENTED with counts and a note) and every violation (limit and measured size in nm,
+the items, a location and the fabricator's wording). Exit 0 when nothing FAILs, 2 on FAIL, 1 when the board or
+profile cannot be read. See [DFM_V2.md](DFM_V2.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

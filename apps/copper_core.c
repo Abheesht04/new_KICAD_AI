@@ -4,6 +4,7 @@
 #include "copper_project.h"
 #include "excellon.h"
 #include "board.h"
+#include "dfm.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -86,6 +87,7 @@ static int board_json(const char *path) {
             printf(",\"type\":\"%s\",\"shape\":\"%s\",\"x_nm\":%lld,\"y_nm\":%lld,\"exact\":%s,\"angle_udeg\":%lld,\"size_nm\":[%lld,%lld]",
                    PAD_TYPES[p->type],PAD_SHAPES[p->shape],(long long)p->at.x,(long long)p->at.y,p->exact?"true":"false",(long long)p->angle_udeg,(long long)p->size_x,(long long)p->size_y);
             if(p->has_drill) printf(",\"drill_nm\":[%lld,%lld],\"drill_oval\":%s",(long long)p->drill_x,(long long)p->drill_y,p->drill_oval?"true":"false");
+            printf(",\"layers\":%llu",(unsigned long long)p->layers);
             fputs(",\"net\":",stdout); net_json(&b,p->net); fputc('}',stdout); }
         fputs("]}",stdout); }
     printf("],\"tracks\":%zu,\"vias\":[",b.track_count);
@@ -111,10 +113,41 @@ static int board_json(const char *path) {
     puts("]}");
     arena_destroy(&arena); return 0;
 }
+static const char *const ITEM_KINDS[]={"none","track","via","pad","edge","board"};
+/* dfm BOARD PROFILE: V2 DFM (src/v2_src/dfm.c) of a .kicad_pcb against a fab profile (fab_profiles/NAME.json), as JSON:
+ * the profile and its source, a verdict per rule, and every violation (lengths in nm). Exit 0 when nothing FAILs
+ * (PASS or UNVERIFIED: see "verdict"), 2 on FAIL, 1 when the board or the profile cannot be read. */
+static int dfm_json(const char *board_path,const char *profile_path) {
+    Arena arena; arena_init(&arena,1<<20); Board b; BoardError be={0}; DfmProfile p; DfmError de={0}; DfmReport r;
+    BoardStatus bs=board_load(&arena,board_path,&b,&be);
+    if(bs!=BOARD_OK) { printf("{\"status\":\"BOARD_%s\",\"line\":%zu,\"item\":%zu,\"message\":",board_status_name(bs),be.line,be.item);
+        json_string(stdout,be.message?be.message:""); puts("}"); arena_destroy(&arena); return 1; }
+    DfmStatus ds=dfm_profile_load(&arena,profile_path,&p,&de);
+    if(ds==DFM_OK) ds=dfm_check(&arena,&b,&p,&r,&de);
+    if(ds!=DFM_OK) { printf("{\"status\":\"PROFILE_%s\",\"line\":%zu,\"column\":%zu,\"key\":",dfm_status_name(ds),de.line,de.column);
+        json_string(stdout,de.key?de.key:""); fputs(",\"message\":",stdout); json_string(stdout,de.message?de.message:""); puts("}");
+        arena_destroy(&arena); return 1; }
+    printf("{\"status\":\"OK\",\"verdict\":\"%s\",\"profile\":{\"name\":",dfm_verdict_name(r.verdict)); json_string(stdout,p.name);
+    fputs(",\"fabricator\":",stdout); json_string(stdout,p.fabricator); fputs(",\"source\":",stdout); json_string(stdout,p.source_url);
+    fputs(",\"retrieved\":",stdout); json_string(stdout,p.retrieved); fputs("},\"rules\":[",stdout);
+    for(int k=0;k<DFM_RULE_COUNT;k++) { const DfmRuleResult *x=&r.rules[k];
+        printf("%s{\"rule\":\"%s\",\"verdict\":\"%s\",\"checked\":%zu,\"violations\":%zu,\"unverified\":%zu,\"note\":",k?",":"",
+               dfm_rule_name(x->rule),dfm_verdict_name(x->verdict),x->checked,x->violations,x->unverified);
+        if(x->note) json_string(stdout,x->note); else fputs("null",stdout); fputc('}',stdout); }
+    fputs("],\"violations\":[",stdout);
+    for(size_t i=0;i<r.violation_count;i++) { const DfmViolation *v=&r.violations[i]; const DfmLimitValue *l=&p.limits[v->limit];
+        printf("%s{\"rule\":\"%s\",\"limit\":\"%s\",\"limit_nm\":%lld,\"measured_nm\":%lld,\"a\":[\"%s\",%zu],\"b\":[\"%s\",%zu],\"at_nm\":[%lld,%lld],\"source\":",
+               i?",":"",dfm_rule_name(v->rule),dfm_limit_key(v->limit),(long long)v->limit_nm,(long long)v->measured_nm,ITEM_KINDS[v->a.kind],v->a.index,
+               ITEM_KINDS[v->b.kind],v->b.index,(long long)v->at.x,(long long)v->at.y);
+        json_string(stdout,l->quote); fputc('}',stdout); }
+    puts("]}");
+    int rc=r.verdict==DFM_FAIL?2:0; arena_destroy(&arena); return rc;
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
     if(argc==3 && !strcmp(argv[1],"board")) return board_json(argv[2]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | dfm BOARD PROFILE | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);

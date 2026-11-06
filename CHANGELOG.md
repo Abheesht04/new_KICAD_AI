@@ -14,6 +14,16 @@
 
 # Changelog
 
+## V2 track C: DFM against fab profiles (2026-11-06)
+
+- `src/v2_src/dfm.{c,h}`, `copper-core dfm BOARD PROFILE`: track width, clearance (BVH, exact shape distances),
+  annular rings, drills and slots, hole to hole, hole to track, copper to edge, hole to edge, board size; zone
+  clearance NOT_IMPLEMENTED; inexact items never FAIL, they are UNVERIFIED.
+- `fab_profiles/jlcpcb_2layer.json`: every limit quoted from jlcpcb.com/capabilities/pcb-capabilities (2026-11-06),
+  unpublished ones null, page conflicts resolved to the stricter value and listed.
+- `src/v2_src/json.{c,h}`: strict JSON reader; decimal mm to exact nm.
+- Clearance equals a brute-force oracle on six KiCad 9.0-saved boards (199 violations, none missed or extra).
+
 ## V2 track B: the board model in C (2026-11-06)
 
 - `src/v2_src/board.{c,h}` and `copper-core board`: KiCad boards (nets, footprints, absolute pads, tracks, vias, zones,

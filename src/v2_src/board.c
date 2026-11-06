@@ -943,3 +943,28 @@ bool board_outline_closed_within(const Board *b, G2Nm tolerance)
     if (b->outline.closed) return true;
     return b->outline.max_gap >= 0 && b->outline.max_gap <= tolerance;
 }
+
+BoardStatus board_arc_bounds(G2Point s, G2Point m, G2Point e, G2Aabb *out)
+{
+    BoardOutline box;
+    if (!out) return BOARD_INVALID_ARGUMENT;
+    memset(&box, 0, sizeof box);
+    box_add(&box, s, 0); box_add(&box, m, 0); box_add(&box, e, 0);
+#if BOARD_HAVE_I128
+    G2Point c;
+    G2Nm r;
+    if (arc_circle(s, m, e, &c, &r)) {
+        static const int DIRS[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int k = 0; k < 4; k++)
+            if (arc_sweeps(s, m, e, c, DIRS[k][0], DIRS[k][1])) {
+                G2Point p = {c.x + (G2Nm)DIRS[k][0] * (r + 1), c.y + (G2Nm)DIRS[k][1] * (r + 1)};
+                box_add(&box, p, 0);
+            }
+    }
+    *out = box.bounds;
+    return BOARD_OK;
+#else
+    *out = box.bounds;
+    return BOARD_RANGE_ERROR;
+#endif
+}
