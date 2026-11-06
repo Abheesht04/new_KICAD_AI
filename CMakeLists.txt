@@ -88,8 +88,23 @@ add_library(copper_v2 STATIC
     src/v2_src/llm_ollama.c
     src/v2_src/schema_gbnf.c
     src/v2_src/agent_loop.c
+    src/v2_src/dfm_cpu_ref.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
+# Track H: the CUDA clearance kernel is opt-in (-DCOPPER_CUDA=ON, needs nvcc and CUDA 11.5+). Without it a stub
+# reports NOT_BUILT; nothing needs a GPU to build or to pass tests.
+option(COPPER_CUDA "Build the CUDA DFM kernel (cuda/dfm_gpu.cu)" OFF)
+if(COPPER_CUDA)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    target_sources(copper_v2 PRIVATE cuda/dfm_gpu.cu)
+    set_source_files_properties(cuda/dfm_gpu.cu PROPERTIES LANGUAGE CUDA)
+    target_link_libraries(copper_v2 PUBLIC CUDA::cudart)
+    target_compile_definitions(copper_v2 PUBLIC COPPER_HAVE_CUDA=1)
+    message(STATUS "copper_v2: CUDA DFM kernel enabled")
+else()
+    target_sources(copper_v2 PRIVATE src/v2_src/dfm_gpu_stub.c)
+endif()
 target_link_libraries(copper_v2 PUBLIC hwcore)
 if(MSVC)
     target_compile_options(copper_v2 PRIVATE /W4)
@@ -159,6 +174,7 @@ if(HWCOMPILER_BUILD_TESTS)
         finding
         tool_server
         llm
+        dfm_gpu
     )
 
     # A stand-in for kicad-cli for tests/kicad_cli_test.c (records its argv; modes for each failure path).
@@ -168,7 +184,7 @@ if(HWCOMPILER_BUILD_TESTS)
     endif()
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm" OR test_name STREQUAL "dfm_gpu")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -249,6 +265,9 @@ if(HWCOMPILER_BUILD_TESTS)
     # The eval pipeline end to end with the mock backend (eval/prompts.jsonl): every prompt must PASS.
     add_test(NAME llm_eval_mock COMMAND ${CMAKE_COMMAND} "-DCORE=$<TARGET_FILE:copper-core>" "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/llm_eval_mock" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/llm_eval_mock.cmake")
+    # Track H: the GPU against the CPU reference on 1000 random boards. Exit 77 = NOT RUN (no CUDA build or device).
+    add_test(NAME dfm_gpu_compare COMMAND dfm_gpu_test --gpu)
+    set_tests_properties(dfm_gpu_compare PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME v2_src_shared_in_sync COMMAND ${CMAKE_COMMAND} "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/v2_src_sync.cmake")
 endif()
@@ -318,6 +337,9 @@ if(HWCOMPILER_BUILD_TESTS)
     )
 endif()
 
+# Track H benchmark: CPU reference vs GPU clearance at N = 64, 1024, 16384.
+add_executable(dfm_bench apps/dfm_bench.c)
+target_link_libraries(dfm_bench PRIVATE copper_v2)
 add_executable(copper-core apps/copper_core.c)
 target_link_libraries(copper-core PRIVATE copper_v2)
 # Measurement tool for docs/engineering/NUMERICAL_ROADMAP.md: kernels against analytical oracles.

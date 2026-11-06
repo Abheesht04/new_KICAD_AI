@@ -14,6 +14,14 @@
 
 # Changelog
 
+## V2 track H: CUDA DFM kernel and its CPU reference (2026-11-07)
+
+- `src/v2_src/dfm_kernel.h` (exact integer clearance predicate shared by CPU and GPU), `dfm_cpu_ref.c`,
+  `cuda/dfm_gpu.cu` + `dfm_gpu.h` (built only with -DCOPPER_CUDA=ON; a stub reports NOT_BUILT otherwise),
+  `apps/dfm_bench.c` (N = 64, 1024, 16384).
+- The CPU reference equals g2's exact capsule distance on 1000 random boards. The GPU path was not built or run
+  here (no CUDA, no GPU): its 1000-board comparison test reports NOT RUN.
+
 ## V2 track G: LLM bridge (2026-11-07)
 
 - `src/v2_src/llm.h` backend interface; `llm_mock.c` (default: scripted or rule planner), `llm_ollama.c`
