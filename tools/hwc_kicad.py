@@ -37,77 +37,57 @@ class SExprError(ValueError):
     pass
 
 
+# One token per match: whitespace, a comment to end of line, '(', ')', a quoted string, or an atom. An atom runs
+# to whitespace or ( ) ; and may contain '"' (but cannot start with one: that is an unterminated string).
+_TOKEN = re.compile(r'(\s+|;[^\n]*\n?)|(\()|(\))|"((?:[^"\\]|\\.)*)"|((?!")[^\s();]+)', re.S)
+_ESCAPE = re.compile(r'\\(.)', re.S)
+_ESCAPES = {'n': '\n', 'r': '\r', 't': '\t'}
+
+
+def _unescape(body: str) -> str:
+    # KiCad strings use backslash escapes: \n \r \t; any other escaped character stands for itself.
+    return _ESCAPE.sub(lambda m: _ESCAPES.get(m.group(1), m.group(1)), body) if '\\' in body else body
+
+
 def parse_sexpr(text: str) -> SExpr:
-    """Small strict parser for KiCad's parenthesized S-expression files."""
-    n = len(text)
-    i = 0
-
-    def skip() -> None:
-        nonlocal i
-        while i < n:
-            if text[i].isspace():
-                i += 1
-            elif text[i] == ';':
-                j = text.find('\n', i)
-                i = n if j < 0 else j + 1
-            else:
-                break
-
-    def read_string() -> Quoted:
-        nonlocal i
-        assert text[i] == '"'
-        i += 1
-        out: list[str] = []
-        while i < n:
-            c = text[i]
-            i += 1
-            if c == '"':
-                return Quoted(''.join(out))
-            if c == '\\':
-                if i >= n:
-                    raise SExprError('backslash at end of quoted string')
-                esc = text[i]
-                i += 1
-                # KiCad strings use backslash escapes. Preserve escaped quote and
-                # backslash; for other escaped chars retain the character.
-                out.append({'n': '\n', 'r': '\r', 't': '\t'}.get(esc, esc))
-            else:
-                out.append(c)
-        raise SExprError('unterminated quoted string')
-
-    def read_node() -> SExpr:
-        nonlocal i
-        skip()
-        if i >= n:
-            raise SExprError('unexpected end of input')
-        c = text[i]
-        if c == '(':
-            i += 1
-            result: list[SExpr] = []
-            while True:
-                skip()
-                if i >= n:
-                    raise SExprError('unclosed list')
-                if text[i] == ')':
-                    i += 1
-                    return result
-                result.append(read_node())
-        if c == ')':
-            raise SExprError(f'unexpected closing parenthesis at byte {i}')
-        if c == '"':
-            return read_string()
-        start = i
-        while i < n and not text[i].isspace() and text[i] not in '();':
-            i += 1
-        if i == start:
-            raise SExprError(f'unexpected token at byte {i}')
-        return Atom(text[start:i])
-
-    node = read_node()
-    skip()
-    if i != n:
-        raise SExprError(f'extra content after expression at byte {i}')
-    return node
+    """Small strict parser for KiCad's parenthesized S-expression files (regex tokenizer, explicit stack:
+    multi-megabyte symbol libraries parse several times faster than character by character)."""
+    stack: list[list[SExpr]] = []
+    top: list[SExpr] = []
+    pos, n = 0, len(text)
+    match = _TOKEN.match
+    while pos < n:
+        m = match(text, pos)
+        if m is None:
+            if text[pos] == '"':
+                raise SExprError('backslash at end of quoted string' if text.endswith('\\') and '"' not in text[pos + 1:] else 'unterminated quoted string')
+            raise SExprError(f'unexpected token at byte {pos}')
+        space, opening, closing, string, atom = m.groups()
+        pos = m.end()
+        if space is not None:
+            continue
+        if opening:
+            stack.append([])
+            continue
+        if closing:
+            if not stack:
+                raise SExprError(f'unexpected closing parenthesis at byte {pos - 1}')
+            node: SExpr = stack.pop()
+        elif string is not None:
+            node = Quoted(_unescape(string))
+        else:
+            node = Atom(atom)
+        if stack:
+            stack[-1].append(node)
+        elif top:
+            raise SExprError(f'extra content after expression at byte {m.start()}')
+        else:
+            top.append(node)
+    if stack:
+        raise SExprError('unclosed list')
+    if not top:
+        raise SExprError('unexpected end of input')
+    return top[0]
 
 
 def quote_string(value: str) -> str:
@@ -157,66 +137,87 @@ def text_at(node: Any, key: str, index: int = 1, default: str = '') -> str:
     return default
 
 
+
+def _installs() -> list[dict[str, Any]]:
+    # One owner for finding KiCad: tools/kicad_library.py (KiCad 9.x first, then other versions, newest first).
+    import kicad_library
+    return kicad_library.ordered(kicad_library.find_installs(probe=False))
+
+
+def installed(key: str) -> list[Path]:
+    return [Path(i[key]) for i in _installs() if i[key]]
+
+
+NO_INSTALL = ('no KiCad installation found (Program Files/KiCad/*, /usr, /usr/local, /Applications/KiCad, '
+              'kicad-cli on PATH or KICAD_CLI)')
+
+
 def discover_symbol_dir(explicit: str | None = None) -> Path:
-    candidates: list[Path] = []
+    # An explicit path is authoritative; never silently substitute another library.
     if explicit:
-        candidates.append(Path(explicit))
+        path = Path(explicit)
+        if path.is_dir() and any(path.glob('*.kicad_sym')):
+            return path.resolve()
+        raise FileNotFoundError(
+            f'Explicit KiCad symbol directory is missing or invalid: {path}'
+        )
+
+    candidates: list[Path] = []
     env = os.environ.get('KICAD_SYMBOL_DIR') or os.environ.get('KICAD9_SYMBOL_DIR')
     if env:
         candidates.append(Path(env))
-    pf = os.environ.get('ProgramFiles', r'C:\Program Files')
-    candidates.extend([
-        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'symbols',
-        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'symbols',
-        Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'symbols',
-        Path('/usr/share/kicad/symbols'),
-        Path('/usr/local/share/kicad/symbols'),
-        Path('/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols'),
-    ])
-    for p in candidates:
-        if p.is_dir() and any(p.glob('*.kicad_sym')):
-            return p.resolve()
-    looked = '\n  '.join(str(p) for p in candidates)
-    raise FileNotFoundError('Cannot find KiCad symbol directory. Supply --symbol-dir. Checked:\n  ' + looked)
+
+    candidates.extend(installed('symbols'))
+
+    for path in candidates:
+        if path.is_dir() and any(path.glob('*.kicad_sym')):
+            return path.resolve()
+
+    looked = '\n  '.join(str(path) for path in candidates) or NO_INSTALL
+    raise FileNotFoundError(
+        'Cannot find KiCad symbol directory. Supply --symbol-dir. Checked:\n  '
+        + looked
+    )
 
 
 
 def discover_footprint_dir(explicit: str | None = None) -> Path:
-    candidates: list[Path] = []
+    # An explicit path is authoritative; never silently substitute another library.
     if explicit:
-        candidates.append(Path(explicit))
+        path = Path(explicit)
+        if path.is_dir() and any(path.glob('*.pretty')):
+            return path.resolve()
+        raise FileNotFoundError(
+            f'Explicit KiCad footprint directory is missing or invalid: {path}'
+        )
+
+    candidates: list[Path] = []
     for env_name in ('KICAD_FOOTPRINT_DIR', 'KISYSMOD'):
         env = os.environ.get(env_name)
         if env:
             candidates.append(Path(env))
-    pf = os.environ.get('ProgramFiles', r'C:\Program Files')
-    candidates.extend([
-        Path(pf) / 'KiCad' / '10.0' / 'share' / 'kicad' / 'footprints',
-        Path(pf) / 'KiCad' / '9.0' / 'share' / 'kicad' / 'footprints',
-        Path(pf) / 'KiCad' / '8.0' / 'share' / 'kicad' / 'footprints',
-        Path('/usr/share/kicad/footprints'),
-        Path('/usr/local/share/kicad/footprints'),
-        Path('/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'),
-    ])
+
+    candidates.extend(installed('footprints'))
+
     for path in candidates:
         if path.is_dir() and any(path.glob('*.pretty')):
             return path.resolve()
-    looked = '\n  '.join(str(path) for path in candidates)
-    raise FileNotFoundError('Cannot find KiCad footprint directory. Supply --footprint-dir. Checked:\n  ' + looked)
+
+    looked = '\n  '.join(str(path) for path in candidates) or NO_INSTALL
+    raise FileNotFoundError(
+        'Cannot find KiCad footprint directory. Supply --footprint-dir. Checked:\n  '
+        + looked
+    )
 
 
 def discover_cli(explicit: str | None = None) -> str | None:
+    explicit = explicit or os.environ.get('KICAD_CLI')
     if explicit:
         return explicit
     found = shutil.which('kicad-cli') or shutil.which('kicad-cli.exe')
     if found:
         return found
-    pf = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))
-    for version in ('10.0', '9.0', '8.0'):
-        candidate = pf / 'KiCad' / version / 'bin' / 'kicad-cli.exe'
-        if candidate.is_file():
-            return str(candidate)
-    return None
+    return next((i['cli'] for i in _installs() if i['cli']), None)  # the KiCad 9.x validation target first
 
 
 def symbol_definitions(lib_dir: Path, requested: str, seen: set[str] | None = None) -> list[list[Any]]:

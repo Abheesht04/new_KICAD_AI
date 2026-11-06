@@ -1,0 +1,177 @@
+; ESP32-WROOM-32E behavioral-boundary example (docs/engineering/PART_REGISTRY.md).
+; U1 drives IO4 high into R2; EN has an RC reset network; UART0 reaches J1. Generated from
+; profiles/mcu_modules.parts and profiles/default.parts; ratings stay UNKNOWN where no source gives them.
+; (rules (drill_mm 0.2)): the module footprint has 0.2 mm thermal vias, so the process must support 0.2 mm holes.
+(copper_project
+  (version 2)
+  (name "esp32_io")
+  (nets GND 3V3 EN IO4 TXD0 RXD0)
+  (board 50 62 1.6 0.035 2)
+  (parts
+    (part
+      esp32_wroom_32e
+      (kind U)
+      (family esp32)
+      (role mcu_module)
+      (symbol "RF_Module:ESP32-WROOM-32E")
+      (footprint "RF_Module:ESP32-WROOM-32E")
+      (manufacturer "Espressif Systems")
+      (mpn "ESP32-WROOM-32E")
+      (datasheet "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf")
+      (height_mm 3.1)
+      (provenance "Espressif ESP32-WROOM-32E/32UE datasheet: module dimensions, pin definitions, strapping pins, recommended operating conditions and DC characteristics (3.3 V, 25 C)")
+      (alternates esp32_wroom_32ue)
+      (mcu
+        (behavior "DC electrical constraints only: pins are high impedance unless driven by the project; firmware execution, RF and transistor-level silicon are not simulated")
+        (provenance "Espressif ESP32-WROOM-32E/32UE datasheet, recommended operating conditions and DC characteristics; ESP32 datasheet strapping pins")
+        (supply 2)
+        (ground 1 15 38 39)
+        (operating_v 3.0 3.6)
+        (vih_ratio 0.75)
+        (vil_ratio 0.25)
+        (max_source_a 0.04)
+        (max_sink_a 0.028)
+        (gpio
+          (pin 4 SENSOR_VP in)
+          (pin 5 SENSOR_VN in)
+          (pin 6 IO34 in)
+          (pin 7 IO35 in)
+          (pin 8 IO32 in out)
+          (pin 9 IO33 in out)
+          (pin 10 IO25 in out)
+          (pin 11 IO26 in out)
+          (pin 12 IO27 in out)
+          (pin 13 IO14 in out)
+          (pin 14 IO12 in out)
+          (pin 16 IO13 in out)
+          (pin 23 IO15 in out)
+          (pin 24 IO2 in out)
+          (pin 25 IO0 in out)
+          (pin 26 IO4 in out)
+          (pin 27 IO16 in out)
+          (pin 28 IO17 in out)
+          (pin 29 IO5 in out)
+          (pin 30 IO18 in out)
+          (pin 31 IO19 in out)
+          (pin 33 IO21 in out)
+          (pin 34 IO3 in out)
+          (pin 35 IO1 in out)
+          (pin 36 IO22 in out)
+          (pin 37 IO23 in out)
+        )
+        (straps
+          (25 "IO0 selects the boot mode: low at reset enters serial download")
+          (24 "IO2 must be low or floating at reset for serial download")
+          (14 "IO12 (MTDI) selects the flash voltage: it must be low at reset for this module's 3.3 V flash")
+          (23 "IO15 (MTDO) controls boot-log output and SDIO timing at reset")
+          (29 "IO5 sets SDIO slave timing at reset")
+        )
+        (reset 3 active_low)
+        (program 35 34 25 3)
+      )
+      (catalogue "user:mcu_modules.parts")
+    )
+    (part
+      resistor
+      (kind R)
+      (symbol "Device:R")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      capacitor
+      (kind C)
+      (symbol "Device:C")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      voltage
+      (kind V)
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      header4
+      (kind J)
+      (symbol "Connector_Generic:Conn_01x04")
+      (footprint "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical")
+      (catalogue "project:esp32_io")
+    )
+  )
+  (components
+    (component
+      V1
+      (part voltage)
+      (value 3.3)
+      (pins
+        (1 3V3)
+        (2 GND)
+      )
+      (at 0 0 0)
+    )
+    (component
+      U1
+      (part esp32_wroom_32e)
+      (pins
+        (1 GND)
+        (2 3V3)
+        (3 EN)
+        (15 GND)
+        (26 IO4)
+        (34 RXD0)
+        (35 TXD0)
+        (38 GND)
+        (39 GND)
+      )
+      (at 25 30 0)
+      (nc 4 5 6 7 8 9 10 11 12 13 14 16 17 18 19 20 21 22 23 24 25 27 28 29 30 31 32 33 36 37)
+      (drive
+        (26 high)
+      )
+    )
+    (component
+      R1
+      (part resistor)
+      (value 10000)
+      (pins
+        (1 3V3)
+        (2 EN)
+      )
+      (at 8 50 0)
+    )
+    (component
+      C1
+      (part capacitor)
+      (value 1e-06)
+      (pins
+        (1 EN)
+        (2 GND)
+      )
+      (at 8 55 0)
+    )
+    (component
+      R2
+      (part resistor)
+      (value 1000)
+      (pins
+        (1 IO4)
+        (2 GND)
+      )
+      (at 42 50 0)
+    )
+    (component
+      J1
+      (part header4)
+      (pins
+        (1 3V3)
+        (2 TXD0)
+        (3 RXD0)
+        (4 GND)
+      )
+      (at 25 52 0)
+    )
+  )
+  (rules
+    (drill_mm 0.2)
+  )
+)

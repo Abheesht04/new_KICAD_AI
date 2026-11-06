@@ -1,0 +1,71 @@
+; Layout fixture: 5 V into two 20 ohm loads (0.5 A). With the default 20 A/mm2 density and 0.05 V drop budgets
+; a 0.2 mm trace fails; the optimizer must widen the copper (current_density_budget), not hide the finding.
+(copper_project
+  (version 2)
+  (name "high_current")
+  (nets GND VIN)
+  (board 30 20 1.6 0.035 2)
+  (parts
+    (part
+      resistor
+      (kind R)
+      (symbol "Device:R")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      voltage
+      (kind V)
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      header3
+      (kind J)
+      (symbol "Connector_Generic:Conn_01x03")
+      (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
+      (catalogue "bundled:default.parts")
+    )
+  )
+  (components
+    (component
+      V1
+      (part voltage)
+      (value 5)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+      (at 0 0 0)
+    )
+    (component
+      R1
+      (part resistor)
+      (value 20)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+      (at 16 6 0)
+    )
+    (component
+      R2
+      (part resistor)
+      (value 20)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+      (at 16 14 0)
+    )
+    (component
+      J1
+      (part header3)
+      (pins
+        (1 VIN)
+        (2 GND)
+        (3 GND)
+      )
+      (at 6 7 0)
+    )
+  )
+)

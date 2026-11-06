@@ -87,6 +87,11 @@ struct MnaAssembly {
 
   size_t node_count;
   size_t unknown_count;
+
+  /* 0: evaluate exactly at x (residual checks, validation, any other caller). Nonzero: a Newton linearisation,
+   * where a nonlinear device may evaluate its junctions at SPICE-limited voltages (pnjlim) relative to its previous
+   * linearisation and stamp the companion model there; 1 marks the first linearisation of a solve (no history). */
+  int limit;
 };
 
 /* --------------------------------------------------------------------------
@@ -129,6 +134,7 @@ typedef struct {
   double saturation_current_a;
   double ideality_factor;
   double temperature_k;
+  double v_last; /* junction voltage of the previous Newton linearisation (solver state) */
 } MnaDiode;
 
 /* --------------------------------------------------------------------------
@@ -164,6 +170,70 @@ int mna_add_voltage_source(MnaCircuit *circuit, size_t node_a, size_t node_b,
 int mna_add_diode(MnaCircuit *circuit, size_t node_anode, size_t node_cathode,
                   double saturation_current_a, double ideality_factor,
                   double temperature_k);
+
+/* The diode's Shockley equation at anode-cathode voltage voltage_v: current and
+ * dI/dV (the small-signal conductance used by AC). The exponent is clamped at
+ * +/-40, exactly as in DC. */
+void mna_diode_evaluate(const MnaDiode *diode, double voltage_v,
+                        double *current_a, double *conductance_s);
+
+/* exp(x), continued linearly above x = 40 with a consistent slope (C1).
+ * Returns the value and writes d/dx to *slope. */
+double mna_limexp(double x, double *slope);
+
+/* First-order Ebers-Moll BJT (transport form), docs/engineering/NONLINEAR_MODELS.md.
+ * polarity +1 = NPN, -1 = PNP. No charge storage, no Early effect, no high
+ * injection; temperature only through Vt. */
+typedef struct {
+  size_t node_collector;
+  size_t node_base;
+  size_t node_emitter;
+  int polarity;
+  double saturation_current_a;
+  double beta_f;
+  double beta_r;
+  double nf;
+  double nr;
+  double temperature_k;
+  double vbe_last, vbc_last; /* junction voltages (polarity applied) of the previous linearisation (solver state) */
+} MnaBjt;
+
+typedef struct {
+  double ic, ib, ie; /* currents INTO collector, base, emitter; ic + ib + ie = 0 */
+  double d[3][3];    /* d(Ic, Ib, Ie) / d(Vc, Vb, Ve) */
+} MnaBjtEval;
+
+void mna_bjt_evaluate(const MnaBjt *bjt, double vc, double vb, double ve,
+                      MnaBjtEval *out);
+/* Copies params. Returns 1 on success, 0 for invalid nodes/parameters. */
+int mna_add_bjt(MnaCircuit *circuit, const MnaBjt *params);
+
+/* Level-1 (Shichman-Hodges) MOSFET with the body tied to the source.
+ * polarity +1 = NMOS, -1 = PMOS (Vto is negative for an enhancement PMOS).
+ * No charge storage, no body effect, no subthreshold conduction. */
+typedef struct {
+  size_t node_drain;
+  size_t node_gate;
+  size_t node_source;
+  int polarity;
+  double vto;    /* V */
+  double kp;     /* A/V^2 */
+  double w, l;   /* m; beta = kp * w / l */
+  double lambda; /* 1/V, >= 0 */
+} MnaMosfet;
+
+enum { MNA_MOS_CUTOFF = 0, MNA_MOS_TRIODE = 1, MNA_MOS_SATURATION = 2 };
+
+typedef struct {
+  double id;               /* into the drain (= out of the source) */
+  double d_vd, d_vg, d_vs; /* dId/dV at each terminal; the gate draws no current */
+  int region;              /* MNA_MOS_* of the conducting orientation */
+  int reversed;            /* 1 when Vds < 0 (drain and source swapped roles) */
+} MnaMosfetEval;
+
+void mna_mosfet_evaluate(const MnaMosfet *mos, double vd, double vg, double vs,
+                         MnaMosfetEval *out);
+int mna_add_mosfet(MnaCircuit *circuit, const MnaMosfet *params);
 
 /* --------------------------------------------------------------------------
  * Solver configuration
@@ -205,6 +275,20 @@ typedef struct {
   double pivot_tolerance;
   double maximum_voltage_step_v;
 
+  /* Nonlinear circuits converge only when the residual test passes AND the
+   * last applied node-voltage update is small:
+   *     max|dV| <= absolute_update_tolerance_v + relative_update_tolerance * max|V|
+   * A small residual alone can hide a large voltage error at a high-impedance
+   * node. Linear circuits use the residual test alone, since one exact Newton
+   * step solves them. */
+  double absolute_update_tolerance_v;
+  double relative_update_tolerance;
+
+  /* 1 (default): nonlinear devices limit their junction voltages between Newton iterations (SPICE pnjlim), so
+   * linearly driven nodes take full steps. maximum_voltage_step_v > 0 additionally scales the whole update so no
+   * node moves more than that (the pre-step-7 behaviour, 0.25 V; default 0 = off). */
+  int junction_limiting;
+
   MnaTraceFn trace;
   void *trace_context;
 
@@ -236,9 +320,16 @@ typedef struct {
   double maximum_residual;
   double maximum_kcl_residual_a;
   double initial_residual_scale;
+  double condition_estimate; /* 1-norm condition estimate of the last Newton Jacobian; NAN if none was factored */
+  size_t singular_unknown;   /* the unknown whose column was found singular, or (size_t)-1 */
 } MnaResult;
 
 void mna_result_free(MnaResult *result);
+
+/* The unknowns (indices: 0..node_count-1 are node voltages of nodes 1..node_count, then device unknowns) that the
+ * system's structure leaves undetermined, from a maximum matching of equations to unknowns over the Jacobian pattern
+ * at x (NULL: zero). Writes up to cap of them and returns how many there are; 0 = structurally nonsingular. */
+size_t mna_structural_deficiency(const MnaCircuit *circuit, const double *x, size_t *unknowns, size_t cap);
 
 void mna_solve(const MnaCircuit *circuit, const MnaOptions *options,
                MnaResult *result);

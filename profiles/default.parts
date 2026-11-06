@@ -1,4 +1,4 @@
-; Generic library identities; ratings deliberately UNKNOWN (0), never inferred from package.
+; Generic library identities; ratings deliberately UNKNOWN (omitted), never inferred from package.
 (catalogue
  (part resistor (kind R) (symbol "Device:R") (footprint "Resistor_SMD:R_0603_1608Metric"))
  (part capacitor (kind C) (symbol "Device:C") (footprint "Capacitor_SMD:C_0603_1608Metric"))

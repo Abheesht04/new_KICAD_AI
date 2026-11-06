@@ -1,0 +1,13 @@
+; Indicator LED and programming header (docs/engineering/DESIGN.md). KiCad identities only, plus one stated
+; LED model. No MPN, no rating: every check that needs a rating stays UNVERIFIED until your catalogue gives one.
+(catalogue
+ (part led_red_0603
+  (kind D) (family led) (role indicator_led)
+  (symbol "Device:LED") (footprint "LED_SMD:LED_0603_1608Metric")
+  (pinmap (cathode 1) (anode 2))
+  (is_a 3.17519e-19) (ideality 2)
+  (provenance "single-point Shockley fit, not a datasheet: Vf = 2.0 V at 20 mA with ideality n = 2 assumed (a generic red indicator LED), Is = 20 mA / (exp(2.0 / (2 x 25.852 mV)) - 1); replace with your LED's datasheet curve"))
+ (part conn_1x06
+  (kind J) (family connector) (role programming_header)
+  (symbol "Connector_Generic:Conn_01x06")
+  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical")))

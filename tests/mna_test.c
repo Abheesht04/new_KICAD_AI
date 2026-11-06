@@ -817,7 +817,11 @@ static void test_nonlinear_flag(void) {
 
   EXPECT(result.status == MNA_STATUS_SUCCESS);
   EXPECT(nearly_equal(mna_node_voltage(&result, 1), 5.0, 1e-12, 1e-12));
-  EXPECT(result.iterations == 20);
+  /* 20 damped 0.25 V steps reach 5 V; the nonlinear update-norm criterion
+   * then needs one confirming iteration whose update is within tolerance. */
+  EXPECT(result.iterations == 21);
+  EXPECT(result.maximum_voltage_step_v <= options.absolute_update_tolerance_v +
+                                              options.relative_update_tolerance * 5.0);
 
   mna_result_free(&result);
   mna_circuit_free(&circuit);
@@ -842,7 +846,11 @@ static void test_mixed_linear_nonlinear(void) {
   EXPECT(result.status == MNA_STATUS_SUCCESS);
   EXPECT(nearly_equal(mna_node_voltage(&result, 1), 5.0, 1e-12, 1e-12));
   EXPECT(nearly_equal(mna_node_voltage(&result, 2), 2.5, 1e-12, 1e-12));
-  EXPECT(result.iterations == 20);
+  /* 20 damped 0.25 V steps reach 5 V; the nonlinear update-norm criterion
+   * then needs one confirming iteration whose update is within tolerance. */
+  EXPECT(result.iterations == 21);
+  EXPECT(result.maximum_voltage_step_v <= options.absolute_update_tolerance_v +
+                                              options.relative_update_tolerance * 5.0);
 
   mna_result_free(&result);
   mna_circuit_free(&circuit);

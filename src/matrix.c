@@ -1,4 +1,5 @@
 #include "matrix.h"
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -188,79 +189,174 @@ void sparse_to_dense(const SparseMatrix *sparse, Matrix *dense_out) {
  * Solves Ax = b using Gaussian Elimination with Partial Pivoting.
  * WARNING: The input matrix 'a' is mutated/destroyed during the solve.
  */
-bool matrix_solve(Matrix *a, const double *b, double *x) {
+/* Dense LU with partial (row) pivoting, P A = L U, factored in place: U on and above the diagonal, the unit-lower
+ * L multipliers below it, perm[i] the original row now at position i. Column k is singular when its pivot is
+ * at most n * DBL_EPSILON times the largest entry the column had before elimination (a relative test: the
+ * answer for a system scaled by any power of ten is the same), or when the column was entirely zero. */
+static bool lu_factor(Matrix *a, size_t *perm, size_t *singular_column) {
   size_t n = a->rows;
-  if (n != a->cols)
-    return false; // Must be a square matrix
-
-  // 1. Initialize output vector x with the constants from b
-  for (size_t i = 0; i < n; i++) {
-    x[i] = b[i];
-  }
-
-  // 2. Elimination Phase (convert matrix to upper triangular)
+  double *colmax = calloc(n ? n : 1, sizeof *colmax);
+  if (!colmax)
+    return false;
+  for (size_t i = 0; i < n; i++)
+    for (size_t j = 0; j < n; j++)
+      if (fabs(a->data[i * n + j]) > colmax[j])
+        colmax[j] = fabs(a->data[i * n + j]);
+  for (size_t i = 0; i < n; i++)
+    perm[i] = i;
   for (size_t k = 0; k < n; k++) {
-
-    // --- Partial Pivoting ---
     size_t pivot_row = k;
-    double max_val = fabs(a->data[(k * n) + k]);
-
-    for (size_t i = k + 1; i < n; i++) {
-      double current_val = fabs(a->data[(i * n) + k]);
-      if (current_val > max_val) {
-        max_val = current_val;
+    double max_val = fabs(a->data[k * n + k]);
+    for (size_t i = k + 1; i < n; i++)
+      if (fabs(a->data[i * n + k]) > max_val) {
+        max_val = fabs(a->data[i * n + k]);
         pivot_row = i;
       }
-    }
-
-    // If the entire column is exactly 0, the matrix is singular (no unique
-    // solution)
-    if (max_val < 1e-12)
+    if (colmax[k] == 0.0 || max_val <= (double)n * DBL_EPSILON * colmax[k]) {
+      if (singular_column)
+        *singular_column = k;
+      free(colmax);
       return false;
-
-    // Swap the current row with the pivot row in both A and x
+    }
     if (pivot_row != k) {
-      // Swap in vector x
-      double temp_x = x[k];
-      x[k] = x[pivot_row];
-      x[pivot_row] = temp_x;
-
-      // Swap in matrix A
+      size_t t = perm[k];
+      perm[k] = perm[pivot_row];
+      perm[pivot_row] = t;
       for (size_t j = 0; j < n; j++) {
-        double temp_a = a->data[(k * n) + j];
-        a->data[(k * n) + j] = a->data[(pivot_row * n) + j];
-        a->data[(pivot_row * n) + j] = temp_a;
+        double temp = a->data[k * n + j];
+        a->data[k * n + j] = a->data[pivot_row * n + j];
+        a->data[pivot_row * n + j] = temp;
       }
     }
-
-    // --- Row Reduction ---
-    // Subtract multiples of the pivot row from all rows below it
     for (size_t i = k + 1; i < n; i++) {
-      double factor = a->data[(i * n) + k] / a->data[(k * n) + k];
-
-      x[i] -= factor * x[k]; // Apply to vector x
-
-      for (size_t j = k; j < n; j++) {
-        a->data[(i * n) + j] -= factor * a->data[(k * n) + j];
-      }
+      double factor = a->data[i * n + k] / a->data[k * n + k];
+      a->data[i * n + k] = factor;
+      for (size_t j = k + 1; j < n; j++)
+        a->data[i * n + j] -= factor * a->data[k * n + j];
     }
   }
-
-  // 3. Back Substitution Phase (solve for x from bottom to top)
-  // n is size_t (unsigned), so "i >= 0" would never be false -- it wraps
-  // around instead of stopping. `i-- > 0` post-decrements before the
-  // comparison, which is the standard idiom for a reverse loop over an
-  // unsigned index.
-  for (size_t i = n; i-- > 0;) {
-    double sum = x[i];
-    for (size_t j = i + 1; j < n; j++) {
-      sum -= a->data[(i * n) + j] * x[j];
-    }
-    x[i] = sum / a->data[(i * n) + i];
-  }
-
+  free(colmax);
   return true;
 }
+
+/* Solves A y = b (transpose = 0) or A^T y = b (transpose = 1) with the factors; y may alias nothing. */
+static void lu_solve(const Matrix *lu, const size_t *perm, const double *b, double *y, int transpose) {
+  size_t n = lu->rows;
+  const double *a = lu->data;
+  if (!transpose) {
+    for (size_t i = 0; i < n; i++) { /* L c = P b */
+      double s = b[perm[i]];
+      for (size_t j = 0; j < i; j++)
+        s -= a[i * n + j] * y[j];
+      y[i] = s;
+    }
+    for (size_t i = n; i-- > 0;) { /* U y = c */
+      double s = y[i];
+      for (size_t j = i + 1; j < n; j++)
+        s -= a[i * n + j] * y[j];
+      y[i] = s / a[i * n + i];
+    }
+    return;
+  }
+  /* A^T = U^T L^T P: U^T s = b, L^T t = s, then y[perm[i]] = t[i]. */
+  double *t = malloc((n ? n : 1) * sizeof *t);
+  if (!t)
+    return;
+  for (size_t i = 0; i < n; i++) {
+    double s = b[i];
+    for (size_t j = 0; j < i; j++)
+      s -= a[j * n + i] * t[j];
+    t[i] = s / a[i * n + i];
+  }
+  for (size_t i = n; i-- > 0;) {
+    double s = t[i];
+    for (size_t j = i + 1; j < n; j++)
+      s -= a[j * n + i] * t[j];
+    t[i] = s;
+  }
+  for (size_t i = 0; i < n; i++)
+    y[perm[i]] = t[i];
+  free(t);
+}
+
+/* Hager's estimate of ||A^-1||_1 with Higham's refinements (Higham, Accuracy and Stability of Numerical
+ * Algorithms, 2nd ed., Algorithm 15.4 and the extra test vector of section 15.3). It can underestimate by a
+ * modest factor, never overestimates by more than rounding. */
+static double inverse_norm1_estimate(const Matrix *lu, const size_t *perm) {
+  size_t n = lu->rows;
+  double *x = malloc(n * sizeof *x), *y = malloc(n * sizeof *y), *z = malloc(n * sizeof *z);
+  double est = 0.0;
+  if (!x || !y || !z) {
+    free(x), free(y), free(z);
+    return NAN;
+  }
+  for (size_t i = 0; i < n; i++)
+    x[i] = 1.0 / (double)n;
+  for (int k = 0; k < 5; k++) {
+    lu_solve(lu, perm, x, y, 0);
+    double norm = 0.0;
+    for (size_t i = 0; i < n; i++)
+      norm += fabs(y[i]);
+    if (k > 0 && norm <= est)
+      break;
+    est = norm;
+    for (size_t i = 0; i < n; i++)
+      y[i] = y[i] >= 0.0 ? 1.0 : -1.0;
+    lu_solve(lu, perm, y, z, 1);
+    size_t jmax = 0;
+    double ztx = 0.0;
+    for (size_t i = 0; i < n; i++) {
+      ztx += z[i] * x[i];
+      if (fabs(z[i]) > fabs(z[jmax]))
+        jmax = i;
+    }
+    if (k > 0 && fabs(z[jmax]) <= ztx)
+      break;
+    for (size_t i = 0; i < n; i++)
+      x[i] = i == jmax ? 1.0 : 0.0;
+  }
+  for (size_t i = 0; i < n; i++)
+    x[i] = (i % 2 ? -1.0 : 1.0) * (1.0 + (n > 1 ? (double)i / (double)(n - 1) : 0.0));
+  lu_solve(lu, perm, x, y, 0);
+  double alt = 0.0;
+  for (size_t i = 0; i < n; i++)
+    alt += fabs(y[i]);
+  alt = 2.0 * alt / (3.0 * (double)n);
+  free(x), free(y), free(z);
+  return alt > est ? alt : est;
+}
+
+bool matrix_solve_info(Matrix *a, const double *b, double *x, MatrixSolveInfo *info) {
+  size_t n = a->rows;
+  if (n != a->cols)
+    return false;
+  if (info) {
+    info->singular_column = (size_t)-1;
+    info->condition_estimate = NAN;
+  }
+  double norm1 = 0.0;
+  for (size_t j = 0; info && j < n; j++) { /* ||A||_1, before the factors overwrite A */
+    double s = 0.0;
+    for (size_t i = 0; i < n; i++)
+      s += fabs(a->data[i * n + j]);
+    if (s > norm1)
+      norm1 = s;
+  }
+  size_t *perm = malloc((n ? n : 1) * sizeof *perm);
+  if (!perm)
+    return false;
+  if (!lu_factor(a, perm, info ? &info->singular_column : NULL)) {
+    free(perm);
+    return false;
+  }
+  lu_solve(a, perm, b, x, 0);
+  if (info)
+    info->condition_estimate = n ? norm1 * inverse_norm1_estimate(a, perm) : 1.0;
+  free(perm);
+  return true;
+}
+
+bool matrix_solve(Matrix *a, const double *b, double *x) { return matrix_solve_info(a, b, x, NULL); }
 
 void matrix_free(Matrix *m) {
   if (m && m->data) {

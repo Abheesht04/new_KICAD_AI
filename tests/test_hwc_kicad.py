@@ -75,5 +75,119 @@ class HwcKiCadTests(unittest.TestCase):
         self.assertEqual(hwc.ROLE_PREFIXES['resistor'], 'R')
 
 
+def reference_parse(text):
+    """The original character-by-character parser, kept verbatim as the oracle for the fast tokenizer."""
+    n = len(text)
+    i = 0
+
+    def skip():
+        nonlocal i
+        while i < n:
+            if text[i].isspace():
+                i += 1
+            elif text[i] == ';':
+                j = text.find('\n', i)
+                i = n if j < 0 else j + 1
+            else:
+                break
+
+    def read_string():
+        nonlocal i
+        i += 1
+        out = []
+        while i < n:
+            c = text[i]
+            i += 1
+            if c == '"':
+                return hwc.Quoted(''.join(out))
+            if c == '\\':
+                if i >= n:
+                    raise hwc.SExprError('backslash at end')
+                esc = text[i]
+                i += 1
+                out.append({'n': '\n', 'r': '\r', 't': '\t'}.get(esc, esc))
+            else:
+                out.append(c)
+        raise hwc.SExprError('unterminated')
+
+    def read_node():
+        nonlocal i
+        skip()
+        if i >= n:
+            raise hwc.SExprError('end')
+        c = text[i]
+        if c == '(':
+            i += 1
+            result = []
+            while True:
+                skip()
+                if i >= n:
+                    raise hwc.SExprError('unclosed')
+                if text[i] == ')':
+                    i += 1
+                    return result
+                result.append(read_node())
+        if c == ')':
+            raise hwc.SExprError('close')
+        if c == '"':
+            return read_string()
+        start = i
+        while i < n and not text[i].isspace() and text[i] not in '();':
+            i += 1
+        if i == start:
+            raise hwc.SExprError('token')
+        return hwc.Atom(text[start:i])
+
+    node = read_node()
+    skip()
+    if i != n:
+        raise hwc.SExprError('extra')
+    return node
+
+
+def typed(node):
+    """A tree with each value's type, so Atom vs Quoted differences are caught too."""
+    if isinstance(node, list):
+        return ['list', [typed(x) for x in node]]
+    return [type(node).__name__, str(node)]
+
+
+class ParserEquivalence(unittest.TestCase):
+    def files(self):
+        root = SCRIPT.parents[1]; found = []
+        for pattern in ('*.kicad_sym', '*.kicad_mod', '*.kicad_sch', '*.kicad_pcb', '*.copper', '*.parts', '*.espec', '*.rules', '*.design', '*.kicad_net'):
+            found += [p for p in root.rglob(pattern) if 'node_modules' not in p.parts and '.git' not in p.parts]
+        import os
+        for env in ('KICAD_SYMBOL_DIR', 'KICAD_FOOTPRINT_DIR'):
+            if os.environ.get(env):
+                found += sorted(Path(os.environ[env]).rglob('*.kicad_sym' if 'SYMBOL' in env else '*.kicad_mod'))[:400]
+        return found
+
+    def test_same_trees_as_the_reference_parser(self):
+        files = self.files(); self.assertGreater(len(files), 20)
+        for path in files:
+            text = path.read_text(encoding='utf-8', errors='replace')
+            try:
+                expected = typed(reference_parse(text))
+            except hwc.SExprError:
+                with self.assertRaises(hwc.SExprError, msg=str(path)):
+                    hwc.parse_sexpr(text)
+                continue
+            self.assertEqual(typed(hwc.parse_sexpr(text)), expected, str(path))
+
+    def test_edge_cases_agree(self):
+        cases = ['(a b c)', '  (a)  ', 'atom', '(a "q \\"x\\" \\n \\t \\\\ \\z") ', '(a b"c d)', '(a ; comment\n b)', '(a); tail',
+                 '(a)\n; only a comment', '(a b)', '(a b)', '((()))', '(a "multi\nline")', '("" x)',
+                 '(unclosed', ')', '(a))', '(a) (b)', '', '   ', '(a "unterminated)', '(a "x\\', '"start', '(a "b"c)']
+        for text in cases:
+            try:
+                expected = typed(reference_parse(text))
+            except hwc.SExprError:
+                with self.assertRaises(hwc.SExprError, msg=repr(text)):
+                    hwc.parse_sexpr(text)
+                continue
+            self.assertEqual(typed(hwc.parse_sexpr(text)), expected, repr(text))
+
+
 if __name__ == '__main__':
     unittest.main()

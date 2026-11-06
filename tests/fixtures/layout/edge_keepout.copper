@@ -1,0 +1,74 @@
+; Layout fixture: a board keepout strip along the left edge (x < 10 mm; no part, pad, track or via).
+; The given placement puts J1 inside it, so the baseline violates the keepout.
+(copper_project
+  (version 2)
+  (name "edge_keepout")
+  (nets GND VIN OUT)
+  (board 40 30 1.6 0.035 2)
+  (parts
+    (part
+      resistor
+      (kind R)
+      (symbol "Device:R")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      voltage
+      (kind V)
+      (catalogue "bundled:default.parts")
+    )
+    (part
+      header3
+      (kind J)
+      (symbol "Connector_Generic:Conn_01x03")
+      (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
+      (catalogue "bundled:default.parts")
+    )
+  )
+  (components
+    (component
+      V1
+      (part voltage)
+      (value 5)
+      (pins
+        (1 VIN)
+        (2 GND)
+      )
+      (at 0 0 0)
+    )
+    (component
+      R1
+      (part resistor)
+      (value 10000)
+      (pins
+        (1 VIN)
+        (2 OUT)
+      )
+      (at 16 12 0)
+    )
+    (component
+      R2
+      (part resistor)
+      (value 20000)
+      (pins
+        (1 OUT)
+        (2 GND)
+      )
+      (at 24 12 0)
+    )
+    (component
+      J1
+      (part header3)
+      (pins
+        (1 VIN)
+        (2 OUT)
+        (3 GND)
+      )
+      (at 5 12 0)
+    )
+  )
+  (keepouts
+    (area 0 0 10 30 3 15)
+  )
+)

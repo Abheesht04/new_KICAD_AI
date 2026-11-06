@@ -17,4 +17,12 @@ bool e_series_contains(ESeries series, double value, double tolerance_ppm);
 // Useful for "the user/LLM asked for 10.3k, what's the closest real part?"
 double e_series_nearest(ESeries series, double value);
 
+// The SMALLEST series value >= `value` (within 1 ppm), e.g. a series resistor that keeps a current at or
+// below its target. Returns 0.0 for a non-positive or non-finite value.
+double e_series_at_least(ESeries series, double value);
+
+// The LARGEST series value <= `value` (within 1 ppm), e.g. the weakest pull-up that still meets a rise time.
+// Returns 0.0 for a non-positive or non-finite value.
+double e_series_at_most(ESeries series, double value);
+
 #endif

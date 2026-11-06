@@ -6,6 +6,17 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Named scratch file in the working directory (CTest runs tests in the build
+ * tree). tmpfile() is not used: the Windows CRT creates it in the drive root,
+ * which ordinary users cannot write. Same "w+b" mode as tmpfile(). */
+#define SCRATCH_PATH "kicad_pcb_test.tmp"
+
+static FILE *open_scratch(void)
+{
+    remove(SCRATCH_PATH);
+    return fopen(SCRATCH_PATH, "w+b");
+}
+
 int main(void)
 {
     Design design;
@@ -66,7 +77,7 @@ int main(void)
         }
     ) == 0);
 
-    FILE *out = tmpfile();
+    FILE *out = open_scratch();
     assert(out != NULL);
     assert(kicad_pcb_write(&board, &design, out) == 0);
 
@@ -89,7 +100,7 @@ int main(void)
     /* The internal stackup order maps to KiCad file layer IDs: In1=4,
      * In2=6, bottom copper=2. These IDs are not stackup indices. */
     board.spec.layer_count = 4;
-    out = tmpfile();
+    out = open_scratch();
     assert(out != NULL);
     assert(kicad_pcb_write(&board, &design, out) == 0);
     rewind(out);
@@ -100,6 +111,7 @@ int main(void)
     assert(strstr(data, "(6 \"In2.Cu\" signal)") != NULL);
 
     fclose(out);
+    assert(remove(SCRATCH_PATH) == 0);
     pcb_board_free(&board);
     design_free(&design);
 
