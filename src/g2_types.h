@@ -35,7 +35,8 @@ typedef enum {
   G2_ERR_OVERFLOW = -3,
   G2_ERR_INVALID_GEOMETRY = -4,
   G2_ERR_UNSUPPORTED = -5,
-  G2_ERR_MEMORY = -6
+  G2_ERR_MEMORY = -6,
+  G2_ERR_CAPACITY = -7 /* more results than the caller's buffer holds; the count is still exact */
 
 } G2Status;
 

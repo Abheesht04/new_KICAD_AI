@@ -126,7 +126,7 @@ NOT_IMPLEMENTED = ['zones, copper pours, planes and thermal relief', 'non-rectan
                    'solder-mask slivers and mask-to-trace clearance', 'paste apertures, stencil ratio, fiducials, tooling holes, panel rails',
                    'creepage and voltage-dependent clearance', 'IPC-2152 ampacity and temperature rise (current checks are estimates)',
                    'impedance, differential pairs, length matching, return paths, EMC, RF, thermal',
-                   'Gerber/drill structural re-reading']
+                   'Gerber image re-reading (drill files and the Gerber job file are re-read: pcba project cam-check)']
 
 
 def errors(report):

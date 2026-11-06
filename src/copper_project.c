@@ -11,7 +11,9 @@
 #endif
 #include <windows.h>
 #include <objbase.h>
-#pragma comment(lib, "ole32.lib")
+#ifdef _MSC_VER
+#pragma comment(lib, "ole32.lib") /* other toolchains: linked by CMakeLists.txt */
+#endif
 #else
 #include <errno.h>
 #endif

@@ -136,7 +136,6 @@ FsStatus fs_get_current_directory(char *out, size_t out_capacity) {
 }
 
 FsStatus fs_path_absolute(char *out, size_t out_capacity, const char *path) {
-  char cwd[FS_PATH_MAX];
   if (out == NULL || out_capacity == 0 || path == NULL || path[0] == '\0') {
     return FS_ERR_ARGUMENT;
   }
@@ -149,6 +148,7 @@ FsStatus fs_path_absolute(char *out, size_t out_capacity, const char *path) {
   if (path[0] == '/') {
     return copy_string(out, out_capacity, path);
   }
+  char cwd[FS_PATH_MAX];
   FsStatus status = fs_get_current_directory(cwd, sizeof(cwd));
   if (status != FS_OK) {
     return status;

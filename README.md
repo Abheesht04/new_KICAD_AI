@@ -119,6 +119,10 @@ Circuit blocks (`use block NAME: key=value ...` in a spec; `pcba blocks` lists t
 I2C-bus specification, a USB-C sink, a linear regulator analysed with an ideal regulator model, an I2C sensor,
 reset/boot buttons and a part's reference circuit. Every value carries its source. See [BLOCKS.md](docs/engineering/BLOCKS.md).
 
+Native KiCad: `pcba kicad new NAME` creates an empty KiCad 9 project, and `pcba project fabricate` / `pcba project
+cam-check` re-read the exported drill and Gerber job files without KiCad and compare them with the design (checked
+against real KiCad 9.0.6 output). See [KICAD_NATIVE.md](docs/engineering/KICAD_NATIVE.md).
+
 The commands below are the underlying `tools/copper.py` backend, kept for compatibility:
 
 ```sh

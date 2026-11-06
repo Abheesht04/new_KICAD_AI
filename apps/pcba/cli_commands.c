@@ -342,6 +342,39 @@ static int run_library(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs 
     return backend(ctx, cmd, &b);
 }
 
+/* kicad new | kicad open: native KiCad 9 projects (src/copper_project.c through copper.py). */
+static int run_kicad(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const map[][2] = {{"--dir", "--dir"}};
+    const char *dir = pcba_opt(cmd, a, "--dir");
+    int rc;
+    if (!*a->positional[0]) return pcba_usage_error(ctx, cmd, "the argument is empty");
+    Bargs b = {{0}, 0};
+    if (!strcmp(cmd->name, "new")) {
+        if (dir && (rc = missing_file(ctx, cmd, dir, 1)) >= 0) return rc;
+        push(&b, "kicad-new");
+        push(&b, a->positional[0]);
+        pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    } else {
+        if ((rc = missing_file(ctx, cmd, a->positional[0], 1)) >= 0) return rc;
+        push(&b, "kicad-open");
+        push(&b, a->positional[0]);
+    }
+    return backend(ctx, cmd, &b);
+}
+
+/* project cam-check: a build's Gerber job and drill files re-read without KiCad (copper.py cam_check). */
+static int run_cam_check(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
+    static const char *const map[][2] = {{"--out", "--out"}, {"--cam", "--cam"}};
+    const char *cam = pcba_opt(cmd, a, "--cam");
+    int rc;
+    if ((rc = missing_file(ctx, cmd, pcba_opt(cmd, a, "--out"), 1)) >= 0) return rc;
+    if (cam && (rc = missing_file(ctx, cmd, cam, 1)) >= 0) return rc;
+    Bargs b = {{0}, 0};
+    push(&b, "cam-check");
+    pass(&b, cmd, a, map, sizeof map / sizeof map[0]);
+    return backend(ctx, cmd, &b);
+}
+
 /* blocks: the circuit blocks a spec can use (tools/blocks.py). */
 static int run_blocks(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     (void)a;
@@ -483,6 +516,13 @@ static const PcbaOption SCAN_OPTIONS[] = {
     {"--out", "DIR", 0, "Where to write index.sqlite and environment.json (default out/library)"},
     {"--jobs", "N", 0, "Parallel parser processes, 1..256 (default: CPU count)"},
 };
+static const PcbaOption KICAD_NEW_OPTIONS[] = {
+    {"--dir", "DIR", 0, "Parent folder for the project folder (default: the current folder)"},
+};
+static const PcbaOption CAM_CHECK_OPTIONS[] = {
+    {"--out", "DIR", 1, "Build directory produced by 'pcba project build' (its resolved.copper is the design)"},
+    {"--cam", "DIR", 0, "CAM folder to re-read (default: DIR/fabrication)"},
+};
 static const PcbaOption RULES_IMPORT_OPTIONS[] = {
     {"--out", "FILE", 1, "The .rules profile to write"},
     {"--base", "FILE", 0, "Profile for limits KiCad does not set (current, deratings, height), e.g. profiles/conservative.rules"},
@@ -560,10 +600,24 @@ static const PcbaCommand COMMANDS[] = {
      "the source file, then runs KiCad 9.x ERC, DRC, schematic parity and pin/net parity. PASS only when every check "
      "ran and passed; a missing or non-9.x KiCad is UNVERIFIED.",
      "pcba project verify --out out/divider", OPTS(VERIFY_OPTIONS), NULL, run_verify},
-    {"project", "fabricate", "", 0, 0, "Export Gerber and drill files after a PASSing verification",
-     "Runs verify first and exports CAM files only when it PASSes with no internal findings. Fabrication export is "
-     "not fabricator acceptance.",
+    {"project", "fabricate", "", 0, 0, "Export Gerber and drill files after a PASSing verification, then re-read them",
+     "Runs verify first and exports CAM files only when it PASSes with no internal findings. The drill files (Excellon, "
+     "decimal mm, absolute origin) and the Gerber job file are then re-read without KiCad and compared with the design; "
+     "any disagreement is FAIL. Gerber images are not re-read yet. Fabrication export is not fabricator acceptance.",
      "pcba project fabricate --out out/divider", OPTS(VERIFY_OPTIONS), NULL, run_verify},
+    {"project", "cam-check", "", 0, 0, "Re-read a build's drill and Gerber job files and compare them with the design",
+     "Reads every Excellon drill file with Copper's own reader: the holes, by position and diameter to 1 um, must be "
+     "exactly the design's pad and via holes. The Gerber job file must state two copper layers, the board size and only "
+     "files that exist. FAIL on any disagreement; UNVERIFIED without a job file. Gerber images are not re-read yet.",
+     "pcba project cam-check --out out/divider\npcba project cam-check --out out/divider --cam kicad-cam", OPTS(CAM_CHECK_OPTIONS), NULL,
+     run_cam_check},
+    {"kicad", "new", "<name>", 1, 1, "Create an empty native KiCad 9 project",
+     "Writes NAME.kicad_pro, NAME.kicad_sch (KiCad 9 format 20250114), NAME.kicad_pcb (20241229) and a .copper workspace "
+     "in DIR/NAME, staged and renamed into place: an existing folder is never overwritten.",
+     "pcba kicad new sensor_board\npcba kicad new sensor_board --dir projects", OPTS(KICAD_NEW_OPTIONS), NULL, run_kicad},
+    {"kicad", "open", "<dir>", 1, 1, "Show what a KiCad project folder holds",
+     "Requires a .kicad_pro; reports the schematic, board, library tables and the kicad-cli found.",
+     "pcba kicad open sensor_board", NONE, NULL, run_kicad},
     {"simulate", "dc", "<file.copper>", 1, 1, "Solve the DC operating point (R, V, I, D, C open, L short)",
      "Status is the DC solve itself: PASS when solved, FAIL for singular/non-converged systems, UNVERIFIED when a "
      "device has no supported model. Rating and DFM findings are listed for information.",

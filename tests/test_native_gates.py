@@ -26,6 +26,15 @@ FAKE = textwrap.dedent('''
         print('9.0.6'); sys.exit(0)
     out = args[args.index('-o') + 1]; kind = args[0] + ' ' + args[1]
     sys.stderr.write(scenario.get('stderr', ''))
+    if kind == 'pcb export':  # the real KiCad 9.0.6 CAM output of the divider, optionally tampered with
+        import shutil
+        source = os.path.join(scenario['cam'], 'gerbers' if args[2] == 'gerbers' else 'drill')
+        for name in os.listdir(source):
+            shutil.copyfile(os.path.join(source, name), os.path.join(out, name))
+        if args[2] == 'drill' and scenario.get('move_hole'):
+            path = os.path.join(out, 'design.drl'); text = open(path).read().replace('Y-14.54', 'Y-14.64')
+            open(path, 'w').write(text)
+        sys.exit(0)
     if kind == 'sch erc':
         if scenario.get('erc_write', True):
             json.dump({'sheets': [{'violations': scenario.get('erc', [])}]}, open(out, 'w'))
@@ -152,6 +161,61 @@ class SecondJudge(Base):
         (self.dir / 'scenario.json').write_text(json.dumps({'drc': [ERR]}))
         chosen, verdicts = layout.second_judge(cands, judge, limit=2)
         self.assertEqual([v['status'] for v in verdicts], ['FAIL', 'FAIL']); self.assertIs(chosen, min((c for c in cands if c['feasible']), key=layout.candidate_key))
+
+
+class Cam(Base):
+    """CAM output re-read without KiCad (copper.cam_check): the real KiCad 9.0.6 Gerber job and Excellon drill files
+    exported from this divider (tests/fixtures/kicad9/cam) must agree with the design; any tampering is FAIL."""
+    CAM = ROOT / 'tests/fixtures/kicad9/cam'
+
+    def tampered(self, edit):
+        cam = self.dir / 'cam-edit'; shutil.rmtree(cam, ignore_errors=True); shutil.copytree(self.CAM, cam)
+        edit(cam)
+        return {c['check']: c for c in copper.cam_check(self.dir / 'build', cam, CORE)}
+
+    def test_kicad_906_cam_output_matches_the_design(self):
+        checks = {c['check']: c for c in copper.cam_check(self.dir / 'build', self.CAM, CORE)}
+        self.assertEqual(checks['drill_holes']['status'], 'PASS', checks)
+        self.assertEqual(checks['drill_holes']['counts'], {'design': 3, 'drill_files': 3})
+        self.assertEqual((checks['gerber_job']['status'], checks['gerber_job']['kicad_version']), ('PASS', '9.0.6'))
+
+    def test_any_disagreement_fails(self):
+        def edit(name, old, new):
+            def f(cam):
+                path = next(cam.rglob(name)); path.write_text(path.read_text().replace(old, new, 1))
+            return f
+        for change, check, needle in ((edit('design.drl', 'Y-14.54', 'Y-14.64'), 'drill_holes', 'missing hole at x 8.0 y -14.54'),
+                                      (edit('design.drl', 'T1C1.000', 'T1C0.900'), 'drill_holes', 'drill 1.0 mm'),
+                                      (edit('design.drl', 'X8.0Y-17.08\n', ''), 'drill_holes', 'missing hole'),
+                                      (edit('design-job.gbrjob', '"LayerNumber": 2', '"LayerNumber": 4'), 'gerber_job', 'LayerNumber 4'),
+                                      (edit('design-job.gbrjob', '"X": 40.05', '"X": 45.05'), 'gerber_job', 'board size'),
+                                      (lambda cam: next(cam.rglob('design-B_Cu.gbl')).unlink(), 'gerber_job', 'design-B_Cu.gbl is missing')):
+            result = self.tampered(change)[check]
+            self.assertEqual(result['status'], 'FAIL', (needle, result)); self.assertIn(needle, result['message'])
+        self.assertEqual(self.tampered(lambda cam: next(cam.rglob('design-job.gbrjob')).unlink())['gerber_job']['status'], 'UNVERIFIED')
+
+    def test_fabricate_rereads_what_it_exports(self):
+        tree = copper.load(ROOT / 'examples/v2/divider.copper')
+        for p in direct(one(tree, 'parts'), 'part'):   # synthetic, explicitly supplied test ratings (as tests/test_v2.py)
+            fields = {'resistor': (('power_w', '0.1'), ('voltage_v', '50'), ('height_mm', '0.55')), 'header3': (('height_mm', '2.5'),)}
+            for key, value in fields.get(str(p[1]), ()):
+                p[:] = [x for x in p if not (isinstance(x, list) and str(x[0]) == key)] + [copper.sx(key, copper.A(value))]
+        source = self.dir / 'rated.copper'; copper.write_tree(source, tree)
+        args = argparse.Namespace(project=str(source), out=str(self.dir / 'rated'), core=CORE, symbol_dir=str(SNAP / 'symbols'),
+                                  footprint_dir=str(SNAP / 'footprints'), no_route=False, draft=False)
+        shutil.rmtree(self.dir / 'rated', ignore_errors=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(copper.export_project(args), 0)
+        os.environ['FAKE_TOOLS'] = str(ROOT / 'tools')
+        for scenario, rc, status in (({'cam': str(self.CAM)}, 0, 'PASS'), ({'cam': str(self.CAM), 'move_hole': True}, 2, 'FAIL')):
+            (self.dir / 'scenario.json').write_text(json.dumps(scenario)); os.environ['FAKE_SCENARIO'] = str(self.dir / 'scenario.json')
+            shutil.rmtree(self.dir / 'rated' / 'fabrication', ignore_errors=True)
+            result = self.dir / 'fab.json'
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                got = copper.main(['--result-json', str(result), 'fabricate', '--out', str(self.dir / 'rated'), '--kicad-cli', str(self.cli), '--core', CORE])
+            doc = json.loads(result.read_text())
+            self.assertEqual((got, doc['status']), (rc, status), doc['message'])
+        self.assertIn('CAM output disagrees with the design', doc['message']); self.assertIn('-14.54', doc['message'])
 
 
 class Placement(unittest.TestCase):

@@ -171,3 +171,15 @@ parts with their datasheet data. Tests use TEST ONLY stand-ins. Details: [BLOCKS
 
 Details: [NUMERICAL_ROADMAP.md](NUMERICAL_ROADMAP.md), "Step 7 results".
 
+## Integration: `v2-native-kicad-integration` (2026-11-06)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Branch merged | **Done** | its tree was this repository's plus 45 files; duplicates and zips removed, modules moved into `src/` |
+| New C modules built and tested | **Done** | `g2_types`, `excellon`, `kicad_library_table`, `filesystem`, `copper_project` in `hwcore`, zero warnings; CTest `g2_types`, `kicad_native` |
+| Defects found and fixed | **Done** | undeclared `G2_ERR_CAPACITY` (did not compile), clashing include guard, two status names lost, `ole32` not linked on MinGW |
+| Gerber/drill structural verification (DFM gap) | **Drill and job file: done; Gerber images: open** | `pcba project cam-check`; `fabricate` re-reads its export; real KiCad 9.0.6 CAM of the divider agrees with the design; tampering FAILs (`test_native_gates.Cam`) |
+| Native KiCad 9 project creation | **Done** | `pcba kicad new/open` |
+
+Details: [KICAD_NATIVE.md](KICAD_NATIVE.md).
+

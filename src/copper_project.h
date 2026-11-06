@@ -1,5 +1,5 @@
-#ifndef COPPER_PROJECT_H
-#define COPPER_PROJECT_H
+#ifndef COPPER_NATIVE_KICAD_PROJECT_H
+#define COPPER_NATIVE_KICAD_PROJECT_H
 
 #include "arena.h"
 #include "filesystem.h"
@@ -93,4 +93,4 @@ const char *copper_project_status_message(CopperProjectStatus status);
 }
 #endif
 
-#endif /* COPPER_PROJECT_H */
+#endif /* COPPER_NATIVE_KICAD_PROJECT_H */

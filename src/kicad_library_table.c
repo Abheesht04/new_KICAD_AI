@@ -200,9 +200,7 @@ KicadLibStatus kicad_lib_table_parse(Arena *arena, const char *text,
   return KICAD_LIB_OK;
 }
 const char *kicad_lib_status_name(KicadLibStatus status) {
-  static const char *const names[] = {"OK", "ARGUMENT_ERROR", "PARSE_ERROR",
-                                      "SCHEMA_ERROR", "MEMORY_ERROR"};
-
+  /* The file-level table: every status, including UNRESOLVED_VARIABLE and RANGE_ERROR. */
   if ((unsigned)status >= sizeof(names) / sizeof(names[0])) {
     return "UNKNOWN_STATUS";
   }

@@ -52,4 +52,4 @@ a separate, independent gate (`project verify`) and is not counted here.
 - creepage and voltage-dependent clearance
 - IPC-2152 ampacity and temperature rise (current checks are estimates)
 - impedance, differential pairs, length matching, return paths, EMC, RF, thermal
-- Gerber/drill structural re-reading
+- Gerber image re-reading (drill files and the Gerber job file are re-read: pcba project cam-check)

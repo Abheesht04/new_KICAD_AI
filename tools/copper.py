@@ -1020,10 +1020,12 @@ def run_command(args):
         if report['errors']:raise Failed('Resolve all internal errors before fabrication export')
         if report['warnings']:raise Unverified('Resolve all internal findings, including unknown ratings, before fabrication export')
         cli=discover_cli(args.kicad_cli);cam=out/'fabrication';cam.mkdir(exist_ok=True)
-        for command in [['pcb','export','gerbers','-o',str(cam)+os.sep,str(out/'design.kicad_pcb')],['pcb','export','drill','-o',str(cam)+os.sep,str(out/'design.kicad_pcb')]]:
+        for command in [['pcb','export','gerbers','-o',str(cam)+os.sep,str(out/'design.kicad_pcb')],['pcb','export','drill',*DRILL_EXPORT,'-o',str(cam)+os.sep,str(out/'design.kicad_pcb')]]:
             subprocess.run([cli,*command],check=True,timeout=180)
-        o['data']['cam']={'dir':str(cam),'files':sorted(p.name for p in cam.iterdir())}
-        print('CAM files exported to '+str(cam)+'. Engineering review of models, process and assembly remains required.');return 0
+        # The exported files are re-read without KiCad and compared with the design before anything is claimed.
+        checks=cam_check(out,cam,args.core);o['data']['cam']={'dir':str(cam),'files':sorted(p.name for p in cam.iterdir()),'checks':checks}
+        if any(c['status']=='FAIL' for c in checks):raise Failed('CAM output disagrees with the design: '+'; '.join(c['message'] for c in checks if c['status']=='FAIL'))
+        print('CAM files exported to '+str(cam)+' and re-read: '+'; '.join(c['message'] for c in checks)+'. Engineering review of models, process and assembly remains required.');return 0
     if args.command=='classify':return subprocess.run([core_path(args.core),'classify',args.text],timeout=30).returncode
     if args.command in ('part-add','part-remove'):
         target=Path(args.file)
@@ -1074,6 +1076,8 @@ def run_command(args):
     if args.command=='library-pair':return library_pair(args)
     if args.command=='dfm':return dfm_check(args)
     if args.command=='rules-import':return rules_import(args)
+    if args.command=='cam-check':return cam_check_command(args)
+    if args.command in ('kicad-new','kicad-open'):return kicad_project_command(args)
     if args.command=='blocks':
         import blocks
         listing=blocks.describe();args.outcome.update(status='PASS',data={'blocks':listing})
@@ -1083,6 +1087,92 @@ def run_command(args):
                 for prm in b['params']:print(f"    {prm['name']:<16} {'required' if prm['required'] else 'optional':<9} {prm['kind']:<9} {prm['meaning']}")
         return 0
 
+# Drill export in the one format the independent reader supports: KiCad 9.x Excellon, decimal mm, absolute origin.
+DRILL_EXPORT = ['--format', 'excellon', '--drill-origin', 'absolute', '--excellon-zeros-format', 'decimal', '--excellon-units', 'mm']
+def cam_check(out, cam, core=None):
+    """Re-read a build's CAM output without KiCad and compare it with the design (resolved.copper). Drill files go
+    through copper-core's Excellon reader (src/excellon.c): their holes, by position and diameter to 1 um, must be
+    exactly the design's pad and via holes (KiCad's absolute drill origin: Excellon y = -board y). The Gerber job file
+    must state two copper layers, the board size (outline plus its 0.05 mm stroke) and only files that exist.
+    Gerber images themselves are not re-read yet. Returns the checks, each PASS / FAIL / UNVERIFIED."""
+    from collections import Counter
+    out, cam = Path(out), Path(cam); checks = []
+    geo = one(load(out / 'resolved.copper'), 'geometry') or []
+    design = Counter()
+    for p in direct(geo, 'pad'):
+        if float(p[7]) > 0:
+            design[(round(float(p[4]), 3), round(-float(p[5]), 3), round(float(p[7]), 3))] += 1
+    for v in direct(geo, 'via'):
+        design[(round(float(v[2]), 3), round(-float(v[3]), 3), round(float(v[5]), 3))] += 1
+    drills = sorted(cam.rglob('*.drl'))
+    found, problems = Counter(), []
+    for f in drills:
+        r = subprocess.run([core_path(core), 'drill', str(f)], capture_output=True, text=True, timeout=120)
+        if r.returncode == 3 or not r.stdout.strip():
+            problems.append(f'{f.name}: unreadable ({r.stderr.strip()})'); continue
+        d = json.loads(r.stdout)
+        if d['errors']:
+            problems.append(f"{f.name}: {d['errors']} reader error(s): {[i['message'] for i in d['issues'] if i['severity'] == 'error'][:3]}")
+        tools = {t['number']: t['diameter_mm'] for t in d['tools']}
+        if any(t['slots'] for t in d['tools']):
+            problems.append(f'{f.name}: routed slots are not compared')
+        for x, y, tool in d['hits']:
+            found[(round(x, 3), round(y, 3), round(tools[tool], 3))] += 1
+    if not drills and not design:
+        checks.append({'check': 'drill_holes', 'status': 'PASS', 'message': 'the design has no holes and no drill file was written'})
+    elif not drills:
+        checks.append({'check': 'drill_holes', 'status': 'FAIL', 'message': f'{sum(design.values())} design holes but no drill file in {cam}'})
+    else:
+        missing, extra = design - found, found - design
+        bad = problems + [f'missing hole at x {k[0]} y {k[1]} drill {k[2]} mm' for k in sorted(missing)[:5]] + \
+            [f'unexpected hole at x {k[0]} y {k[1]} drill {k[2]} mm' for k in sorted(extra)[:5]]
+        checks.append({'check': 'drill_holes', 'status': 'FAIL' if bad else 'PASS', 'files': [f.name for f in drills],
+                       'counts': {'design': sum(design.values()), 'drill_files': sum(found.values())},
+                       'message': '; '.join(bad) if bad else f'{sum(found.values())} holes re-read from {len(drills)} drill file(s) match the design exactly'})
+    jobs = sorted(cam.rglob('*.gbrjob'))
+    if not jobs:
+        checks.append({'check': 'gerber_job', 'status': 'UNVERIFIED', 'message': f'no Gerber job file in {cam}: layer count and board size not re-read'})
+    else:
+        job = json.loads(jobs[0].read_text(encoding='utf-8')); spec = job.get('GeneralSpecs', {})
+        width, height = (float(x) for x in (one(load(out / 'resolved.copper'), 'board') or [None, 40, 30])[1:3])
+        size = spec.get('Size', {}); bad = []
+        if spec.get('LayerNumber') != 2:
+            bad.append(f"LayerNumber {spec.get('LayerNumber')} (the design has 2 copper layers)")
+        if abs(float(size.get('X', -1)) - (width + .05)) > .005 or abs(float(size.get('Y', -1)) - (height + .05)) > .005:
+            bad.append(f"board size {size.get('X')} x {size.get('Y')} mm (the design is {width:g} x {height:g} mm plus the 0.05 mm outline stroke)")
+        listed = [a.get('Path') for a in job.get('FilesAttributes', [])]
+        bad += [f'listed file {n} is missing' for n in listed if not (jobs[0].parent / n).is_file()]
+        version = job.get('Header', {}).get('GenerationSoftware', {}).get('Version', '?')
+        checks.append({'check': 'gerber_job', 'status': 'FAIL' if bad else 'PASS', 'files': len(listed), 'kicad_version': version,
+                       'message': '; '.join(bad) if bad else f'{len(listed)} Gerber files listed and present, 2 copper layers, board size matches (KiCad {version})'})
+    return checks
+def kicad_project_command(args):
+    """kicad-new: an empty native KiCad 9 project (copper-core, src/copper_project.c: atomic, never over anything);
+    kicad-open: what a KiCad project folder holds."""
+    cmd = ['kicad-new', str(Path(args.dir).resolve()), args.name] if args.command == 'kicad-new' else ['kicad-open', str(Path(args.dir).resolve())]
+    r = subprocess.run([core_path(args.core), *cmd], capture_output=True, text=True, timeout=60)
+    if r.returncode:
+        message = r.stderr.strip().removeprefix('PROJECT ERROR: ')
+        raise (InvalidInput if 'ALREADY_EXISTS' in message or 'INVALID' in message or 'NOT_FOUND' in message else CoreError)(message)
+    project = json.loads(r.stdout)
+    args.outcome.update(status='PASS', data=project)
+    if args.format == 'human':
+        print(f"KiCad project {project['name']} in {project['root_dir']}")
+        for key in ('project_file', 'schematic_file', 'board_file'):
+            print(f"  {project[key]}")
+    return 0
+def cam_check_command(args):
+    out = Path(args.out).resolve(); cam = Path(args.cam).resolve() if args.cam else out / 'fabrication'
+    existing(out / 'resolved.copper', 'Build (resolved.copper)')
+    if not cam.is_dir():
+        raise InvalidInput(f'CAM folder not found: {cam}')
+    checks = cam_check(out, cam, args.core); status = overall_status([c['status'] for c in checks])
+    args.outcome.update(status=status, data={'out': str(out), 'cam': str(cam), 'checks': checks},
+                        message='' if status == 'PASS' else '; '.join(f"{c['check']}: {c['message']}" for c in checks if c['status'] != 'PASS'))
+    if args.format == 'human':
+        for c in checks:
+            print(f"  {c['status']:<10} {c['check']:<12} {c['message']}")
+    return 0 if status == 'PASS' else 2
 def rules_import(args):
     """A KiCad project's design rules -> a (rules ...) profile with the source and date of every limit, accepted by
     copper-core before it is written (tools/kicad_rules.py)."""
@@ -1131,6 +1221,9 @@ def main(argv=None):
     p=sub.add_parser('part-import',help='validate a catalogue against copper-core and the native KiCad libraries; --into merges it');p.add_argument('file');p.add_argument('--into');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir');p.add_argument('--core')
     p=sub.add_parser('ac',help='small-signal AC sweep; sources need (ac MAGNITUDE PHASE_DEG)');p.add_argument('project');p.add_argument('--start',type=float,required=True);p.add_argument('--stop',type=float,required=True);p.add_argument('--points',type=int,required=True);p.add_argument('--sweep',choices=['log','lin'],default='log');p.add_argument('--out',help='CSV path');p.add_argument('--core')
     p=sub.add_parser('dfm');p.add_argument('target',help='.copper file with geometry, or a build directory');p.add_argument('--core')
+    p=sub.add_parser('cam-check',help='re-read a build\'s Gerber job and drill files without KiCad and compare them with the design');p.add_argument('--out',required=True);p.add_argument('--cam');p.add_argument('--core')
+    p=sub.add_parser('kicad-new',help='create an empty native KiCad 9 project');p.add_argument('name');p.add_argument('--dir',default='.');p.add_argument('--core')
+    p=sub.add_parser('kicad-open',help='inspect a KiCad project folder');p.add_argument('dir');p.add_argument('--core')
     sub.add_parser('blocks',help='list the circuit blocks and their parameters (docs/engineering/BLOCKS.md)')
     p=sub.add_parser('rules-import',help='KiCad project design rules -> (rules ...) profile (docs/engineering/KICAD_RULES.md)');p.add_argument('project');p.add_argument('--out',required=True);p.add_argument('--base');p.add_argument('--date');p.add_argument('--report');p.add_argument('--force',action='store_true');p.add_argument('--core')
     p=sub.add_parser('doctor');p.add_argument('--out',default='out');p.add_argument('--core');p.add_argument('--kicad-cli');p.add_argument('--symbol-dir');p.add_argument('--footprint-dir')

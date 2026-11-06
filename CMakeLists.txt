@@ -52,6 +52,13 @@ add_library(hwcore STATIC
     Extras/tokenizer.c
     src/vec.c
     src/xForm.c
+    # Native KiCad integration (v2-native-kicad-integration): exact nm geometry, Excellon reader,
+    # KiCad library tables, filesystem helpers and native KiCad 9 project creation.
+    src/g2_types.c
+    src/excellon.c
+    src/kicad_library_table.c
+    src/filesystem.c
+    src/copper_project.c
 )
 
 target_include_directories(hwcore PUBLIC src)
@@ -64,6 +71,9 @@ else()
     if(UNIX)
         target_link_libraries(hwcore PUBLIC m)
     endif()
+endif()
+if(WIN32)
+    target_link_libraries(hwcore PUBLIC ole32)  # CoCreateGuid for native KiCad project UUIDs (src/copper_project.c)
 endif()
 
 if(HWCOMPILER_BUILD_TESTS)
@@ -101,11 +111,17 @@ if(HWCOMPILER_BUILD_TESTS)
         mna_ac
         nonlinear_models
         transient
+        g2_types
+        kicad_native
     )
 
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
         target_link_libraries(${test_name}_test PRIVATE hwcore)
+        if(test_name STREQUAL "kicad_native")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/cam" KICAD9_CAM_PATH)
+            target_compile_definitions(${test_name}_test PRIVATE KICAD9_CAM_DIR="${KICAD9_CAM_PATH}")
+        endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
             target_compile_definitions(${test_name}_test PRIVATE IR_TEST_FIXTURE_DIR="${IR_FIXTURE_PATH}")
