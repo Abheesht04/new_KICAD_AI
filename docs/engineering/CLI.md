@@ -150,6 +150,13 @@ status, units, format, file attributes, apertures (D-code, type, bounds in nm, e
 (draws chained into loops, closed, bounds), flashes with their net and pin, and issues with line numbers. Exit 0 when
 OK, 2 on content errors, 1 when unreadable. See [GERBER.md](GERBER.md).
 
+## copper-core report
+
+`copper-core report BOARD PROFILE [DRILL|GERBER...]` writes one findings report (`copper.findings/1`): the board's
+DFM against the profile, its model issues, and every given drill (`.drl`) and Gerber file. Verdict FAIL,
+INVALID_INPUT, UNVERIFIED or PASS; findings sorted. Exit 0 for PASS or UNVERIFIED, 2 for FAIL or INVALID_INPUT, 1 when
+the board or profile cannot be read. See [FINDINGS.md](FINDINGS.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

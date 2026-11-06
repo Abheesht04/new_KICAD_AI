@@ -81,6 +81,7 @@ add_library(copper_v2 STATIC
     src/v2_src/dfm.c
     src/v2_src/kicad_cli.c
     src/v2_src/gerber.c
+    src/v2_src/finding.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 target_link_libraries(copper_v2 PUBLIC hwcore)
@@ -148,6 +149,7 @@ if(HWCOMPILER_BUILD_TESTS)
         dfm_v2
         kicad_cli
         gerber
+        finding
     )
 
     # A stand-in for kicad-cli for tests/kicad_cli_test.c (records its argv; modes for each failure path).
@@ -157,7 +159,7 @@ if(HWCOMPILER_BUILD_TESTS)
     endif()
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -194,6 +196,10 @@ if(HWCOMPILER_BUILD_TESTS)
             target_compile_definitions(${test_name}_test PRIVATE GERBER_ROOT="${GERBER_ROOT}"
                 GERBER_SCRATCH="${CMAKE_CURRENT_BINARY_DIR}/gerber_real")
             file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gerber_real")
+        endif()
+        if(test_name STREQUAL "finding")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" FINDING_ROOT_PATH)
+            target_compile_definitions(${test_name}_test PRIVATE FINDING_ROOT="${FINDING_ROOT_PATH}")
         endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)

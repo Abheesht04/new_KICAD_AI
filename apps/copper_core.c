@@ -7,6 +7,7 @@
 #include "dfm.h"
 #include "kicad_cli.h"
 #include "gerber.h"
+#include "finding.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -212,13 +213,46 @@ static int gerber_json(const char *path) {
     puts("]}");
     int rc=st==GERBER_OK?0:2; arena_destroy(&arena); return rc;
 }
+/* report BOARD PROFILE [FILE...]: one findings report (src/v2_src/finding.c, "copper.findings/1") for a board's DFM
+ * against a fab profile, its model issues, and any drill (.drl) and Gerber files given after it. Inputs are labelled
+ * by the paths as given. Exit 0 when the verdict is PASS or UNVERIFIED, 2 for FAIL or INVALID_INPUT, 1 when the board
+ * or profile cannot be read. */
+static int report_json(int argc,char **argv) {
+    Arena arena; arena_init(&arena,1<<20); Board b; BoardError be={0}; DfmProfile p; DfmError de={0}; DfmReport r; FindingList l;
+    if(board_load(&arena,argv[2],&b,&be)!=BOARD_OK) { fprintf(stderr,"report: cannot read the board %s: %s\n",argv[2],be.message?be.message:""); arena_destroy(&arena); return 1; }
+    if(dfm_profile_load(&arena,argv[3],&p,&de)!=DFM_OK || dfm_check(&arena,&b,&p,&r,&de)!=DFM_OK) {
+        fprintf(stderr,"report: profile %s: %s %s\n",argv[3],de.key?de.key:"",de.message?de.message:""); arena_destroy(&arena); return 1; }
+    finding_list_init(&l,&arena);
+    finding_from_dfm(&l,argv[2],&b,&p,&r);
+    finding_from_board(&l,argv[2],&b);
+    for(int i=4;i<argc;i++) {
+        const char *dot=strrchr(argv[i],'.');
+        if(dot && (!strcmp(dot,".drl") || !strcmp(dot,".DRL"))) {
+            ExcFile *x=arena_alloc(&arena,sizeof *x);
+            if(!x || exc_parse_path(&arena,argv[i],x)==EXC_ERR_IO) { fprintf(stderr,"report: cannot read %s\n",argv[i]); arena_destroy(&arena); return 1; }
+            finding_from_excellon(&l,argv[i],x);
+        } else {
+            GerberFile g;
+            GerberStatus gs=gerber_parse_path(&arena,argv[i],&g);
+            if(gs==GERBER_IO_ERROR||gs==GERBER_OUT_OF_MEMORY) { fprintf(stderr,"report: cannot read %s\n",argv[i]); arena_destroy(&arena); return 1; }
+            finding_from_gerber(&l,argv[i],&g);
+        }
+    }
+    size_t n; const char *text=finding_report_json(&l,&arena,&n);
+    if(!text) { fputs("report: out of memory\n",stderr); arena_destroy(&arena); return 1; }
+    fwrite(text,1,n,stdout);
+    FindingVerdict v=finding_verdict(&l);
+    arena_destroy(&arena);
+    return v==FINDING_VERDICT_FAIL||v==FINDING_VERDICT_INVALID_INPUT?2:0;
+}
 int main(int argc,char **argv) {
+    if(argc>=4 && !strcmp(argv[1],"report")) return report_json(argc,argv);
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
     if(argc==3 && !strcmp(argv[1],"board")) return board_json(argv[2]);
     if(argc==3 && !strcmp(argv[1],"gerber")) return gerber_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
     if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);

@@ -1,0 +1,13 @@
+M48
+; test-authored: an Excellon file with problems (not a KiCad export)
+FMAT,2
+METRIC
+T1C0.800
+%
+G90
+G05
+T1
+X5.0Y-5.0
+T2
+X6.0Y-6.0
+M77

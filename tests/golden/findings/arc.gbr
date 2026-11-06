@@ -1,0 +1,11 @@
+G04 test-authored: a Gerber file with an arc and an ignored command (not a KiCad export)*
+%FSLAX46Y46*%
+%MOMM*%
+%IPPOS*%
+%ADD10C,0.200000*%
+D10*
+X0Y0D02*
+G02*
+X2000000Y0I1000000J0D01*
+G01*
+X2000000Y2000000D01*

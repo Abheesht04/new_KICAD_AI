@@ -353,3 +353,142 @@ JsonNumberStatus json_to_i64(const JsonValue *v, int64_t *out)
     *out = neg ? -(int64_t)x : (int64_t)x;
     return JSON_NUMBER_OK;
 }
+
+/* ------------------------------------------------------------------------------------------------ writer */
+
+void json_writer_init(JsonWriter *w, Arena *arena)
+{
+    memset(w, 0, sizeof *w);
+    w->arena = arena;
+    w->depth = -1;
+    if (!arena) w->failed = true;
+}
+
+static void put(JsonWriter *w, const char *s, size_t n)
+{
+    if (w->failed) return;
+    if (w->len + n + 2 > w->cap) {
+        size_t cap = w->cap ? w->cap * 2 : 1024;
+        while (cap < w->len + n + 2) cap *= 2;
+        char *b = arena_alloc(w->arena, cap);
+        if (!b) { w->failed = true; return; }
+        if (w->len) memcpy(b, w->buf, w->len);
+        w->buf = b;
+        w->cap = cap;
+    }
+    memcpy(w->buf + w->len, s, n);
+    w->len += n;
+    w->buf[w->len] = 0;
+}
+
+static void puts_(JsonWriter *w, const char *s) { put(w, s, strlen(s)); }
+
+static void newline(JsonWriter *w)
+{
+    put(w, "\n", 1);
+    for (int i = 0; i <= w->depth; i++) put(w, "  ", 2);
+}
+
+/* Before any value: a comma and a newline inside a container, and a key inside an object. */
+static void before_value(JsonWriter *w)
+{
+    if (w->failed) return;
+    if (w->depth < 0) { if (w->len) w->failed = true; return; }      /* one top-level value */
+    if (w->object[w->depth]) {
+        if (!w->key_pending) { w->failed = true; return; }
+        w->key_pending = false;
+        return;
+    }
+    if (w->members[w->depth]++) put(w, ",", 1);
+    newline(w);
+}
+
+static void open(JsonWriter *w, bool object)
+{
+    before_value(w);
+    if (w->failed) return;
+    if (w->depth + 1 >= JSON_WRITER_MAX_DEPTH) { w->failed = true; return; }
+    put(w, object ? "{" : "[", 1);
+    w->depth++;
+    w->object[w->depth] = object;
+    w->members[w->depth] = 0;
+}
+
+static void close_(JsonWriter *w, bool object)
+{
+    if (w->failed) return;
+    if (w->depth < 0 || w->object[w->depth] != object || w->key_pending) { w->failed = true; return; }
+    size_t members = w->members[w->depth];
+    w->depth--;
+    if (members) newline(w);
+    put(w, object ? "}" : "]", 1);
+}
+
+void json_write_begin_object(JsonWriter *w) { open(w, true); }
+void json_write_end_object(JsonWriter *w) { close_(w, true); }
+void json_write_begin_array(JsonWriter *w) { open(w, false); }
+void json_write_end_array(JsonWriter *w) { close_(w, false); }
+
+static void quoted(JsonWriter *w, const char *s)
+{
+    put(w, "\"", 1);
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        char esc[8];
+        switch (*p) {
+        case '"': puts_(w, "\\\""); break;
+        case '\\': puts_(w, "\\\\"); break;
+        case '\n': puts_(w, "\\n"); break;
+        case '\r': puts_(w, "\\r"); break;
+        case '\t': puts_(w, "\\t"); break;
+        default:
+            if (*p < 0x20) { snprintf(esc, sizeof esc, "\\u%04x", *p); puts_(w, esc); }
+            else put(w, (const char *)p, 1);
+        }
+    }
+    put(w, "\"", 1);
+}
+void json_write_key(JsonWriter *w, const char *key)
+{
+    if (w->failed) return;
+    if (w->depth < 0 || !w->object[w->depth] || w->key_pending || !key) { w->failed = true; return; }
+    if (w->members[w->depth]++) put(w, ",", 1);
+    newline(w);
+    quoted(w, key);
+    put(w, ": ", 2);
+    w->key_pending = true;
+}
+
+void json_write_string(JsonWriter *w, const char *s)
+{
+    if (!s) { json_write_null(w); return; }
+    before_value(w);
+    if (!w->failed) quoted(w, s);
+}
+
+void json_write_int(JsonWriter *w, int64_t v)
+{
+    char b[32];
+    before_value(w);
+    snprintf(b, sizeof b, "%lld", (long long)v);
+    puts_(w, b);
+}
+
+void json_write_uint(JsonWriter *w, uint64_t v)
+{
+    char b[32];
+    before_value(w);
+    snprintf(b, sizeof b, "%llu", (unsigned long long)v);
+    puts_(w, b);
+}
+
+void json_write_bool(JsonWriter *w, bool v) { before_value(w); puts_(w, v ? "true" : "false"); }
+void json_write_null(JsonWriter *w) { before_value(w); puts_(w, "null"); }
+
+const char *json_writer_finish(JsonWriter *w, size_t *len)
+{
+    if (w->failed || w->depth != -1 || !w->len || w->key_pending) { if (len) *len = 0; return NULL; }
+    put(w, "\n", 1);
+    if (w->failed) return NULL;
+    if (len) *len = w->len;
+    return w->buf;
+}

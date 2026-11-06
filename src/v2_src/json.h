@@ -73,6 +73,38 @@ JsonNumberStatus json_to_nm(const JsonValue *value, int64_t *out_nm);
 /* An integer within int64. */
 JsonNumberStatus json_to_i64(const JsonValue *value, int64_t *out);
 
+/* ------------------------------------------------------------------------------------------------ writer
+ * A minimal JSON writer into an Arena buffer: deterministic output (2-space indentation, members in call order,
+ * integers only, strings escaped per RFC 8259 with UTF-8 passed through), so a report can be compared byte for byte
+ * with a golden file. Misuse (a value where a key is due, unbalanced ends) or memory exhaustion sets `failed`; the
+ * text is then not valid and json_writer_finish returns NULL. */
+#define JSON_WRITER_MAX_DEPTH 32
+
+typedef struct JsonWriter {
+    Arena *arena;
+    char *buf;
+    size_t len, cap;
+    int depth;
+    bool object[JSON_WRITER_MAX_DEPTH];   /* per level: object (true) or array */
+    size_t members[JSON_WRITER_MAX_DEPTH];
+    bool key_pending;
+    bool failed;
+} JsonWriter;
+
+void json_writer_init(JsonWriter *w, Arena *arena);
+void json_write_begin_object(JsonWriter *w);
+void json_write_end_object(JsonWriter *w);
+void json_write_begin_array(JsonWriter *w);
+void json_write_end_array(JsonWriter *w);
+void json_write_key(JsonWriter *w, const char *key);
+void json_write_string(JsonWriter *w, const char *s);   /* NULL writes null */
+void json_write_int(JsonWriter *w, int64_t v);
+void json_write_uint(JsonWriter *w, uint64_t v);
+void json_write_bool(JsonWriter *w, bool v);
+void json_write_null(JsonWriter *w);
+/* The finished text (NUL-terminated, ending in a newline), or NULL when the writer failed or is unbalanced. */
+const char *json_writer_finish(JsonWriter *w, size_t *len);
+
 #ifdef __cplusplus
 }
 #endif

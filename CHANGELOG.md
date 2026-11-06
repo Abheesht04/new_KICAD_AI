@@ -14,6 +14,14 @@
 
 # Changelog
 
+## V2 track E: findings and one report (2026-11-07)
+
+- `src/v2_src/finding.{c,h}`: one Finding for DFM violations and undecided rules, Excellon, Gerber and board-model
+  issues; statuses FAIL / INVALID_INPUT / UNVERIFIED / NOT_IMPLEMENTED / INFO; a total sort order; verdict.
+- `json.c` gains a deterministic JSON writer; `copper-core report BOARD PROFILE [FILES...]`.
+- Golden `tests/golden/report.json` from test-authored and real KiCad 9.0.6 inputs, compared byte for byte.
+- excellon.c: a non-coordinate line after an undefined tool no longer stops reading with EXC_ERR_ARGUMENT.
+
 ## V2 track A: Gerber reader in C (2026-11-07)
 
 - `src/v2_src/gerber.{c,h}`, `copper-core gerber FILE`: RS-274X/X2 in exact nm: FS, MO, AD (C/R/O/P, macros), AM

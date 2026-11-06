@@ -455,7 +455,11 @@ static DfmStatus pairs(Ctx *c, DfmRule rule, const Item *as, size_t na, const It
             gs = g2_compare_shape_distance(as[i].shape, bs[j].shape, t, &order);
             if (gs != G2_OK) { res->unverified++; continue; }
             if (order != G2_ORDER_LESS) { res->checked++; continue; }
-            if (!as[i].exact || !bs[j].exact) { res->unverified++; continue; }
+            if (!as[i].exact || !bs[j].exact) {
+                res->unverified++;
+                if (!res->note) res->note = "an item without an exact shape (arc track, pad at a non-90-degree angle) is within the limit of another";
+                continue;
+            }
             res->checked++;
             DfmStatus s = add_violation(c, rule, which, -1, as[i].ref, bs[j].ref, as[i].at, as[i].layers & bs[j].layers);
             if (s) return s;

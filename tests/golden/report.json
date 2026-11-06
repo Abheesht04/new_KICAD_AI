@@ -1,0 +1,193 @@
+{
+  "format": "copper.findings/1",
+  "verdict": "FAIL",
+  "complete": true,
+  "counts": {
+    "FAIL": 3,
+    "INVALID_INPUT": 1,
+    "UNVERIFIED": 8,
+    "NOT_IMPLEMENTED": 1,
+    "INFO": 0
+  },
+  "sources": [
+    {
+      "source": "board",
+      "file": "board.kicad_pcb",
+      "verdict": "UNVERIFIED",
+      "findings": 1
+    },
+    {
+      "source": "dfm",
+      "file": "board.kicad_pcb",
+      "verdict": "FAIL",
+      "findings": 6,
+      "rules_passed": 5
+    },
+    {
+      "source": "excellon",
+      "file": "drill/broken.drl",
+      "verdict": "INVALID_INPUT",
+      "findings": 3
+    },
+    {
+      "source": "excellon",
+      "file": "drill/design.drl",
+      "verdict": "PASS",
+      "findings": 0
+    },
+    {
+      "source": "gerber",
+      "file": "gerber/arc.gbr",
+      "verdict": "UNVERIFIED",
+      "findings": 3
+    },
+    {
+      "source": "gerber",
+      "file": "gerber/design-Edge_Cuts.gm1",
+      "verdict": "PASS",
+      "findings": 0
+    }
+  ],
+  "findings": [
+    {
+      "source": "board",
+      "rule": "board/inexact_rotation",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "board.kicad_pcb",
+      "message": "footprint U1 (top-level item 9)"
+    },
+    {
+      "source": "dfm",
+      "rule": "clearance",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "board.kicad_pcb",
+      "message": "1 item or pair not decided: an item without an exact shape (arc track, pad at a non-90-degree angle) is within the limit of another"
+    },
+    {
+      "source": "dfm",
+      "rule": "clearance/track_spacing_min_mm",
+      "status": "FAIL",
+      "severity": "error",
+      "file": "board.kicad_pcb",
+      "at_nm": [
+        4000000,
+        4000000
+      ],
+      "layers": 1,
+      "limit_nm": 100000,
+      "items": [
+        "track 0",
+        "track 1"
+      ],
+      "message": "copper of two nets closer than the fabricator's minimum",
+      "fabricator_says": "1- and 2-layer: 0.10 / 0.10 mm (4 / 4 mil)"
+    },
+    {
+      "source": "dfm",
+      "rule": "drill/via_hole_min_mm",
+      "status": "FAIL",
+      "severity": "error",
+      "file": "board.kicad_pcb",
+      "at_nm": [
+        25000000,
+        5000000
+      ],
+      "limit_nm": 150000,
+      "measured_nm": 120000,
+      "items": [
+        "via 0"
+      ],
+      "message": "hole or via smaller than the fabricator's minimum",
+      "fabricator_says": "2-layer: 0.15mm hole size / 0.25mm via diameter (0.1mm hole size / 0.2mm via diameter only available for board thickness <=1mm; ENIG/OSP surface finish required)"
+    },
+    {
+      "source": "dfm",
+      "rule": "hole_to_edge",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "board.kicad_pcb",
+      "message": "4 items or pairs not decided: the profile has no value for this limit (not published by the fabricator)"
+    },
+    {
+      "source": "dfm",
+      "rule": "track_width/track_width_min_mm",
+      "status": "FAIL",
+      "severity": "error",
+      "file": "board.kicad_pcb",
+      "at_nm": [
+        4000000,
+        4000000
+      ],
+      "limit_nm": 100000,
+      "measured_nm": 80000,
+      "items": [
+        "track 0"
+      ],
+      "message": "track narrower than the fabricator's minimum",
+      "fabricator_says": "1- and 2-layer: 0.10 / 0.10 mm (4 / 4 mil)"
+    },
+    {
+      "source": "dfm",
+      "rule": "zone_clearance",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "warning",
+      "file": "board.kicad_pcb",
+      "message": "1 item or pair not decided: zone fills are not in the board model yet: filled zones are not checked"
+    },
+    {
+      "source": "excellon",
+      "rule": "excellon/missing_end",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "drill/broken.drl",
+      "message": "Missing end command"
+    },
+    {
+      "source": "excellon",
+      "rule": "excellon/undefined_tool",
+      "status": "INVALID_INPUT",
+      "severity": "error",
+      "file": "drill/broken.drl",
+      "line": 11,
+      "message": "Undefined drill tool (tool T2)"
+    },
+    {
+      "source": "excellon",
+      "rule": "excellon/unknown_command",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "drill/broken.drl",
+      "line": 13,
+      "message": "Unknown command"
+    },
+    {
+      "source": "gerber",
+      "rule": "gerber/arc_unsupported",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "gerber/arc.gbr",
+      "line": 9,
+      "message": "G02/G03 circular interpolation is not supported"
+    },
+    {
+      "source": "gerber",
+      "rule": "gerber/missing_m02",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "gerber/arc.gbr",
+      "line": 12,
+      "message": "no M02 at the end"
+    },
+    {
+      "source": "gerber",
+      "rule": "gerber/unsupported_command",
+      "status": "UNVERIFIED",
+      "severity": "warning",
+      "file": "gerber/arc.gbr",
+      "line": 4,
+      "message": "IPPOS"
+    }
+  ]
+}
