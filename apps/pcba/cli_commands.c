@@ -342,7 +342,7 @@ static int run_library(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs 
     return backend(ctx, cmd, &b);
 }
 
-/* kicad new | kicad open: native KiCad 9 projects (src/copper_project.c through copper.py). */
+/* kicad new | kicad open: native KiCad 9 projects (src/v2_src/copper_project.c through copper.py). */
 static int run_kicad(PcbaContext *ctx, const PcbaCommand *cmd, const PcbaArgs *a) {
     static const char *const map[][2] = {{"--dir", "--dir"}};
     const char *dir = pcba_opt(cmd, a, "--dir");

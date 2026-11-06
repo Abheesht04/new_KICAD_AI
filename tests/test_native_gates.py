@@ -28,7 +28,7 @@ FAKE = textwrap.dedent('''
     sys.stderr.write(scenario.get('stderr', ''))
     if kind == 'pcb export':  # the real KiCad 9.0.6 CAM output of the divider, optionally tampered with
         import shutil
-        source = os.path.join(scenario['cam'], 'gerbers' if args[2] == 'gerbers' else 'drill')
+        source = os.path.join(scenario['cam'], 'gerber_test' if args[2] == 'gerbers' else 'drill_test')
         for name in os.listdir(source):
             shutil.copyfile(os.path.join(source, name), os.path.join(out, name))
         if args[2] == 'drill' and scenario.get('move_hole'):
@@ -165,11 +165,11 @@ class SecondJudge(Base):
 
 class Cam(Base):
     """CAM output re-read without KiCad (copper.cam_check): the real KiCad 9.0.6 Gerber job and Excellon drill files
-    exported from this divider (tests/fixtures/kicad9/cam) must agree with the design; any tampering is FAIL."""
-    CAM = ROOT / 'tests/fixtures/kicad9/cam'
+    exported from this divider (manufacturing_audit/{gerber_test,drill_test}) must agree with the design; any tampering is FAIL."""
+    CAM = ROOT / 'manufacturing_audit'
 
     def tampered(self, edit):
-        cam = self.dir / 'cam-edit'; shutil.rmtree(cam, ignore_errors=True); shutil.copytree(self.CAM, cam)
+        cam = self.dir / 'cam-edit'; shutil.rmtree(cam, ignore_errors=True); shutil.copytree(self.CAM, cam, ignore=shutil.ignore_patterns('*.zip'))
         edit(cam)
         return {c['check']: c for c in copper.cam_check(self.dir / 'build', cam, CORE)}
 

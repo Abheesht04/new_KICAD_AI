@@ -18,7 +18,7 @@ static const char *plating_name(ExcPlating p) {
 static const char *function_name(ExcDrillFunction d) {
     return d==EXC_DRILL_COMPONENT?"component":d==EXC_DRILL_VIA?"via":d==EXC_DRILL_MECHANICAL?"mechanical":d==EXC_DRILL_OTHER?"other":"unknown";
 }
-/* drill FILE: an Excellon drill file read independently of KiCad (src/excellon.c), in mm. Exit 0 when it parsed with
+/* drill FILE: an Excellon drill file read independently of KiCad (src/v2_src/excellon.c), in mm. Exit 0 when it parsed with
  * no error issue, 2 when the file has errors (the content is still reported), 3 when it could not be read. */
 static int drill_json(const char *path) {
     Arena arena; arena_init(&arena,1<<16); ExcFile *f=malloc(sizeof *f); if(!f) return 3;

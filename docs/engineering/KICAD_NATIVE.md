@@ -1,25 +1,31 @@
 # Native KiCad integration
 
 What the `v2-native-kicad-integration` branch brought (one commit, `e04491b`, on the 2026-10-17 baseline) and how it
-is wired into the product. The branch's tree was this repository's plus 45 new files. Integration:
+is wired into the product. The branch's files stay where it put them (owner rule 2026-11-06, `CLAUDE.md` §2: do not
+rename or move existing files); the build compiles them in place.
 
-| Brought | Integrated as | Owner |
+| Brought (kept at this path) | Built and used as | Owner |
 |---|---|---|
-| `src/v2_src/{IR,arena,cplx,nmath,sexpr,u128}.{c,h}` | **removed**: byte-identical copies of the files in `src/` | `src/` |
-| `src/v2_src.zip` | **removed**: a zip of `src/v2_src/` | — |
-| `src/v2_src/g2_types.{c,h}` | `src/g2_types.*` in `hwcore`; tests `tests/g2_types_test.c` | exact nm geometry |
-| `src/v2_src/excellon.{c,h}` | `src/excellon.*`; `copper-core drill FILE`; `pcba project cam-check`; re-read by `pcba project fabricate`; tests `tests/kicad_native_test.c`, `test_native_gates.Cam` | Excellon reader |
-| `src/v2_src/kicad_library_table.{c,h}` | `src/kicad_library_table.*`; tests `tests/kicad_native_test.c` | KiCad library tables (C side) |
-| `src/v2_src/filesystem.{c,h}` | `src/filesystem.*`; tests `tests/kicad_native_test.c` | filesystem helpers |
-| `src/v2_src/copper_project.{c,h}` | `src/copper_project.*`; `copper-core kicad-new/kicad-open`; `pcba kicad new/open`; tests | native KiCad 9 projects |
-| `export_cam_kicad906.ps1` | `tools/export_cam_kicad906.ps1` | KiCad 9 CAM export, for the owner's machine |
-| `src/v2_src/copper_ai_model_probe.ps1` | `tools/copper_ai_model_probe.ps1` | Ollama probe (Qwen3 8B, Llama 3.2) for the smart-layer plan |
-| `manufacturing_audit/{gerber_test,drill_test}` | `tests/fixtures/kicad9/cam/{gerbers,drill}` | **real KiCad 9.0.6 CAM output** of the divider board, used as test oracle |
-| `manufacturing_audit/gerber_test.zip` | **removed**: a zip of the same Gerbers | — |
+| `src/v2_src/` | the **V2 strict-C engine folder**: every new V2 module goes here as new files | `copper_v2` CMake library |
+| `src/v2_src/g2_types.{c,h}` | `copper_v2`; tests `tests/g2_types_test.c` | exact nm geometry |
+| `src/v2_src/excellon.{c,h}` | `copper_v2`; `copper-core drill FILE`; `pcba project cam-check`; re-read by `pcba project fabricate`; tests `tests/kicad_native_test.c`, `test_native_gates.Cam` | Excellon reader |
+| `src/v2_src/kicad_library_table.{c,h}` | `copper_v2`; tests `tests/kicad_native_test.c` | KiCad library tables (C side) |
+| `src/v2_src/filesystem.{c,h}` | `copper_v2`; tests `tests/kicad_native_test.c` | filesystem helpers |
+| `src/v2_src/copper_project.{c,h}` | `copper_v2`; `copper-core kicad-new/kicad-open`; `pcba kicad new/open`; tests | native KiCad 9 projects |
+| `src/v2_src/{IR,arena,cplx,nmath,sexpr,u128}.{c,h}` | byte-identical to the copies in `src/`, which `hwcore` compiles; test `v2_src_shared_in_sync` fails if they ever differ | base modules |
+| `src/v2_src.zip` | not built: the folder as delivered | — |
+| `export_cam_kicad906.ps1` | run by hand on a machine with KiCad 9.0.6 | KiCad 9 CAM export |
+| `src/v2_src/copper_ai_model_probe.ps1` | run by hand against an Ollama server | Ollama probe (Qwen3 8B, Llama 3.2) for the smart-layer plan |
+| `manufacturing_audit/{gerber_test,drill_test}` | **real KiCad 9.0.6 CAM output** of the divider board, the test oracle for `kicad_native_test` and `test_native_gates.Cam` | — |
+| `manufacturing_audit/gerber_test.zip` | not built: the same Gerbers zipped | — |
+
+`copper_v2` builds with `-std=c17 -Wall -Wextra -Wpedantic` and links `hwcore` for the base modules; `copper-core`
+links `copper_v2`. `-DCOPPER_V2_SANITIZE=ON` adds `-fsanitize=address,undefined`; on MinGW (no `libasan`) it adds
+UBSan in trap mode only, and ASan is reported as not run.
 
 ## Fixed while integrating
 
-Each was found by building the modules with this project's flags (C17, `-Wall -Wextra -Wpedantic`), or by their first
+Each is a small edit to a protected file, noted here as `CLAUDE.md` §2 requires. Each was found by building the modules with this project's flags (C17, `-Wall -Wextra -Wpedantic`), or by their first
 tests. On the branch none of the modules were part of any build target.
 
 - **Compile error:** `g2_types.c` returned `G2_ERR_CAPACITY`, which the enum did not declare, so the module did not compile. It is now declared: more BVH results than the caller's buffer. The count stays exact (tested).
@@ -57,7 +63,7 @@ tests. On the branch none of the modules were part of any build target.
 
 ## Evidence
 
-- **Real KiCad 9.0.6 output of a Copper board:** the files under `tests/fixtures/kicad9/cam` were exported by KiCad 9.0.6 on the owner's machine from the divider board (`examples/v2/divider.copper`, built with the committed library snapshot).
+- **Real KiCad 9.0.6 output of a Copper board:** the files under `manufacturing_audit/{gerber_test,drill_test}` were exported by KiCad 9.0.6 on the owner's machine from the divider board (`examples/v2/divider.copper`, built with the committed library snapshot).
   - Re-read without KiCad, they agree with Copper's design: 3 plated 1.000 mm holes at x 8, y 12 / 14.54 / 17.08, and 14 Gerber files for a two-layer 40 × 30 mm board (`test_native_gates.Cam`).
   - Moving a hole by 0.1 mm, shrinking the drill, deleting a hole, changing the layer count or the board size, or deleting a listed Gerber each make the check FAIL.
 - **`fabricate` end to end:** run against a fake `kicad-cli` that returns those real KiCad 9.0.6 files, it PASSes; with one hole moved it FAILs, naming the hole.
@@ -65,7 +71,7 @@ tests. On the branch none of the modules were part of any build target.
 
 ## Smart-layer probe
 
-`tools/copper_ai_model_probe.ps1` sends one under-specified request (a USB-C sensor board) to a local Ollama server
+`src/v2_src/copper_ai_model_probe.ps1` sends one under-specified request (a USB-C sensor board) to a local Ollama server
 (`qwen3:8b`, `llama3.2:latest`). It asks the model to separate requirements from assumptions and to ask at most three
 questions, then reports latency, tokens per second, CPU/GPU placement and GPU memory. It is an evaluation script for
 the plan's §6; nothing in the product calls a model. It has not been run on this machine (no Ollama here).

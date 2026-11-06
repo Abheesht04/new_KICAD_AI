@@ -15,11 +15,11 @@
 
 static void test_excellon_reads_kicad_906(void)
 {
-    /* tests/fixtures/kicad9/cam/drill/design.drl: KiCad 9.0.6's drill export of the divider board (J1 header). */
+    /* manufacturing_audit/drill_test/design.drl: KiCad 9.0.6's drill export of the divider board (J1 header). */
     Arena arena;
     arena_init(&arena, 1 << 16);
     ExcFile f;
-    assert(exc_parse_path(&arena, KICAD9_CAM_DIR "/drill/design.drl", &f) == EXC_OK);
+    assert(exc_parse_path(&arena, KICAD9_CAM_DIR "/drill_test/design.drl", &f) == EXC_OK);
     assert(f.units == EXC_UNITS_METRIC && f.zeros == EXC_ZEROS_DECIMAL && f.absolute && f.fmat == 2);
     assert(f.file_plating == EXC_PLATING_MIXED && f.layer_from == 1 && f.layer_to == 2 && f.saw_end);
     assert(f.tool_count == 1 && f.error_count == 0);

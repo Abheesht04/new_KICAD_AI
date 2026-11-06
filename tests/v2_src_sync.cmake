@@ -1,0 +1,17 @@
+# The shared base modules exist twice: src/ (compiled into hwcore) and src/v2_src/ (the V2 engine folder, kept as
+# delivered). Only the src/ copy is compiled, so the two must stay identical; line endings are ignored.
+set(SHARED IR.c IR.h arena.c arena.h cplx.c cplx.h nmath.c nmath.h sexpr.c sexpr.h u128.c u128.h)
+set(DIFFERENT "")
+foreach(name IN LISTS SHARED)
+    file(READ "${ROOT}/src/${name}" A)
+    file(READ "${ROOT}/src/v2_src/${name}" B)
+    string(REPLACE "\r\n" "\n" A "${A}")
+    string(REPLACE "\r\n" "\n" B "${B}")
+    if(NOT A STREQUAL B)
+        list(APPEND DIFFERENT "${name}")
+    endif()
+endforeach()
+if(DIFFERENT)
+    message(FATAL_ERROR "src/ and src/v2_src/ differ: ${DIFFERENT}. Change both copies together (CLAUDE.md section 2).")
+endif()
+message(STATUS "src/ and src/v2_src/ shared modules identical (${SHARED})")

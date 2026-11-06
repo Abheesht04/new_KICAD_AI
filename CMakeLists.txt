@@ -52,13 +52,6 @@ add_library(hwcore STATIC
     Extras/tokenizer.c
     src/vec.c
     src/xForm.c
-    # Native KiCad integration (v2-native-kicad-integration): exact nm geometry, Excellon reader,
-    # KiCad library tables, filesystem helpers and native KiCad 9 project creation.
-    src/g2_types.c
-    src/excellon.c
-    src/kicad_library_table.c
-    src/filesystem.c
-    src/copper_project.c
 )
 
 target_include_directories(hwcore PUBLIC src)
@@ -72,8 +65,40 @@ else()
         target_link_libraries(hwcore PUBLIC m)
     endif()
 endif()
+
+# Copper V2 strict-C engine (src/v2_src, CLAUDE.md section 2): int64 nm geometry, Arena memory, status enums,
+# no printf/exit in library code. The shared base modules (arena, IR, sexpr, nmath, u128, cplx) exist in both
+# src/ and src/v2_src/ byte for byte; they are compiled once, from src/ in hwcore, and the v2_src_shared_in_sync
+# test fails if the two copies ever differ.
+add_library(copper_v2 STATIC
+    src/v2_src/g2_types.c
+    src/v2_src/excellon.c
+    src/v2_src/kicad_library_table.c
+    src/v2_src/filesystem.c
+    src/v2_src/copper_project.c
+)
+target_include_directories(copper_v2 PUBLIC src/v2_src)
+target_link_libraries(copper_v2 PUBLIC hwcore)
+if(MSVC)
+    target_compile_options(copper_v2 PRIVATE /W4)
+else()
+    target_compile_options(copper_v2 PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 if(WIN32)
-    target_link_libraries(hwcore PUBLIC ole32)  # CoCreateGuid for native KiCad project UUIDs (src/copper_project.c)
+    target_link_libraries(copper_v2 PUBLIC ole32)  # CoCreateGuid for native KiCad project UUIDs (copper_project.c)
+endif()
+# Sanitizers for the V2 engine and its tests. MinGW has no libasan: UBSan runs in trap mode there and ASan is
+# reported as not run, never as passed.
+option(COPPER_V2_SANITIZE "Build copper_v2 and its tests with sanitizers" OFF)
+if(COPPER_V2_SANITIZE AND NOT MSVC)
+    if(MINGW)
+        set(COPPER_V2_SAN_FLAGS -fsanitize=undefined -fsanitize-undefined-trap-on-error)
+        message(STATUS "copper_v2: UBSan (trap mode); ASan NOT RUN (unavailable on MinGW)")
+    else()
+        set(COPPER_V2_SAN_FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer)
+    endif()
+    target_compile_options(copper_v2 PUBLIC ${COPPER_V2_SAN_FLAGS})
+    target_link_options(copper_v2 PUBLIC ${COPPER_V2_SAN_FLAGS})
 endif()
 
 if(HWCOMPILER_BUILD_TESTS)
@@ -117,9 +142,14 @@ if(HWCOMPILER_BUILD_TESTS)
 
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        target_link_libraries(${test_name}_test PRIVATE hwcore)
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native")
+            target_link_libraries(${test_name}_test PRIVATE copper_v2)
+        else()
+            target_link_libraries(${test_name}_test PRIVATE hwcore)
+        endif()
         if(test_name STREQUAL "kicad_native")
-            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/cam" KICAD9_CAM_PATH)
+            # Real KiCad 9.0.6 CAM output of the divider board (manufacturing_audit/{gerber_test,drill_test}).
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/manufacturing_audit" KICAD9_CAM_PATH)
             target_compile_definitions(${test_name}_test PRIVATE KICAD9_CAM_DIR="${KICAD9_CAM_PATH}")
         endif()
         if(test_name STREQUAL "ir")
@@ -136,6 +166,8 @@ if(HWCOMPILER_BUILD_TESTS)
         endif()
         add_test(NAME ${test_name} COMMAND ${test_name}_test)
     endforeach()
+    add_test(NAME v2_src_shared_in_sync COMMAND ${CMAKE_COMMAND} "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/v2_src_sync.cmake")
 endif()
 
 add_executable(fabcheck_demo apps/fabcheck_demo.c)
@@ -204,7 +236,7 @@ if(HWCOMPILER_BUILD_TESTS)
 endif()
 
 add_executable(copper-core apps/copper_core.c)
-target_link_libraries(copper-core PRIVATE hwcore)
+target_link_libraries(copper-core PRIVATE copper_v2)
 # Measurement tool for docs/engineering/NUMERICAL_ROADMAP.md: kernels against analytical oracles.
 add_executable(numeric_bench apps/numeric_bench.c)
 target_include_directories(numeric_bench PRIVATE ${CMAKE_SOURCE_DIR}/src)

@@ -1091,7 +1091,7 @@ def run_command(args):
 DRILL_EXPORT = ['--format', 'excellon', '--drill-origin', 'absolute', '--excellon-zeros-format', 'decimal', '--excellon-units', 'mm']
 def cam_check(out, cam, core=None):
     """Re-read a build's CAM output without KiCad and compare it with the design (resolved.copper). Drill files go
-    through copper-core's Excellon reader (src/excellon.c): their holes, by position and diameter to 1 um, must be
+    through copper-core's Excellon reader (src/v2_src/excellon.c): their holes, by position and diameter to 1 um, must be
     exactly the design's pad and via holes (KiCad's absolute drill origin: Excellon y = -board y). The Gerber job file
     must state two copper layers, the board size (outline plus its 0.05 mm stroke) and only files that exist.
     Gerber images themselves are not re-read yet. Returns the checks, each PASS / FAIL / UNVERIFIED."""
@@ -1147,7 +1147,7 @@ def cam_check(out, cam, core=None):
                        'message': '; '.join(bad) if bad else f'{len(listed)} Gerber files listed and present, 2 copper layers, board size matches (KiCad {version})'})
     return checks
 def kicad_project_command(args):
-    """kicad-new: an empty native KiCad 9 project (copper-core, src/copper_project.c: atomic, never over anything);
+    """kicad-new: an empty native KiCad 9 project (copper-core, src/v2_src/copper_project.c: atomic, never over anything);
     kicad-open: what a KiCad project folder holds."""
     cmd = ['kicad-new', str(Path(args.dir).resolve()), args.name] if args.command == 'kicad-new' else ['kicad-open', str(Path(args.dir).resolve())]
     r = subprocess.run([core_path(args.core), *cmd], capture_output=True, text=True, timeout=60)

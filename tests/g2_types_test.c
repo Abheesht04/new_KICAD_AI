@@ -1,4 +1,4 @@
-/* Exact nanometre geometry (src/g2_types.c): predicates and distance comparisons against hand-computed answers.
+/* Exact nanometre geometry (src/v2_src/g2_types.c): predicates and distance comparisons against hand-computed answers.
  * Every case is chosen so the exact answer is known: 3-4-5 triangles, axis-aligned boxes, unit squares. */
 #include <assert.h>
 #include <stdio.h>

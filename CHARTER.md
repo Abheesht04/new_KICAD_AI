@@ -117,6 +117,30 @@ Follow the C11/C23 decision already agreed by the repository owner and current V
 - Do not use compiler-specific integer extensions without guards or a portable fallback.
 - Do not commit machine-specific paths, generated build trees, binaries, caches, or secrets.
 
+### 3.1 Language split (hard rule, owner decision 2026-11-06)
+
+**Everything deterministic is C** (C17, with CUDA as an opt-in accelerator). That covers:
+- physics: MNA, AC, transient, device models;
+- geometry and DFM;
+- placement and routing;
+- KiCad parsing and writing;
+- CAM re-reading;
+- fab profiles and rule checks;
+- the tool server;
+- the client side of the LLM bridge (HTTP to a model server);
+- REST serving and any GPU kernels.
+
+**Python is allowed only for:**
+- natural-language processing and transformers;
+- learning algorithms: training, fine-tuning (e.g. LoRA), translation models, and part-picking models that consume C-parsed libraries and DFM rules;
+- hosting the LLM or model server, which may run on another machine.
+
+Consequences:
+- **No new deterministic Python.** A feature that computes, checks, places, routes, exports or decides is written in C.
+- **Existing deterministic Python is legacy.** It is listed with its port order in `docs/engineering/C_FIRST_AUDIT.md`. It may be fixed, but it is not extended, and each part is retired once its C replacement passes the same tests.
+- **The C engine reaches learned components through one interface:** the LLM backend over HTTP/JSON, with a mock backend as the default. A model never decides physics, DFM or pass/fail.
+- **Determinism:** results must not depend on threads, GPU scheduling or wall clock. A CUDA path must match its CPU reference bit for bit and is never required to build or to pass tests.
+
 ## 4. KiCad compatibility policy
 
 **The current native-validation target is KiCad 9.x only.**
