@@ -79,6 +79,7 @@ add_library(copper_v2 STATIC
     src/v2_src/board.c
     src/v2_src/json.c
     src/v2_src/dfm.c
+    src/v2_src/kicad_cli.c
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 target_link_libraries(copper_v2 PUBLIC hwcore)
@@ -144,11 +145,17 @@ if(HWCOMPILER_BUILD_TESTS)
         board
         json
         dfm_v2
+        kicad_cli
     )
 
+    # A stand-in for kicad-cli for tests/kicad_cli_test.c (records its argv; modes for each failure path).
+    add_executable(fake_kicad_cli tests/fake_kicad_cli.c)
+    if(WIN32)
+        target_link_libraries(fake_kicad_cli PRIVATE shell32)
+    endif()
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -171,6 +178,14 @@ if(HWCOMPILER_BUILD_TESTS)
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" DFM_ROOT)
             target_compile_definitions(${test_name}_test PRIVATE DFM_ROOT="${DFM_ROOT}")
         endif()
+        if(test_name STREQUAL "kicad_cli")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/board" KCLI_GOLDEN)
+            target_compile_definitions(${test_name}_test PRIVATE
+                FAKE_KICAD_CLI="$<TARGET_FILE:fake_kicad_cli>"
+                KCLI_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}/kicad_cli_test"
+                BOARD_GOLDEN_DIR="${KCLI_GOLDEN}")
+            add_dependencies(${test_name}_test fake_kicad_cli)
+        endif()
         if(test_name STREQUAL "ir")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kicad9/symbols" IR_FIXTURE_PATH)
             target_compile_definitions(${test_name}_test PRIVATE IR_TEST_FIXTURE_DIR="${IR_FIXTURE_PATH}")
@@ -185,6 +200,9 @@ if(HWCOMPILER_BUILD_TESTS)
         endif()
         add_test(NAME ${test_name} COMMAND ${test_name}_test)
     endforeach()
+    # The same runner against a real kicad-cli (KICAD_CLI). Exit 77 = skipped (UNVERIFIED) when none is configured.
+    add_test(NAME kicad_cli_real COMMAND kicad_cli_test --real)
+    set_tests_properties(kicad_cli_real PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME v2_src_shared_in_sync COMMAND ${CMAKE_COMMAND} "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/v2_src_sync.cmake")
 endif()

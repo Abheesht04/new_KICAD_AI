@@ -5,6 +5,7 @@
 #include "excellon.h"
 #include "board.h"
 #include "dfm.h"
+#include "kicad_cli.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -143,11 +144,40 @@ static int dfm_json(const char *board_path,const char *profile_path) {
     puts("]}");
     int rc=r.verdict==DFM_FAIL?2:0; arena_destroy(&arena); return rc;
 }
+/* kicad JOB BOARD OUT: run kicad-cli (src/v2_src/kicad_cli.c; found via KICAD_CLI_PATH, PATH or the KiCad 9 install
+ * folders) for JOB = drc | gerbers | drill | pos, into OUT, which must not exist. JSON: status, the CLI version and
+ * whether it is 9.x, argv, exit code, elapsed time, files, stderr. COPPER_KICAD_TIMEOUT_MS sets the timeout (default
+ * 600000). Exit 0 on OK (DRC violations included: see drc_violations), 2 otherwise. */
+static int kicad_job(const char *job,const char *board,const char *out) {
+    Arena arena; arena_init(&arena,1<<16); KicadCli cli; KicadCliResult r;
+    const char *t=getenv("COPPER_KICAD_TIMEOUT_MS"); unsigned long timeout=t&&*t?strtoul(t,NULL,10):600000ul;
+    KicadCliStatus s=kicad_cli_open(&arena,NULL,(uint32_t)timeout,false,&cli,&r);
+    if(s==KCLI_OK) {
+        if(!strcmp(job,"drc")) { KicadDrcOptions o={false,true}; s=kicad_cli_drc(&arena,&cli,board,out,&o,&r); }
+        else if(!strcmp(job,"gerbers")) s=kicad_cli_gerbers(&arena,&cli,board,out,&r);
+        else if(!strcmp(job,"drill")) s=kicad_cli_drill(&arena,&cli,board,out,&r);
+        else if(!strcmp(job,"pos")) s=kicad_cli_pos(&arena,&cli,board,out,&r);
+        else { fprintf(stderr,"kicad: JOB is drc, gerbers, drill or pos\n"); arena_destroy(&arena); return 64; }
+    }
+    printf("{\"status\":\"%s\",\"job\":\"%s\",\"kicad_cli\":",kicad_cli_status_name(s),kicad_cli_job_name(r.job));
+    if(cli.path) json_string(stdout,cli.path); else fputs("null",stdout);
+    fputs(",\"version\":",stdout); if(r.cli_version) json_string(stdout,r.cli_version); else fputs("null",stdout);
+    printf(",\"kicad9\":%s,\"exit_code\":%d,\"timed_out\":%s,\"elapsed_ms\":%llu,\"drc_violations\":%s,\"argv\":[",
+           r.cli_is_9x?"true":"false",r.exit_code,r.timed_out?"true":"false",(unsigned long long)r.elapsed_ms,r.drc_violations?"true":"false");
+    for(size_t i=0;i<r.argc;i++) { if(i) fputc(',',stdout); json_string(stdout,r.argv[i]); }
+    fputs("],\"output\":",stdout); if(r.output) json_string(stdout,r.output); else fputs("null",stdout);
+    fputs(",\"files\":[",stdout);
+    for(size_t i=0;i<r.file_count;i++) { if(i) fputc(',',stdout); json_string(stdout,r.files[i]); }
+    fputs("],\"message\":",stdout); if(r.message) json_string(stdout,r.message); else fputs("null",stdout);
+    fputs(",\"stderr\":",stdout); json_string(stdout,r.stderr_text?r.stderr_text:""); puts("}");
+    arena_destroy(&arena); return s==KCLI_OK?0:2;
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
     if(argc==3 && !strcmp(argv[1],"board")) return board_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | dfm BOARD PROFILE | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);

@@ -136,6 +136,13 @@ zone counts, the Edge.Cuts outline (loops, exact closure, `max_gap_nm`, bounds, 
 the items, a location and the fabricator's wording). Exit 0 when nothing FAILs, 2 on FAIL, 1 when the board or
 profile cannot be read. See [DFM_V2.md](DFM_V2.md).
 
+## copper-core kicad
+
+`copper-core kicad drc|gerbers|drill|pos BOARD OUT` runs kicad-cli through the C runner (`src/v2_src/kicad_cli.c`):
+no shell, a timeout (`COPPER_KICAD_TIMEOUT_MS`, default 600000) that kills the process tree, and `OUT` must not exist
+(it is never overwritten). JSON: status, the CLI path and version, `kicad9`, argv, exit code, elapsed time, DRC
+violations, output, files, stderr. Exit 0 on OK, 2 otherwise. See [KICAD_CLI.md](KICAD_CLI.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

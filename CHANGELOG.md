@@ -14,6 +14,14 @@
 
 # Changelog
 
+## V2 track D: kicad-cli runner in C (2026-11-06)
+
+- `src/v2_src/kicad_cli.{c,h}`, `copper-core kicad JOB BOARD OUT`: version, DRC (JSON), Gerbers, drill (metric,
+  decimal, absolute) and position exports; CreateProcessW / posix_spawn without a shell; timeout kills the job
+  object / process group; stdout and stderr to files; staged output moved into place without ever replacing;
+  KiCad 9.x version gate.
+- Tested against a fake kicad-cli (every failure path) and the real KiCad 10.0.5 CLI (development check).
+
 ## V2 track C: DFM against fab profiles (2026-11-06)
 
 - `src/v2_src/dfm.{c,h}`, `copper-core dfm BOARD PROFILE`: track width, clearance (BVH, exact shape distances),
