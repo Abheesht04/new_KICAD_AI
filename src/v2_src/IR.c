@@ -533,7 +533,15 @@ static IRNode *ir_parse_string_node(IRParser *parser)
 {
     const size_t start = parser->pos;
     parser->pos++; /* opening quote */
-    size_t max_len = parser->length - parser->pos;
+    /* Decoded text is never longer than the raw text up to the closing quote, so size the buffer from that span,
+     * not from the rest of the input (which made parsing quadratic in memory on large files). An unterminated
+     * string scans to the end and is reported below exactly as before. */
+    size_t max_len = 0;
+    while (parser->pos + max_len < parser->length) {
+        char c = parser->source[parser->pos + max_len];
+        if (c == '"') break;
+        max_len += (c == '\\' && parser->pos + max_len + 1 < parser->length) ? 2 : 1;
+    }
     char *decoded = (char *)arena_alloc(parser->arena, max_len + 1);
     if (!decoded) {
         ir_parser_set_error(parser, IR_STATUS_OUT_OF_MEMORY, start, "out of memory decoding string");
