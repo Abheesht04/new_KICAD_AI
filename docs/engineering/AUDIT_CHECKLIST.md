@@ -15,6 +15,7 @@ KiCad 10.0.5 library copy for the ESP32 module (development only; not native val
 | Per-rule DFM table, one passing and one failing board per rule | **Done** | [DFM_RULES.md](DFM_RULES.md), generated from `tests/test_dfm_rules.py` (CTest `dfm_rules`): 21 rules with passing and failing boards, 3 load-time, 2 UNVERIFIED-reporting, 3 internal self-checks; the test fails if the engine gains a rule without a row |
 | Profile one full `pcba design` run | **Done** | below; `design.json` now carries `profile` (time per stage, child processes per executable) on every run |
 | Triage table of every failing prompt or board | **Done** | below |
+| C-first language split (owner rule 2026-11-06, CHARTER §3.1) | **Rule recorded; port in progress** | `CLAUDE.md`, [C_FIRST_AUDIT.md](C_FIRST_AUDIT.md): compliance table, port order, V2 tracks A–H status; placement ported to C (`src/v2_src/placement.c`, `placement_test`, `test_layout.CPlacer`) |
 
 ## Profile and what changed
 
