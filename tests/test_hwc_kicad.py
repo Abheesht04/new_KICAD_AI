@@ -155,8 +155,13 @@ def typed(node):
 class ParserEquivalence(unittest.TestCase):
     def files(self):
         root = SCRIPT.parents[1]; found = []
+        # The repository's files, not build output: /build/, /build-*/ and /out/ are gitignored, and other tests write
+        # (and delete) scratch boards there while this one runs.
+        def repository_file(p):
+            top = p.relative_to(root).parts[0]
+            return 'node_modules' not in p.parts and '.git' not in p.parts and top not in ('build', 'out') and not top.startswith('build-')
         for pattern in ('*.kicad_sym', '*.kicad_mod', '*.kicad_sch', '*.kicad_pcb', '*.copper', '*.parts', '*.espec', '*.rules', '*.design', '*.kicad_net'):
-            found += [p for p in root.rglob(pattern) if 'node_modules' not in p.parts and '.git' not in p.parts]
+            found += [p for p in root.rglob(pattern) if repository_file(p)]
         import os
         for env in ('KICAD_SYMBOL_DIR', 'KICAD_FOOTPRINT_DIR'):
             if os.environ.get(env):

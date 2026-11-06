@@ -14,6 +14,16 @@
 
 # Changelog
 
+## V2 track A: Gerber reader in C (2026-11-07)
+
+- `src/v2_src/gerber.{c,h}`, `copper-core gerber FILE`: RS-274X/X2 in exact nm: FS, MO, AD (C/R/O/P, macros), AM
+  (primitives 1/4/20/21, variables, arithmetic), D01/D02/D03, G01, regions, polarity, TF/TA/TO/TD. G02/G03 reported
+  as unsupported with its line; every other problem an issue with a line number.
+- The 17 KiCad 9.0.6 Gerbers in manufacturing_audit read with no issue; Edge.Cuts closes into one 40 x 30 mm loop;
+  copper flashes match the drill file and the C board model. 237 KiCad-written Gerbers of 10 demo boards read with
+  no error.
+- tests/test_hwc_kicad.py scans repository files only, not the gitignored build folders other tests write into.
+
 ## V2 track D: kicad-cli runner in C (2026-11-06)
 
 - `src/v2_src/kicad_cli.{c,h}`, `copper-core kicad JOB BOARD OUT`: version, DRC (JSON), Gerbers, drill (metric,

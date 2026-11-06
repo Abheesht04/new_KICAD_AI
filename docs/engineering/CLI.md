@@ -143,6 +143,13 @@ no shell, a timeout (`COPPER_KICAD_TIMEOUT_MS`, default 600000) that kills the p
 (it is never overwritten). JSON: status, the CLI path and version, `kicad9`, argv, exit code, elapsed time, DRC
 violations, output, files, stderr. Exit 0 on OK, 2 otherwise. See [KICAD_CLI.md](KICAD_CLI.md).
 
+## copper-core gerber
+
+`copper-core gerber FILE` reads a Gerber RS-274X/X2 file with the C reader (`src/v2_src/gerber.c`) and prints JSON:
+status, units, format, file attributes, apertures (D-code, type, bounds in nm, exact), object counts, the outline
+(draws chained into loops, closed, bounds), flashes with their net and pin, and issues with line numbers. Exit 0 when
+OK, 2 on content errors, 1 when unreadable. See [GERBER.md](GERBER.md).
+
 ## Backend protocol (`tools/copper.py`)
 
 `copper.py --format human|quiet|json --result-json FILE <command> …` writes

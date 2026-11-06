@@ -59,7 +59,7 @@ tests. On the branch none of the modules were part of any build target.
 **What the CAM re-read checks** (`copper.cam_check`):
 - **Drill holes:** every hole in every drill file, by position and diameter to 1 µm, must be exactly the design's pad and via holes (`resolved.copper`), with Excellon y = −board y under KiCad's absolute origin. Missing, extra and moved holes are named.
 - **Gerber job file:** it must state two copper layers, the board's size (outline plus its 0.05 mm stroke), and only files that exist. Without a job file the result is UNVERIFIED.
-- **Not checked:** the Gerber images themselves (copper, mask, silkscreen) are not re-read yet; there is no Gerber parser.
+- **Not checked yet:** the Gerber images themselves (copper, mask, silkscreen). The C Gerber reader now exists (`src/v2_src/gerber.c`, [GERBER.md](GERBER.md)); wiring it into this check is the next CAM step.
 
 ## Evidence
 

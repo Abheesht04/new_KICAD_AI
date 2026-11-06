@@ -6,6 +6,7 @@
 #include "board.h"
 #include "dfm.h"
 #include "kicad_cli.h"
+#include "gerber.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -172,12 +173,52 @@ static int kicad_job(const char *job,const char *board,const char *out) {
     fputs(",\"stderr\":",stdout); json_string(stdout,r.stderr_text?r.stderr_text:""); puts("}");
     arena_destroy(&arena); return s==KCLI_OK?0:2;
 }
+static const char *const GERBER_KINDS[]={"flash","draw","region","arc"};
+/* gerber FILE: a Gerber RS-274X/X2 file read by src/v2_src/gerber.c, lengths in nm (file coordinates, y up). JSON:
+ * status, units, format, file attributes, apertures (D-code, type, bounds, exact), object counts, outline (draws
+ * chained into loops), flashes with their attributes, and issues with line numbers. Exit 0 when OK, 2 on content
+ * errors, 1 when unreadable. */
+static int gerber_json(const char *path) {
+    Arena arena; arena_init(&arena,1<<20); GerberFile g; GerberOutline o;
+    GerberStatus st=gerber_parse_path(&arena,path,&g);
+    if(st==GERBER_IO_ERROR||st==GERBER_OUT_OF_MEMORY||st==GERBER_INVALID_ARGUMENT) { printf("{\"status\":\"%s\"}\n",gerber_status_name(st)); arena_destroy(&arena); return 1; }
+    printf("{\"status\":\"%s\",\"units\":\"%s\",\"format\":[%d,%d],\"attributes\":{",gerber_status_name(st),
+           g.units==GERBER_UNITS_MM?"mm":g.units==GERBER_UNITS_INCH?"inch":"unknown",g.int_digits,g.dec_digits);
+    for(size_t i=0;i<g.attribute_count;i++) { if(i) fputc(',',stdout); json_string(stdout,g.attributes[i].name); fputs(":[",stdout);
+        for(size_t k=0;k<g.attributes[i].value_count;k++) { if(k) fputc(',',stdout); json_string(stdout,g.attributes[i].values[k]); } fputc(']',stdout); }
+    fputs("},\"apertures\":[",stdout);
+    static const char *const AP[]={"C","R","O","P","macro"};
+    for(size_t i=0;i<g.aperture_count;i++) { const GerberAperture *a=&g.apertures[i];
+        printf("%s{\"d\":%d,\"type\":\"%s\",\"shapes\":%zu,\"exact\":%s,\"bounds_nm\":[%lld,%lld,%lld,%lld],\"function\":",i?",":"",a->number,AP[a->type],a->shape_count,
+               a->exact?"true":"false",(long long)a->bounds.min.x,(long long)a->bounds.min.y,(long long)a->bounds.max.x,(long long)a->bounds.max.y);
+        const char *fn=NULL; for(size_t k=0;k<a->attribute_count;k++) if(!strcmp(a->attributes[k].name,".AperFunction")&&a->attributes[k].value_count) fn=a->attributes[k].values[0];
+        if(fn) json_string(stdout,fn); else fputs("null",stdout); fputc('}',stdout); }
+    printf("],\"counts\":{\"flashes\":%zu,\"draws\":%zu,\"regions\":%zu,\"arcs\":%zu}",g.flash_count,g.draw_count,g.region_count,g.arc_count);
+    if(gerber_outline(&arena,&g,&o)==GERBER_OK)
+        printf(",\"outline\":{\"segments\":%zu,\"loops\":%zu,\"open_loops\":%zu,\"closed\":%s,\"bounds_nm\":[%lld,%lld,%lld,%lld]}",o.segments,o.loops,o.open_loops,
+               o.closed?"true":"false",(long long)o.bounds.min.x,(long long)o.bounds.min.y,(long long)o.bounds.max.x,(long long)o.bounds.max.y);
+    fputs(",\"flashes\":[",stdout);
+    for(size_t i=0,first=1;i<g.object_count;i++) { const GerberObject *x=&g.objects[i]; if(x->kind!=GERBER_FLASH) continue;
+        if(!first) fputc(',',stdout); first=0;
+        printf("{\"d\":%d,\"x_nm\":%lld,\"y_nm\":%lld,\"dark\":%s,\"line\":%zu",g.apertures[x->aperture].number,(long long)x->at.x,(long long)x->at.y,x->dark?"true":"false",x->line);
+        if(x->net) { fputs(",\"net\":",stdout); json_string(stdout,x->net); }
+        if(x->pin_ref) { fputs(",\"pin\":[",stdout); json_string(stdout,x->pin_ref); fputc(',',stdout); json_string(stdout,x->pin_number); fputc(']',stdout); }
+        fputc('}',stdout); }
+    fputs("],\"issues\":[",stdout);
+    for(size_t i=0;i<g.issue_count;i++) { const GerberIssue *x=&g.issues[i];
+        printf("%s{\"code\":\"%s\",\"severity\":\"%s\",\"line\":%zu,\"detail\":",i?",":"",gerber_issue_name(x->code),x->severity==GERBER_ERROR?"error":"warning",x->line);
+        json_string(stdout,x->detail?x->detail:""); fputc('}',stdout); }
+    (void)GERBER_KINDS;
+    puts("]}");
+    int rc=st==GERBER_OK?0:2; arena_destroy(&arena); return rc;
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"models")) return cp_models_json(stdout);
     if(argc==3 && !strcmp(argv[1],"board")) return board_json(argv[2]);
+    if(argc==3 && !strcmp(argv[1],"gerber")) return gerber_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
     if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR\n");return 64;}
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
     if(argc==3 && !strcmp(argv[1],"kicad-open")) return kicad_project(0,argv[2],NULL);
