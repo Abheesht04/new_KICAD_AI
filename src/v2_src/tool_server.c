@@ -34,7 +34,7 @@ static bool fail(Call *c, int code, const char *kind, const char *message, const
     return false;
 }
 
-static char *dup(Arena *a, const char *s)
+static char *ts_dup(Arena *a, const char *s)
 {
     size_t n = strlen(s);
     char *d = arena_alloc(a, n + 1);
@@ -106,7 +106,7 @@ static const char *pad_name(Arena *a, const Board *b, size_t i)
     const BoardPad *p = &b->pads[i];
     const char *ref = b->footprints[p->footprint].reference;
     snprintf(buf, sizeof buf, "pad %s.%s", ref && *ref ? ref : "?", p->number && *p->number ? p->number : "-");
-    return dup(a, buf);
+    return ts_dup(a, buf);
 }
 
 static bool add_cam(FindingList *l, const char *label, const char *rule, FindingStatus st, const char *msg,
@@ -141,7 +141,7 @@ static void cam_compare(Arena *a, FindingList *l, const char *label, const Board
         if (v->type != BOARD_VIA_THROUGH) { blind++; continue; }
         char buf[64];
         snprintf(buf, sizeof buf, "via %zu", i);
-        holes[nb++] = (Hole){{v->at.x, -v->at.y}, v->drill, dup(a, buf), false};
+        holes[nb++] = (Hole){{v->at.x, -v->at.y}, v->drill, ts_dup(a, buf), false};
     }
     for (size_t h = 0; h < nh; h++) {
         size_t at = SIZE_MAX, near = SIZE_MAX;
@@ -222,8 +222,8 @@ static bool tool_board_load(Call *c, JsonWriter *w)
     if (!load_board(c, &s->session, path, &tb->board)) return false;
     char id[32];
     snprintf(id, sizeof id, "board-%zu", s->board_count + 1);
-    tb->id = dup(&s->session, id);
-    tb->path = dup(&s->session, path);
+    tb->id = ts_dup(&s->session, id);
+    tb->path = ts_dup(&s->session, path);
     s->board_count++;
     const Board *b = &tb->board;
     json_write_begin_object(w);

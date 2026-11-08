@@ -82,7 +82,13 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!strcmp(mode(), "flood")) {
-        for (int i = 0; i < 4 * 1024; i++) { for (int k = 0; k < 1023; k++) { putchar('o'); fputc('e', stderr); } putchar('\n'); fputc('\n', stderr); }
+        /* The same bytes as before (4096 lines of 1023 'o' / 'e' and a newline), one fwrite per line: stderr is
+         * unbuffered, and character-at-a-time writes took 20 s under the UCRT runtime, past the runner's timeout. */
+        char out_line[1024], err_line[1024];
+        memset(out_line, 'o', 1023);
+        memset(err_line, 'e', 1023);
+        out_line[1023] = err_line[1023] = '\n';
+        for (int i = 0; i < 4 * 1024; i++) { fwrite(out_line, 1, sizeof out_line, stdout); fwrite(err_line, 1, sizeof err_line, stderr); }
     }
     if (!strcmp(mode(), "fail")) { fputs("boom: the board is broken\n", stderr); return 3; }
     const char *out = NULL;

@@ -75,7 +75,7 @@ size_t kicad_cli_quote_arg(const char *arg, char *out, size_t cap)
     return n;
 }
 
-static char *dup(Arena *a, const char *s)
+static char *kcli_dup(Arena *a, const char *s)
 {
     size_t n = strlen(s);
     char *d = arena_alloc(a, n + 1);
@@ -345,7 +345,7 @@ static bool list_dir(Arena *a, const char *p, const char ***out, size_t *count)
             names = more;
             cap *= 2;
         }
-        names[n++] = dup(a, e->d_name);
+        names[n++] = kcli_dup(a, e->d_name);
     }
     closedir(d);
     *out = names;
@@ -380,7 +380,7 @@ static unsigned long process_id(void) { return (unsigned long)getpid(); }
 static const char *temp_dir(Arena *a)
 {
     const char *t = getenv("TMPDIR");
-    return dup(a, t && *t ? t : "/tmp");
+    return kcli_dup(a, t && *t ? t : "/tmp");
 }
 
 static uint64_t now_ms(void)
@@ -526,11 +526,11 @@ static KicadCliStatus run_job(Arena *a, const KicadCli *cli, KicadCliJob job, co
             status = KCLI_NO_OUTPUT; why = "kicad-cli did not write the output file";
         } else {
             r->files = arena_alloc_array(a, sizeof *r->files, 1);
-            if (r->files) { r->files[0] = dup(a, out_name); r->file_count = 1; }
+            if (r->files) { r->files[0] = kcli_dup(a, out_name); r->file_count = 1; }
         }
         if (status == KCLI_OK) {
             if (!move_noreplace(a, staged, out_path)) { status = KCLI_EXISTS; why = "the output path appeared while kicad-cli ran: nothing is overwritten"; }
-            else r->output = dup(a, out_path);
+            else r->output = kcli_dup(a, out_path);
         }
     }
     remove_tree(a, staging);

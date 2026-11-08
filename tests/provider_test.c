@@ -47,7 +47,8 @@ int main(void)
         "0603",
         24.0,
         0.01,
-        0.05
+        0.05,
+        NULL
     };
 
     PartResult result;

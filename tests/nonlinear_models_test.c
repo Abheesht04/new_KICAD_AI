@@ -25,7 +25,7 @@ static void test_diode_hardening(void)
     assert(close_rel(mna_limexp(41.0, &s1), exp(40.0) * 2.0, 1e-15, 0) && s1 == exp(40.0));
     assert(mna_limexp(-800.0, &s1) == 0.0 && s1 == 0.0);
 
-    MnaDiode d = {1, 0, 1e-14, 1.0, 300.0};
+    MnaDiode d = {1, 0, 1e-14, 1.0, 300.0, 0.0};
     double i, g;
     mna_diode_evaluate(&d, 0.6, &i, &g);
     assert(close_rel(i, 1e-14 * (exp(0.6 / VT) - 1.0), 1e-13, 0) && close_rel(g, 1e-14 * exp(0.6 / VT) / VT, 1e-13, 0));
@@ -45,7 +45,7 @@ static void test_diode_hardening(void)
 /* ---------------- BJT ---------------- */
 static MnaBjt bjt(int polarity)
 {
-    MnaBjt b = {1, 2, 3, polarity, 1e-16, 100.0, 1.0, 1.0, 1.0, 300.0};
+    MnaBjt b = {1, 2, 3, polarity, 1e-16, 100.0, 1.0, 1.0, 1.0, 300.0, 0.0, 0.0};
     return b;
 }
 
@@ -209,7 +209,7 @@ static void test_circuits(void)
     /* NPN common emitter: Vcc = 5 V (node 1), Rb = 470k to the base (2), Rc = 1k to the collector (3).
      * Ib ~ 9 uA, Ic ~ 0.9 mA, Vc ~ 4.1 V: forward active (100k would saturate it). */
     mna_circuit_init(&c, 3);
-    MnaBjt q = {3, 2, 0, 1, 1e-16, 100.0, 1.0, 1.0, 1.0, 300.0};
+    MnaBjt q = {3, 2, 0, 1, 1e-16, 100.0, 1.0, 1.0, 1.0, 300.0, 0.0, 0.0};
     assert(mna_add_voltage_source(&c, 1, 0, 5.0) && mna_add_resistor(&c, 1, 2, 4.7e5) && mna_add_resistor(&c, 1, 3, 1e3));
     assert(mna_add_bjt(&c, &q));
     solve_ok(&c, &r);

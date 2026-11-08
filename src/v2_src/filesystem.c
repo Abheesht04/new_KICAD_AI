@@ -479,13 +479,11 @@ FsStatus fs_remove_tree(const char *path) {
 FsStatus fs_find_executable_on_path(const char *executable_name, char *out,
                                     size_t out_capacity) {
   const char *path_env;
-  size_t name_length;
   if (executable_name == NULL || executable_name[0] == '\0' || out == NULL ||
       out_capacity == 0 || strchr(executable_name, '/') != NULL ||
       strchr(executable_name, '\\') != NULL) {
     return FS_ERR_ARGUMENT;
   }
-  name_length = strlen(executable_name);
   path_env = getenv("PATH");
   if (path_env == NULL) return FS_ERR_NOT_FOUND;
 
@@ -518,6 +516,7 @@ FsStatus fs_find_executable_on_path(const char *executable_name, char *out,
 #ifdef _WIN32
     if (directory[0] != '\0' && strchr(executable_name, '.') == NULL) {
       char exe_name[FS_PATH_MAX];
+      size_t name_length = strlen(executable_name);
       if (name_length + 5 < sizeof(exe_name)) {
         memcpy(exe_name, executable_name, name_length);
         memcpy(exe_name + name_length, ".exe", 5);

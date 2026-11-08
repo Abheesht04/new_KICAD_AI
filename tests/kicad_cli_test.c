@@ -112,7 +112,11 @@ static const char *at(const char *name)
     static char buf[8][4096];
     static int k;
     k = (k + 1) % 8;
-    snprintf(buf[k], sizeof buf[k], "%s" SEPS "%s", ROOTDIR, name);
+    int n = snprintf(buf[k], sizeof buf[k], "%s" SEPS "%s", ROOTDIR, name);
+    if (n < 0 || (size_t)n >= sizeof buf[k]) {   /* a cut path would point the test at the wrong file */
+        fprintf(stderr, "kicad_cli_test: path too long: %s" SEPS "%s\n", ROOTDIR, name);
+        exit(2);
+    }
     return buf[k];
 }
 

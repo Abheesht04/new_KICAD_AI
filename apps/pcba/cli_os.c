@@ -1,3 +1,6 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L   /* setenv, readlink: POSIX.1-2008, hidden by strict C17 otherwise */
+#endif
 #include "cli_os.h"
 
 #include <stdio.h>

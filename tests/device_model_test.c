@@ -192,7 +192,7 @@ static void test_stamps_solve(void)
     const DeviceModelSpec *v = model_registry_find_device(&reg, "ideal.voltage_source");
     const DeviceModelSpec *r = model_registry_find_device(&reg, "ideal.resistor");
     const DeviceModelSpec *d = model_registry_find_device(&reg, "shockley.diode");
-    DeviceStampContext dc = {DEVICE_ANALYSIS_DC, 0.0, NULL};
+    DeviceStampContext dc = {DEVICE_ANALYSIS_DC, 0.0, NULL, 0u};
     MnaOptions opt;
     mna_options_default(&opt);
 

@@ -38,15 +38,22 @@ static void literal_json_string(Out *o, const char *s)
     put(o, "\\\"\"");
 }
 
-static void rule_name(char *dst, size_t cap, const char *parent, const char *key)
+/* "<parent>-<key>" with the key lower-cased and other characters as '-'. A name that does not fit is refused, never
+ * truncated: a cut name could overrun dst (snprintf returns the untruncated length) or merge two rules. */
+static bool rule_name(Out *o, char *dst, size_t cap, const char *parent, const char *key)
 {
-    size_t n = (size_t)snprintf(dst, cap, "%s-", parent);
-    for (const char *p = key; *p && n + 1 < cap; p++) {
+    size_t pl = strlen(parent), kl = strlen(key);
+    if (pl >= cap || kl >= cap - pl - 1) { o->error = "a property name or the nesting is too deep for a grammar rule name (255 bytes)"; return false; }
+    memcpy(dst, parent, pl);
+    size_t n = pl;
+    dst[n++] = '-';
+    for (const char *p = key; *p; p++) {
         char c = *p;
         if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
         dst[n++] = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ? c : '-';
     }
     dst[n] = 0;
+    return true;
 }
 
 static bool emit_rule(Out *o, const char *name, const JsonValue *schema);
@@ -89,14 +96,18 @@ static bool value_expr(Out *o, const char *name, const JsonValue *s, char *expr,
 static bool emit_rule(Out *o, const char *name, const JsonValue *s)
 {
     const char *t = json_get(s, "type")->text;
-    char line[8192];
     if (!strcmp(t, "array")) {
         char item[4096], child[256];
-        rule_name(child, sizeof child, name, "item");
+        if (!rule_name(o, child, sizeof child, name, "item")) return false;
         if (!value_expr(o, child, json_get(s, "items"), item, sizeof item)) { if (!o->error) o->error = "array items"; return false; }
-        snprintf(line, sizeof line, "%s ::= \"[\" ws ( %s ( ws \",\" ws %s )* )? ws \"]\"\n", name, item, item);
-        put(o, line);
-        return true;
+        /* Written piece by piece: the rule holds the item expression twice and has no fixed size. */
+        put(o, name);
+        put(o, " ::= \"[\" ws ( ");
+        put(o, item);
+        put(o, " ( ws \",\" ws ");
+        put(o, item);
+        put(o, " )* )? ws \"]\"\n");
+        return !o->oom;
     }
     const JsonValue *props = json_get(s, "properties"), *req = json_get(s, "required");
     if (!props || props->kind != JSON_OBJECT || !props->count) { o->error = "an object schema needs properties"; return false; }
@@ -111,7 +122,7 @@ static bool emit_rule(Out *o, const char *name, const JsonValue *s)
     put(&body, " ::= \"{\" ws ");
     for (size_t i = 0; i < props->count; i++) {
         char expr[4096], child[256];
-        rule_name(child, sizeof child, name, props->keys[i]);
+        if (!rule_name(o, child, sizeof child, name, props->keys[i])) return false;
         if (!value_expr(o, child, props->items[i], expr, sizeof expr)) return false;
         if (i) put(&body, " ws \",\" ws ");
         literal_json_string(&body, props->keys[i]);
@@ -135,9 +146,9 @@ LlmStatus llm_schema_to_gbnf(Arena *a, const char *schema, size_t len, const cha
     char root[4096];
     if (!value_expr(&o, "root", v, root, sizeof root)) { if (error) *error = o.error ? o.error : "unsupported schema"; return o.oom ? LLM_OUT_OF_MEMORY : LLM_INVALID_ARGUMENT; }
     if (strcmp(root, "root")) {          /* a primitive or enum at the top: root names it */
-        char line[4200];
-        snprintf(line, sizeof line, "root ::= %s\n", root);
-        put(&o, line);
+        put(&o, "root ::= ");
+        put(&o, root);
+        put(&o, "\n");
     }
     /* Shared rules (llama.cpp's json grammar), always present so the output does not depend on what was used. */
     put(&o, "ws ::= [ \\t\\n]*\n");

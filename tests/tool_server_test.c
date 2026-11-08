@@ -5,6 +5,9 @@
  * tests/golden/tool_server/responses.jsonl line for line ("${WORK}" substituted back); notifications must get none;
  * every response must be one line of JSON-RPC 2.0; and the session log must hold every message in and out.
  * `tool_server_test --write-golden` rewrites responses.jsonl for review. */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L   /* lstat in rm_tree: POSIX.1-2008, hidden by strict C17 otherwise */
+#endif
 #include "tool_server.h"
 
 #include "json.h"

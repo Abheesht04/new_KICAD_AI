@@ -56,7 +56,7 @@ static double deg(double rad) { return rad * 180.0 / PI; }
 static void test_resistor_divider_phase(void)
 {
     /* 1 V at 30 degrees into 1k + 3k: Vout = 0.75 V at 30 degrees, for every frequency. */
-    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {0}}, {"ideal.resistor", 1, 2, 1000, {0}}, {"ideal.resistor", 2, 0, 3000, {0}}};
+    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {0, 0}}, {"ideal.resistor", 1, 2, 1000, {0, 0}}, {"ideal.resistor", 2, 0, 3000, {0, 0}}};
     c[0].ac = cplx_polar_deg(1.0, 30.0);
     Cplx x[3];
     for (double f = 0; f <= 1e6; f = f ? f * 100 : 1) {
@@ -71,7 +71,7 @@ static void test_rc_low_pass(void)
 {
     const double R = 1000.0, C = 1e-6, fc = 1.0 / (2 * PI * R * C);
     assert(fabs(fc - 159.154943) < 1e-6);
-    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, R, {0}}, {"ideal.capacitor", 2, 0, C, {0}}};
+    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, R, {0, 0}}, {"ideal.capacitor", 2, 0, C, {0, 0}}};
     Cplx x[3];
     assert(solve(c, 3, 2, 2 * PI * fc, NULL, x, NULL) == MNA_AC_OK);
     assert(near(cplx_abs(x[1]), 1.0 / sqrt(2.0), 1e-12) && near(cplx_arg_deg(x[1]), -45.0, 1e-10));
@@ -87,7 +87,7 @@ static void test_rc_low_pass(void)
 static void test_rc_high_pass(void)
 {
     const double R = 2200.0, C = 47e-9;
-    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.capacitor", 1, 2, C, {0}}, {"ideal.resistor", 2, 0, R, {0}}};
+    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.capacitor", 1, 2, C, {0, 0}}, {"ideal.resistor", 2, 0, R, {0, 0}}};
     Cplx x[3];
     double freqs[] = {1, 100, 1539.2, 1e4, 1e6};
     for (size_t i = 0; i < sizeof freqs / sizeof freqs[0]; ++i) {
@@ -102,7 +102,7 @@ static void test_rl(void)
 {
     /* R in series, L to ground: H = jwL / (R + jwL); inductor current = Vin / (R + jwL). */
     const double R = 50.0, L = 1e-3;
-    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, R, {0}}, {"ideal.inductor", 2, 0, L, {0}}};
+    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, R, {0, 0}}, {"ideal.inductor", 2, 0, L, {0, 0}}};
     Cplx x[4];
     double freqs[] = {10, 7957.75, 1e5, 1e7};
     for (size_t i = 0; i < sizeof freqs / sizeof freqs[0]; ++i) {
@@ -119,8 +119,8 @@ static void test_series_rlc_resonance(void)
 {
     const double R = 10.0, L = 10e-3, C = 1e-6, f0 = 1.0 / (2 * PI * sqrt(L * C));
     /* V -> R -> L -> C -> ground; nodes: 1 = source, 2 = R/L, 3 = L/C. */
-    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, R, {0}},
-                {"ideal.inductor", 2, 3, L, {0}}, {"ideal.capacitor", 3, 0, C, {0}}};
+    Inst c[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, R, {0, 0}},
+                {"ideal.inductor", 2, 3, L, {0, 0}}, {"ideal.capacitor", 3, 0, C, {0, 0}}};
     Cplx x[5];
     double best = 0;
     for (double f = f0 / 4; f < f0 * 4; f *= 1.01) {
@@ -142,7 +142,7 @@ static void test_superposition_and_sources(void)
      * Vout = (V1/R1 + V2/R2) / (1/R1 + 1/R2 + 1/R3). */
     const double R1 = 1000, R2 = 2000, R3 = 500;
     Inst both[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.voltage_source", 2, 0, 0, {0, 2}},
-                   {"ideal.resistor", 1, 3, R1, {0}}, {"ideal.resistor", 2, 3, R2, {0}}, {"ideal.resistor", 3, 0, R3, {0}}};
+                   {"ideal.resistor", 1, 3, R1, {0, 0}}, {"ideal.resistor", 2, 3, R2, {0, 0}}, {"ideal.resistor", 3, 0, R3, {0, 0}}};
     Cplx x[5], a[5], b[5];
     double g = 1 / R1 + 1 / R2 + 1 / R3;
     assert(solve(both, 5, 3, 2 * PI * 1e3, NULL, x, NULL) == MNA_AC_OK);
@@ -157,12 +157,12 @@ static void test_superposition_and_sources(void)
     assert(near(x[2].re, a[2].re + b[2].re, 1e-12) && near(x[2].im, a[2].im + b[2].im, 1e-12));
 
     /* A DC-only source contributes no AC: everything is zero. */
-    Inst dc_only[] = {{"ideal.voltage_source", 1, 0, 5.0, {0, 0}}, {"ideal.resistor", 1, 0, 1000, {0}}};
+    Inst dc_only[] = {{"ideal.voltage_source", 1, 0, 5.0, {0, 0}}, {"ideal.resistor", 1, 0, 1000, {0, 0}}};
     Cplx y[2];
     assert(solve(dc_only, 2, 1, 2 * PI * 50, NULL, y, NULL) == MNA_AC_OK && cplx_abs(y[0]) == 0 && cplx_abs(y[1]) == 0);
 
     /* Current source 1 mA at -60 deg flowing from ground through the source into node 1, 1k load: 1 V at -60 deg. */
-    Inst cur[] = {{"ideal.current_source", 0, 1, 0, {0}}, {"ideal.resistor", 1, 0, 1000, {0}}};
+    Inst cur[] = {{"ideal.current_source", 0, 1, 0, {0, 0}}, {"ideal.resistor", 1, 0, 1000, {0, 0}}};
     cur[0].ac = cplx_polar_deg(1e-3, -60);
     assert(solve(cur, 2, 1, 2 * PI * 50, NULL, y, NULL) == MNA_AC_OK);
     assert(near(cplx_abs(y[0]), 1.0, 1e-12) && near(cplx_arg_deg(y[0]), -60.0, 1e-10));
@@ -172,16 +172,16 @@ static void test_zero_frequency_and_singular(void)
 {
     Cplx x[4];
     /* w = 0: capacitor open, inductor short. */
-    Inst rc[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, 1000, {0}}, {"ideal.capacitor", 2, 0, 1e-6, {0}}};
+    Inst rc[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, 1000, {0, 0}}, {"ideal.capacitor", 2, 0, 1e-6, {0, 0}}};
     assert(solve(rc, 3, 2, 0.0, NULL, x, NULL) == MNA_AC_OK && near(x[1].re, 1.0, 1e-14) && x[1].im == 0.0);
-    Inst rl[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, 50, {0}}, {"ideal.inductor", 2, 0, 1e-3, {0}}};
+    Inst rl[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, 50, {0, 0}}, {"ideal.inductor", 2, 0, 1e-3, {0, 0}}};
     assert(solve(rl, 3, 2, 0.0, NULL, x, NULL) == MNA_AC_OK && cplx_abs(x[1]) < 1e-15 && near(x[3].re, 1.0 / 50, 1e-12));
     /* A node joined only by capacitors floats at w = 0 (singular) but is defined at w > 0. */
-    Inst cc[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.capacitor", 1, 2, 1e-6, {0}}, {"ideal.capacitor", 2, 0, 1e-6, {0}}};
+    Inst cc[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.capacitor", 1, 2, 1e-6, {0, 0}}, {"ideal.capacitor", 2, 0, 1e-6, {0, 0}}};
     assert(solve(cc, 3, 2, 0.0, NULL, x, NULL) == MNA_AC_SINGULAR);
     assert(solve(cc, 3, 2, 2 * PI * 100, NULL, x, NULL) == MNA_AC_OK && near(x[1].re, 0.5, 1e-12));
     /* A floating node with no element at all is singular at every frequency. */
-    Inst floating[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 0, 100, {0}}};
+    Inst floating[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 0, 100, {0, 0}}};
     assert(solve(floating, 2, 2, 2 * PI * 100, NULL, x, NULL) == MNA_AC_SINGULAR);
 }
 
@@ -197,7 +197,7 @@ static void test_guards(void)
     mna_ac_stamp_admittance(&sys, 1, 0, cplx(NAN, 0));
     assert(mna_ac_solve(&sys, x) == MNA_AC_NON_FINITE);
     mna_ac_free(&sys);
-    Inst nan_source[] = {{"ideal.voltage_source", 1, 0, 0, {NAN, 0}}, {"ideal.resistor", 1, 0, 1, {0}}};
+    Inst nan_source[] = {{"ideal.voltage_source", 1, 0, 0, {NAN, 0}}, {"ideal.resistor", 1, 0, 1, {0, 0}}};
     assert(solve(nan_source, 2, 1, 1.0, NULL, x, NULL) == MNA_AC_NON_FINITE);
 }
 
@@ -220,7 +220,7 @@ static void test_frequency_grid(void)
     /* Repeated sweeps are bit-identical. */
     double h[5];
     assert(mna_ac_frequency_grid(10, 1e5, 5, 1, h) && !memcmp(f, h, sizeof f));
-    Inst rc[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, 1000, {0}}, {"ideal.capacitor", 2, 0, 1e-6, {0}}};
+    Inst rc[] = {{"ideal.voltage_source", 1, 0, 0, {1, 0}}, {"ideal.resistor", 1, 2, 1000, {0, 0}}, {"ideal.capacitor", 2, 0, 1e-6, {0, 0}}};
     Cplx x1[3], x2[3];
     assert(solve(rc, 3, 2, 1234.5, NULL, x1, NULL) == MNA_AC_OK && solve(rc, 3, 2, 1234.5, NULL, x2, NULL) == MNA_AC_OK);
     assert(!memcmp(x1, x2, sizeof x1));
@@ -232,7 +232,7 @@ static void test_diode_small_signal(void)
 {
     const double R = 1000.0, Is = 1e-14, vt = 1.380649e-23 * 300.0 / 1.602176634e-19;
     const DeviceModelSpec *v = spec("ideal.voltage_source"), *r = spec("ideal.resistor"), *d = spec("shockley.diode");
-    DeviceStampContext dc = {DEVICE_ANALYSIS_DC, 0.0, NULL};
+    DeviceStampContext dc = {DEVICE_ANALYSIS_DC, 0.0, NULL, 0u};
     MnaCircuit m;
     MnaResult op = {0};
     MnaOptions o;
@@ -245,7 +245,7 @@ static void test_diode_small_signal(void)
     assert(op.status == MNA_STATUS_SUCCESS);
     double vd = mna_node_voltage(&op, 2), gd = Is / vt * exp(vd / vt);
     assert(gd > 0.01 && gd < 1.0); /* forward biased, a few mA */
-    Inst c[] = {{"ideal.voltage_source", 1, 0, 5.0, {1e-3, 0}}, {"ideal.resistor", 1, 2, R, {0}}, {"shockley.diode", 0, 2, 0, {0}}};
+    Inst c[] = {{"ideal.voltage_source", 1, 0, 5.0, {1e-3, 0}}, {"ideal.resistor", 1, 2, R, {0, 0}}, {"shockley.diode", 0, 2, 0, {0, 0}}};
     Cplx x[3];
     assert(solve(c, 3, 2, 2 * PI * 1e3, &op, x, NULL) == MNA_AC_OK);
     double expected = 1e-3 / (1.0 + R * gd);

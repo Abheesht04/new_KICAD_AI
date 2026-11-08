@@ -206,7 +206,8 @@ static int gerber_json(const char *path) {
                o.closed?"true":"false",(long long)o.bounds.min.x,(long long)o.bounds.min.y,(long long)o.bounds.max.x,(long long)o.bounds.max.y);
     fputs(",\"flashes\":[",stdout);
     for(size_t i=0,first=1;i<g.object_count;i++) { const GerberObject *x=&g.objects[i]; if(x->kind!=GERBER_FLASH) continue;
-        if(!first) fputc(',',stdout); first=0;
+        if(!first) fputc(',',stdout);
+        first=0;
         printf("{\"d\":%d,\"x_nm\":%lld,\"y_nm\":%lld,\"dark\":%s,\"line\":%zu",g.apertures[x->aperture].number,(long long)x->at.x,(long long)x->at.y,x->dark?"true":"false",x->line);
         if(x->net) { fputs(",\"net\":",stdout); json_string(stdout,x->net); }
         if(x->pin_ref) { fputs(",\"pin\":[",stdout); json_string(stdout,x->pin_ref); fputc(',',stdout); json_string(stdout,x->pin_number); fputc(']',stdout); }
@@ -401,7 +402,8 @@ static void placement_json(const PlProblem *P,const PlPlacement *pl) {
     fputc('{',stdout);
     for(size_t i=0,first=1;i<P->part_count;i++) {
         if(!pl->placed[i]) continue;
-        if(!first) fputc(',',stdout); first=0;
+        if(!first) fputc(',',stdout);
+        first=0;
         json_string(stdout,P->parts[i].ref); fputs(":[",stdout); mm_text(stdout,pl->x[i]); fputc(',',stdout);
         mm_text(stdout,pl->y[i]); printf(",%d]",pl->rot[i]*90);
     }
@@ -433,7 +435,8 @@ static int place(const char *path,const char *iters,const char *seeds) {
             if(end==s||(*end&&*end!=',')) { rc=64; fprintf(stderr,"place: SEEDS is a comma-separated list of integers\n"); break; }
             PlPlacement out; PlStats stats; PlStatus a=pl_placement_alloc(&arena,&P,&out);
             if(a==PL_OK) a=pl_anneal(&arena,&P,&start,seed,(uint32_t)n,&out,&stats);
-            if(!first) fputc(',',stdout); first=0;
+            if(!first) fputc(',',stdout);
+            first=0;
             printf("{\"seed\":%llu,\"status\":\"%s\"",seed,pl_status_name(a));
             if(a==PL_OK) {
                 fputs(",\"placement\":",stdout); placement_json(&P,&out);

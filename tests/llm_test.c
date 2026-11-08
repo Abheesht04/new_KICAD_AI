@@ -112,6 +112,64 @@ static void test_gbnf(bool write)
     arena_destroy(&a);
 }
 
+/* P01/F1 regressions (schema_gbnf.c at 7199ef6): (a) an array rule longer than 8 KiB was cut off with status OK;
+ * (b) a rule name that filled its 256-byte buffer made rule_name write one byte past it. */
+static char *object_schema(const char *key, const char *inner)
+{
+    size_t need = 2 * strlen(key) + strlen(inner) + 96;   /* the key appears twice */
+    char *s = malloc(need);
+    if (s && snprintf(s, need, "{\"type\":\"object\",\"properties\":{\"%s\":%s},\"required\":[\"%s\"]}", key, inner, key) >= (int)need) {
+        free(s);   /* never hand a cut schema to the converter */
+        s = NULL;
+    }
+    return s;
+}
+
+static void test_gbnf_bounds(void)
+{
+    Arena a;
+    const char *g, *err;
+    size_t n;
+    arena_init(&a, 1 << 20);
+
+    /* (a) the item expression is ("\"<4070 v>\""): 4078 bytes, twice in one rule of 8196 bytes. */
+    enum { V = 4070 };
+    char *value = malloc(V + 1), *schema = malloc(V + 64), *item = malloc(V + 16), *want = malloc(2 * V + 128);
+    if (value && schema && item && want) {
+        memset(value, 'v', V);
+        value[V] = 0;
+        snprintf(schema, V + 64, "{\"type\":\"array\",\"items\":{\"enum\":[\"%s\"]}}", value);
+        snprintf(item, V + 16, "(\"\\\"%s\\\"\")", value);
+        snprintf(want, 2 * V + 128, "root ::= \"[\" ws ( %s ( ws \",\" ws %s )* )? ws \"]\"\n", item, item);
+        CHECK(strlen(want) > 8192);
+        CHECK(llm_schema_to_gbnf(&a, schema, strlen(schema), &g, &n, &err) == LLM_OK);
+        CHECK(g && !strncmp(g, want, strlen(want)));
+        CHECK(g && strstr(g, "\nws ::= "));            /* the shared rules follow the complete array rule */
+    } else CHECK(!"out of memory");
+    free(value); free(schema); free(item); free(want);
+
+    /* (b) Every property gets a name, so the deepest is "root-<key>-y"; with its NUL it must fit in 256 bytes.
+     * key 248: 255 bytes, accepted. key 249: 256 bytes, refused (7199ef6 silently cut it to "root-<key>-").
+     * key 250: refused (7199ef6 wrote its NUL one byte past the buffer). */
+    const char *inner = "{\"type\":\"object\",\"properties\":{\"y\":{\"type\":\"integer\"}},\"required\":[\"y\"]}";
+    char key[260], rule[300];
+    for (size_t len = 248; len <= 250; len++) {
+        memset(key, 'k', len);
+        key[len] = 0;
+        char *s = object_schema(key, inner);
+        err = NULL;
+        LlmStatus st = s ? llm_schema_to_gbnf(&a, s, strlen(s), &g, &n, &err) : LLM_OUT_OF_MEMORY;
+        if (len == 248) {
+            snprintf(rule, sizeof rule, "root-%s ::= \"{\"", key);   /* children are emitted first: may start g */
+            CHECK(st == LLM_OK && strstr(g, rule));
+        } else {
+            CHECK(st == LLM_INVALID_ARGUMENT && err && strstr(err, "rule name"));
+        }
+        free(s);
+    }
+    arena_destroy(&a);
+}
+
 typedef struct Lines { size_t n; } Lines;
 static void count_line(void *ctx, const char *line, size_t len) { (void)line; (void)len; ((Lines *)ctx)->n++; }
 
@@ -258,6 +316,7 @@ int main(int argc, char **argv)
     test_http_and_url();
     test_ollama_body_and_reply();
     test_gbnf(write);
+    test_gbnf_bounds();
     test_agent_script();
     test_eval_with_rules();
     if (failures) { fprintf(stderr, "%d check(s) failed\n", failures); return 1; }

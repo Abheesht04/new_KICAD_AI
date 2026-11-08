@@ -5,6 +5,9 @@
  * into one 40 x 30 mm loop; the RoundRect macro evaluates to the 0603 pad (0.8 x 0.95 mm); J1's copper flashes sit
  * exactly on KiCad's drill holes; and every flash of R1 and J1 (both also in examples/generated/divider) is where
  * the board model puts that pad, with that pad's size. Inline files cover every error and unsupported path. */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L   /* lstat in rm_tree: POSIX.1-2008, hidden by strict C17 otherwise */
+#endif
 #include "board.h"
 #include "excellon.h"
 #include "gerber.h"
@@ -17,7 +20,7 @@
 
 static int failures;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: CHECK failed: %s\n", __FILE__, __LINE__, #c); failures++; } } while (0)
-#define DIR GERBER_ROOT "/manufacturing_audit/gerber_test/"
+#define GERBER_TEST_DIR GERBER_ROOT "/manufacturing_audit/gerber_test/"
 
 static const char *const FILES[] = {
     "design-B_Adhesive.gba", "design-B_Courtyard.gbr", "design-B_Cu.gbl", "design-B_Fab.gbr", "design-B_Mask.gbs",
@@ -28,7 +31,7 @@ static const char *const FILES[] = {
 static GerberStatus load(Arena *a, const char *name, GerberFile *g)
 {
     char path[1024];
-    snprintf(path, sizeof path, "%s%s", DIR, name);
+    snprintf(path, sizeof path, "%s%s", GERBER_TEST_DIR, name);
     return gerber_parse_path(a, path, g);
 }
 

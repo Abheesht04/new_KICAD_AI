@@ -19,7 +19,7 @@ static const char *const EXC_NAMES[] = {
     "unsupported_slot", "bad_number", "coord_range", "rounded", "duplicate_tool", "undefined_tool",
     "hit_before_tool", "bad_diameter", "missing_header_end"};
 
-static char *dup(Arena *a, const char *s)
+static char *finding_dup(Arena *a, const char *s)
 {
     if (!s) return NULL;
     size_t n = strlen(s);
@@ -65,13 +65,13 @@ bool finding_add(FindingList *l, const Finding *f)
     if (!grow(l->arena, (void **)&l->items, &l->cap, l->count + 1, sizeof *l->items)) { l->failed = true; return false; }
     Finding *d = &l->items[l->count];
     *d = *f;
-    d->source = dup(l->arena, f->source);
-    d->rule = dup(l->arena, f->rule);
-    d->file = dup(l->arena, f->file);
-    d->items[0] = dup(l->arena, f->items[0]);
-    d->items[1] = dup(l->arena, f->items[1]);
-    d->message = dup(l->arena, f->message);
-    d->quote = dup(l->arena, f->quote);
+    d->source = finding_dup(l->arena, f->source);
+    d->rule = finding_dup(l->arena, f->rule);
+    d->file = finding_dup(l->arena, f->file);
+    d->items[0] = finding_dup(l->arena, f->items[0]);
+    d->items[1] = finding_dup(l->arena, f->items[1]);
+    d->message = finding_dup(l->arena, f->message);
+    d->quote = finding_dup(l->arena, f->quote);
     if (!d->source || !d->rule || !d->message || (f->file && !d->file) || (f->items[0] && !d->items[0]) ||
         (f->items[1] && !d->items[1]) || (f->quote && !d->quote)) { l->failed = true; return false; }
     l->count++;
@@ -83,8 +83,8 @@ static bool add_source(FindingList *l, const char *source, const char *file, Fin
     if (l->failed) return false;
     if (!grow(l->arena, (void **)&l->sources, &l->source_cap, l->source_count + 1, sizeof *l->sources)) { l->failed = true; return false; }
     FindingSourceSummary *s = &l->sources[l->source_count++];
-    s->source = dup(l->arena, source);
-    s->file = dup(l->arena, file);
+    s->source = finding_dup(l->arena, source);
+    s->file = finding_dup(l->arena, file);
     s->verdict = v; s->checks_passed = passed; s->findings = findings;
     return true;
 }
@@ -121,7 +121,7 @@ static const char *item_name(FindingList *l, const Board *b, DfmItemRef r)
         break;
     default: return NULL;
     }
-    return dup(l->arena, buf);
+    return finding_dup(l->arena, buf);
 }
 
 static const char *rule_message(DfmRule rule)
