@@ -1,0 +1,1017 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-17T16:51:44+0530",
+    "kicad_version": "9.0.6",
+    "schematic_parity": [],
+    "source": "flat_hierarchy.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Silkscreen clipped by board edge",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 73.66,
+                        "y": 139.7
+                    },
+                    "uuid": "99b1d7c6-94e3-4c49-baf5-963485f19575"
+                },
+                {
+                    "description": "Segment of J1 on F.Silkscreen",
+                    "pos": {
+                        "x": 71.943,
+                        "y": 100.006
+                    },
+                    "uuid": "3765fb7a-39d9-49af-b685-ae0d3e6aed8f"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_edge_clearance"
+        },
+        {
+            "description": "Silkscreen clipped by board edge",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 73.66,
+                        "y": 139.7
+                    },
+                    "uuid": "99b1d7c6-94e3-4c49-baf5-963485f19575"
+                },
+                {
+                    "description": "Segment of J1 on F.Silkscreen",
+                    "pos": {
+                        "x": 84.283,
+                        "y": 130.976
+                    },
+                    "uuid": "de1c2434-d98f-41c7-9e4f-0058736fd07a"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_edge_clearance"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint P3",
+                    "pos": {
+                        "x": 175.26,
+                        "y": 50.8
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a88ed"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint HOLE1",
+                    "pos": {
+                        "x": 229.87,
+                        "y": 44.45
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a932c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint HOLE6",
+                    "pos": {
+                        "x": 229.87,
+                        "y": 135.89
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a9339"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint HOLE3",
+                    "pos": {
+                        "x": 77.47,
+                        "y": 44.45
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a9340"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint HOLE4",
+                    "pos": {
+                        "x": 77.47,
+                        "y": 135.89
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a9347"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint HOLE5",
+                    "pos": {
+                        "x": 158.75,
+                        "y": 135.89
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a9352"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint HOLE2",
+                    "pos": {
+                        "x": 158.75,
+                        "y": 44.45
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000442a9359"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint P2",
+                    "pos": {
+                        "x": 207.645,
+                        "y": 50.8
+                    },
+                    "uuid": "00000000-0000-0000-0000-00004436967e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C1",
+                    "pos": {
+                        "x": 110.49,
+                        "y": 78.74
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84427"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C2",
+                    "pos": {
+                        "x": 84.455,
+                        "y": 90.17
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84436"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C3",
+                    "pos": {
+                        "x": 133.985,
+                        "y": 62.23
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84445"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C4",
+                    "pos": {
+                        "x": 114.3,
+                        "y": 52.07
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84455"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C5",
+                    "pos": {
+                        "x": 129.54,
+                        "y": 49.53
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84460"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C6",
+                    "pos": {
+                        "x": 196.85,
+                        "y": 112.395
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8446b"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C7",
+                    "pos": {
+                        "x": 198.755,
+                        "y": 71.12
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84476"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C8",
+                    "pos": {
+                        "x": 200.66,
+                        "y": 112.395
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84481"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint C9",
+                    "pos": {
+                        "x": 143.002,
+                        "y": 49.784
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8448c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D1",
+                    "pos": {
+                        "x": 78.359,
+                        "y": 87.884
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84497"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D2",
+                    "pos": {
+                        "x": 109.22,
+                        "y": 118.745
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b844a6"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D3",
+                    "pos": {
+                        "x": 109.22,
+                        "y": 121.793
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b844b5"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D4",
+                    "pos": {
+                        "x": 109.22,
+                        "y": 111.125
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b844c4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D5",
+                    "pos": {
+                        "x": 109.22,
+                        "y": 107.95
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b844d3"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D6",
+                    "pos": {
+                        "x": 109.22,
+                        "y": 125.095
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b844e2"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D7",
+                    "pos": {
+                        "x": 109.22,
+                        "y": 115.57
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b844f1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D8",
+                    "pos": {
+                        "x": 156.21,
+                        "y": 77.47
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84500"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D9",
+                    "pos": {
+                        "x": 156.337,
+                        "y": 87.63
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84509"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D10",
+                    "pos": {
+                        "x": 137.16,
+                        "y": 57.15
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84512"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D11",
+                    "pos": {
+                        "x": 139.065,
+                        "y": 80.645
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84521"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint D12",
+                    "pos": {
+                        "x": 156.21,
+                        "y": 96.266
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84530"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint J1",
+                    "pos": {
+                        "x": 82.423,
+                        "y": 121.031
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84539"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint JP1",
+                    "pos": {
+                        "x": 147.275,
+                        "y": 96.65
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84551"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint L1",
+                    "pos": {
+                        "x": 125.73,
+                        "y": 64.77
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8455a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint P1",
+                    "pos": {
+                        "x": 81.915,
+                        "y": 58.039
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84560"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint Q1",
+                    "pos": {
+                        "x": 146.05,
+                        "y": 69.85
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8456a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint Q2",
+                    "pos": {
+                        "x": 147.066,
+                        "y": 62.484
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84578"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint Q3",
+                    "pos": {
+                        "x": 141.351,
+                        "y": 97.79
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84586"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R2",
+                    "pos": {
+                        "x": 87.63,
+                        "y": 115.57
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845a1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R3",
+                    "pos": {
+                        "x": 87.63,
+                        "y": 111.76
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845ae"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R4",
+                    "pos": {
+                        "x": 87.63,
+                        "y": 107.95
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845bb"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R5",
+                    "pos": {
+                        "x": 87.63,
+                        "y": 127.0
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845c8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R6",
+                    "pos": {
+                        "x": 87.63,
+                        "y": 123.19
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845d5"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R7",
+                    "pos": {
+                        "x": 139.065,
+                        "y": 53.7972
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845e2"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R8",
+                    "pos": {
+                        "x": 139.065,
+                        "y": 92.075
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845ef"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R9",
+                    "pos": {
+                        "x": 139.065,
+                        "y": 77.47
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b845fc"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R10",
+                    "pos": {
+                        "x": 114.3,
+                        "y": 48.26
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84609"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R11",
+                    "pos": {
+                        "x": 139.065,
+                        "y": 71.12
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84616"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R12",
+                    "pos": {
+                        "x": 135.255,
+                        "y": 121.92
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84623"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R13",
+                    "pos": {
+                        "x": 140.335,
+                        "y": 111.76
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84630"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R14",
+                    "pos": {
+                        "x": 139.065,
+                        "y": 87.63
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8463d"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R15",
+                    "pos": {
+                        "x": 118.11,
+                        "y": 78.74
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8464a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R17",
+                    "pos": {
+                        "x": 156.21,
+                        "y": 58.42
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84664"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R18",
+                    "pos": {
+                        "x": 152.4,
+                        "y": 68.58
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84671"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R19",
+                    "pos": {
+                        "x": 149.225,
+                        "y": 83.82
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8467e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R21",
+                    "pos": {
+                        "x": 148.075,
+                        "y": 102.975
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84698"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint RV1",
+                    "pos": {
+                        "x": 127.635,
+                        "y": 90.805
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b846a5"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint U1",
+                    "pos": {
+                        "x": 179.07,
+                        "y": 109.22
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b846b6"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint U2",
+                    "pos": {
+                        "x": 115.57,
+                        "y": 119.38
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b846c8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint U3",
+                    "pos": {
+                        "x": 96.52,
+                        "y": 71.247
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b846e0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint U4",
+                    "pos": {
+                        "x": 110.49,
+                        "y": 57.15
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b846f1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint U5",
+                    "pos": {
+                        "x": 207.6,
+                        "y": 107.95
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b84703"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 179.07,
+                        "y": 120.65
+                    },
+                    "uuid": "00000000-0000-0000-0000-000053b8471f"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R1",
+                    "pos": {
+                        "x": 87.63,
+                        "y": 119.38
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a82bab9"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R20",
+                    "pos": {
+                        "x": 144.775,
+                        "y": 102.875
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a82bb57"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'pic_programmer_fp'.",
+            "items": [
+                {
+                    "description": "Footprint R16",
+                    "pos": {
+                        "x": 118.11,
+                        "y": 74.295
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a82bc23"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        }
+    ]
+}

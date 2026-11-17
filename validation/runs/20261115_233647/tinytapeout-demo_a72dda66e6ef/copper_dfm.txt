@@ -1,0 +1,350 @@
+COPPER DFM REPORT
+Board: D:\Engine\copper_v2_patched\validation\boards\tinytapeout-demo.kicad_pcb
+Verdict: FAIL
+PASS: 12  FAIL: 58  UNVERIFIED: 20
+
+[PASS] trace_min_1oz_ml / track #117 @ (81.500000, 117.437500) mm measured 0.160000 mm / limit 0.090000 mm
+  Minimum imported track width meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] space_min_1oz_ml / board
+  Track clearance is only partially covered: pads, vias, arc tracks, zone fills, or unmodelled geometry require additional checks/native KiCad DRC
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] space_min_1oz_ml / track_pairs measured 0.090000 mm / limit 0.090000 mm
+  All tested straight-track pairs satisfy the centreline + half-width clearance threshold
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] drill_min_mech / pad_hole #6 @ (84.200000, 115.700000) mm measured 0.300000 mm / limit 0.150000 mm
+  Minimum measured drill dimension meets the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] via_hole_min / via #0 @ (68.680000, 109.323316) mm measured 0.300000 mm / limit 0.150000 mm
+  Minimum measured via dimension meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] via_diameter_min / via #376 @ (83.423624, 108.884105) mm measured 0.600000 mm / limit 0.250000 mm
+  Minimum measured via dimension meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] via_annular_min / via #376 @ (83.423624, 108.884105) mm measured 0.150000 mm / limit 0.050000 mm
+  Minimum measured via dimension meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] npth_min / holes
+  No applicable holes were present
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[PASS] hole_hole_via / hole_pairs measured 0.200000 mm / limit 0.200000 mm
+  All tested hole pairs satisfy the edge-to-edge spacing rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] hole_hole_pad / oval_holes
+  Oval/slot hole spacing requires capsule geometry; the current centre-distance check cannot certify it
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] hole_hole_pad / hole_pairs measured 0.450000 mm / limit 0.450000 mm
+  All tested hole pairs satisfy the edge-to-edge spacing rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] ar_ml_1oz_abs / pth_pad #0 @ (156.400000, 117.720000) mm measured 0.150000 mm / limit 0.150000 mm
+  Minimum conservative PTH annular ring meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[FAIL] smd_pad_min / smd_pad #125 @ (136.420000, 86.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #339 @ (79.062500, 111.400000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #340 @ (79.062500, 111.800000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #341 @ (79.062500, 112.200000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #342 @ (79.062500, 112.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #343 @ (79.062500, 113.000000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #344 @ (79.062500, 113.400000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #345 @ (79.062500, 113.800000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #346 @ (79.062500, 114.200000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #347 @ (79.062500, 114.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #348 @ (79.062500, 115.000000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #349 @ (79.062500, 115.400000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #350 @ (79.062500, 115.800000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #351 @ (79.062500, 116.200000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #352 @ (79.062500, 116.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #353 @ (79.900000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #354 @ (80.300000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #355 @ (80.700000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #356 @ (81.100000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #357 @ (81.500000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #358 @ (81.900000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #359 @ (82.300000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #360 @ (82.700000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #361 @ (83.100000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #362 @ (83.500000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #363 @ (83.900000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #364 @ (84.300000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #365 @ (84.700000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #366 @ (85.100000, 117.437500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #367 @ (85.937500, 116.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #368 @ (85.937500, 116.200000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #369 @ (85.937500, 115.800000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #370 @ (85.937500, 115.400000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #371 @ (85.937500, 115.000000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #372 @ (85.937500, 114.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #373 @ (85.937500, 114.200000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #374 @ (85.937500, 113.800000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #375 @ (85.937500, 113.400000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #376 @ (85.937500, 113.000000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #377 @ (85.937500, 112.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #378 @ (85.937500, 112.200000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #379 @ (85.937500, 111.800000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #380 @ (85.937500, 111.400000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #381 @ (85.100000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #382 @ (84.700000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #383 @ (84.300000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #384 @ (83.900000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #385 @ (83.500000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #386 @ (83.100000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #387 @ (82.700000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #388 @ (82.300000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #389 @ (81.900000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #390 @ (81.500000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #391 @ (81.100000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #392 @ (80.700000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #393 @ (80.300000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #394 @ (79.900000, 110.562500) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] smd_pad_min / smd_pad #743 @ (100.420000, 86.600000) mm measured 0.200000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] edge_routed / board_copper
+  Edge-clearance coverage is incomplete for pads, vias, zones, arc tracks, and non-linear outlines
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] edge_routed / track_edges measured 0.200000 mm / limit 0.200000 mm
+  All tested track-to-straight-outline distances meet the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] board_min_dimension / board_outline
+  Cannot calculate board bounds from Edge.Cuts
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_thickness_min / board_thickness measured 1.562520 mm / limit 0.400000 mm
+  Board thickness meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_thickness_max / board_thickness measured 1.562520 mm / limit 4.500000 mm
+  Board thickness meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / unmodelled_geometry
+  KiCad contains manufacturing-relevant geometry not represented in the typed board model; retain and run native KiCad DRC
+

@@ -1,0 +1,10 @@
+^D:\FILES (7)\COPPER_V2_PATCHED\BUILD\CMAKEFILES\9A3620682DA7BDE837847EA3A33A1B7B\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SD:/files (7)/copper_v2_patched/v2_src" "-BD:/files (7)/copper_v2_patched/build" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "D:/files (7)/copper_v2_patched/build/CopperStudio.slnx"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

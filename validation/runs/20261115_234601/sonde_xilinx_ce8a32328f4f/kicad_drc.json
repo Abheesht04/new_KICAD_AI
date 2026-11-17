@@ -1,0 +1,1237 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-15T23:46:18+0530",
+    "kicad_version": "9.0.6",
+    "schematic_parity": [],
+    "source": "sonde xilinx.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.2828 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 67.31
+                    },
+                    "uuid": "98e005b0-3099-4cb6-a606-3772c06b5e36"
+                },
+                {
+                    "description": "PCB text 'Copper layer' on bottom_copper",
+                    "pos": {
+                        "x": 119.38,
+                        "y": 68.58
+                    },
+                    "uuid": "2949626e-a492-4c0f-b71e-12e7e31d79ab"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 1 [unconnected-(J1-Pad1)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 72.4832
+                    },
+                    "uuid": "a4dd22c1-947a-40ec-bfc9-ef5ddb344848"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 2 [/TDI-DIN-D0] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 75.2532
+                    },
+                    "uuid": "b29319db-1b9b-4b6a-a4a6-108e3206839b"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 3 [/CLK-D1] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 78.0232
+                    },
+                    "uuid": "1f175e1c-1773-4fbe-861f-248be328a2e5"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 4 [/TMS-PROG-D2] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 80.7932
+                    },
+                    "uuid": "d85bd893-df4f-4810-8c87-827b3177da9d"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 5 [/CTRL-D3] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 83.5632
+                    },
+                    "uuid": "dc921a8b-7d05-48bc-b1a5-3d6e8d368fb4"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 6 [/TD0-PROG-D4] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 86.3332
+                    },
+                    "uuid": "ac6477f2-ce8d-4c64-a22d-48cf72e3229e"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 7 [unconnected-(J1-Pad7)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 89.1032
+                    },
+                    "uuid": "5f54c4ea-6516-4e70-b4b4-b1f3dcc6ac35"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 8 [Net-(J1-Pad11)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 91.8732
+                    },
+                    "uuid": "e1b15f58-e809-4df9-94d9-ae3fdc35bf20"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 9 [unconnected-(J1-Pad9)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 94.6432
+                    },
+                    "uuid": "7f6d6020-06d7-444b-b6ea-1acea8bfd886"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 10 [unconnected-(J1-Pad10)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 97.4132
+                    },
+                    "uuid": "6f6e7534-3e8d-4013-8f29-bbc62e4742c5"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 11 [Net-(J1-Pad11)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 100.1832
+                    },
+                    "uuid": "6b74bbef-21ff-43b9-ac28-7ebbfd0683ed"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 12 [Net-(J1-Pad11)] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 102.9532
+                    },
+                    "uuid": "d56a4cb9-4811-4641-949c-e6081680acca"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 13 [/DONE-SELECT*] of J1 on top_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 105.7232
+                    },
+                    "uuid": "64433fa7-8320-4ab2-ad0f-3ea6b4e2c1ce"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 14 [unconnected-(J1-P14-Pad14)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 73.8682
+                    },
+                    "uuid": "f878ea41-07e6-4d0d-9525-6463f07d2d41"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 15 [/VCC_SENSE-ERROR*] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 76.6382
+                    },
+                    "uuid": "6f117566-67af-4b13-9c24-27ba5c49f01b"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 16 [unconnected-(J1-P16-Pad16)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 79.4082
+                    },
+                    "uuid": "6dad85b5-21ee-4e55-af7e-7756fca4b60f"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 17 [unconnected-(J1-P17-Pad17)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 82.1782
+                    },
+                    "uuid": "5dd63cee-3178-42f2-b2f8-3a70a02de179"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 18 [unconnected-(J1-P18-Pad18)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 84.9482
+                    },
+                    "uuid": "4b7f6d83-e519-4264-aca0-085fb4501d53"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 19 [unconnected-(J1-P19-Pad19)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 87.7182
+                    },
+                    "uuid": "a946095f-8b0a-422b-bd5d-bd3df8693d2c"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 20 [GND] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 90.4882
+                    },
+                    "uuid": "82fc538f-a1f5-4f4d-a9ef-cc2b97f1252a"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 21 [unconnected-(J1-P21-Pad21)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 93.2582
+                    },
+                    "uuid": "d2078c3e-fe54-4fc3-8496-1aff53ed27ca"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 22 [unconnected-(J1-P22-Pad22)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 96.0282
+                    },
+                    "uuid": "c1d5a037-b751-42ec-9cd9-3d5e8ec733af"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 23 [unconnected-(J1-P23-Pad23)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 98.7982
+                    },
+                    "uuid": "0a6a21d1-170c-4828-8386-5d701aebc664"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 24 [unconnected-(J1-P24-Pad24)] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 101.5682
+                    },
+                    "uuid": "a0c34409-7d84-4558-bf37-130937d84c97"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.4716 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 103.3,
+                        "y": 110.49
+                    },
+                    "uuid": "36cde3e2-d7fa-4360-b96f-19b3794f18da"
+                },
+                {
+                    "description": "Pad 25 [GND] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 104.3382
+                    },
+                    "uuid": "8f9d01df-9e28-4016-b3d6-582408c63e27"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 1 [/PWR_3,3-5V] of J2 on bottom_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 84.5792
+                    },
+                    "uuid": "5a71f1b5-55fa-4504-91d2-8225955318aa"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 2 [/TD0-DONE] of J2 on bottom_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 87.3492
+                    },
+                    "uuid": "e470a78d-3c4f-4270-983b-5e321f13b801"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 3 [/TDI-DIN] of J2 on bottom_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 90.1192
+                    },
+                    "uuid": "86e91185-7b00-4329-9a90-dd9de5d2824a"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 4 [/TCK-CCLK] of J2 on bottom_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 92.8892
+                    },
+                    "uuid": "2d96c25a-5fd0-43eb-8ecb-e76d7473de19"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 5 [/TMS-PROG] of J2 on bottom_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 95.6592
+                    },
+                    "uuid": "daf68687-c87d-47bb-ab09-8478764358d4"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 6 [GND] of J2 on top_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 85.9642
+                    },
+                    "uuid": "d6700b04-2a63-47e1-b09e-feb3edf7df67"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 7 [GND] of J2 on top_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 88.7342
+                    },
+                    "uuid": "edbbf432-5304-453b-8560-b7f1d22f025d"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 8 [GND] of J2 on top_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 91.5042
+                    },
+                    "uuid": "874d351c-1cca-41df-862f-99aa41303e1b"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.3500 mm)",
+            "items": [
+                {
+                    "description": "Segment on Edge.Cuts",
+                    "pos": {
+                        "x": 183.7,
+                        "y": 67.31
+                    },
+                    "uuid": "ae5ca856-80ea-4818-b46b-23af5d11e5ea"
+                },
+                {
+                    "description": "Pad 9 [GND] of J2 on top_copper",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 94.2742
+                    },
+                    "uuid": "00203f73-f051-4825-8700-366fa481308d"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Thermal relief connection to zone incomplete (layer bottom_copper; 1 spokes connected to isolated island)",
+            "items": [
+                {
+                    "description": "Zone [GND] on bottom_copper, priority 0",
+                    "pos": {
+                        "x": 182.88,
+                        "y": 110.49
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005b221ae5"
+                },
+                {
+                    "description": "PTH pad 2 [GND] of U1",
+                    "pos": {
+                        "x": 127.0,
+                        "y": 85.09
+                    },
+                    "uuid": "1c81992c-be6e-40bf-8af7-6fef1a04ba6f"
+                }
+            ],
+            "severity": "error",
+            "type": "starved_thermal"
+        },
+        {
+            "description": "Thermal relief connection to zone incomplete (layer bottom_copper; zone min spoke count 2; actual 1)",
+            "items": [
+                {
+                    "description": "Zone [GND] on bottom_copper, priority 0",
+                    "pos": {
+                        "x": 182.88,
+                        "y": 110.49
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005b221ae5"
+                },
+                {
+                    "description": "Pad 20 [GND] of J1 on bottom_copper",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 90.4882
+                    },
+                    "uuid": "82fc538f-a1f5-4f4d-a9ef-cc2b97f1252a"
+                }
+            ],
+            "severity": "error",
+            "type": "starved_thermal"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R14",
+                    "pos": {
+                        "x": 162.56,
+                        "y": 88.9
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56ced6"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R9",
+                    "pos": {
+                        "x": 121.92,
+                        "y": 80.518
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56ceec"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R4",
+                    "pos": {
+                        "x": 121.92,
+                        "y": 104.14
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf02"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R13",
+                    "pos": {
+                        "x": 162.56,
+                        "y": 105.41
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf18"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R12",
+                    "pos": {
+                        "x": 162.56,
+                        "y": 99.06
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf2e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R11",
+                    "pos": {
+                        "x": 162.56,
+                        "y": 93.98
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf44"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R8",
+                    "pos": {
+                        "x": 121.92,
+                        "y": 87.63
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf5a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R7",
+                    "pos": {
+                        "x": 121.92,
+                        "y": 92.71
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf70"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R6",
+                    "pos": {
+                        "x": 121.9327,
+                        "y": 83.82
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf86"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R2",
+                    "pos": {
+                        "x": 137.16,
+                        "y": 72.39
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cf9c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R5",
+                    "pos": {
+                        "x": 151.13,
+                        "y": 73.66
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cfc8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R10",
+                    "pos": {
+                        "x": 121.92,
+                        "y": 77.216
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56cfde"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint D2",
+                    "pos": {
+                        "x": 160.02,
+                        "y": 78.74
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56d036"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint D1",
+                    "pos": {
+                        "x": 134.62,
+                        "y": 72.39
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56d054"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint R1",
+                    "pos": {
+                        "x": 121.92,
+                        "y": 73.8632
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a56d255"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint C1",
+                    "pos": {
+                        "x": 134.62,
+                        "y": 76.2
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a5834a9"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint P1",
+                    "pos": {
+                        "x": 169.672,
+                        "y": 80.137
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a583d55"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint U2",
+                    "pos": {
+                        "x": 140.97,
+                        "y": 82.55
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a58f58c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint U1",
+                    "pos": {
+                        "x": 127.0,
+                        "y": 82.55
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a58f5ad"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint C5",
+                    "pos": {
+                        "x": 145.0,
+                        "y": 102.87
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a59b977"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint C4",
+                    "pos": {
+                        "x": 149.0,
+                        "y": 102.87
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a59b98b"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint C3",
+                    "pos": {
+                        "x": 151.13,
+                        "y": 69.85
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a59b99f"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint C2",
+                    "pos": {
+                        "x": 140.97,
+                        "y": 102.87
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a59b9b3"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint J1",
+                    "pos": {
+                        "x": 105.5116,
+                        "y": 89.1032
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a73ac29"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'sonde-xilinx'.",
+            "items": [
+                {
+                    "description": "Footprint J2",
+                    "pos": {
+                        "x": 181.61,
+                        "y": 90.1192
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a73b143"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        }
+    ]
+}

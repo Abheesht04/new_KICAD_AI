@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copper.local/schemas/copper.optimization-run.v1.schema.json",
+  "title": "Copper Optimization Run",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "status",
+    "decision_authority",
+    "summary",
+    "final_metrics",
+    "history",
+    "final_board_state",
+    "manufacturing_release_ready",
+    "run_config",
+    "final_board_hash"
+  ],
+  "properties": {
+    "schema": {
+      "const": "copper.optimization-run"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "type": "string"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "decision_authority": {
+      "const": "decision_callback"
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "iterations",
+        "accepted_actions",
+        "max_iterations"
+      ],
+      "properties": {
+        "iterations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "accepted_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "final_metrics": {
+      "type": "object"
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "iteration",
+          "before",
+          "after",
+          "candidate_count",
+          "eligible_count",
+          "selected_candidate_id",
+          "selected_action",
+          "action_committed"
+        ],
+        "properties": {
+          "iteration": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "before": {
+            "type": "object"
+          },
+          "after": {
+            "type": "object"
+          },
+          "candidate_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "eligible_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "selected_candidate_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "selected_action": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "candidate_id",
+                  "base_board_hash",
+                  "evaluation_hash",
+                  "kind",
+                  "footprint_index",
+                  "delta_nm",
+                  "net_id",
+                  "router"
+                ],
+                "properties": {
+                  "candidate_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{16}$"
+                  },
+                  "base_board_hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{16}$"
+                  },
+                  "evaluation_hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{16}$"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "footprint_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "delta_nm": {
+                    "type": "object",
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "properties": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "net_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "router": {
+                    "type": "object"
+                  }
+                }
+              }
+            ]
+          },
+          "action_committed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "final_board_state": {
+      "type": "object",
+      "required": [
+        "footprints",
+        "tracks",
+        "snapshot_scope",
+        "is_partial_snapshot"
+      ],
+      "properties": {
+        "snapshot_scope": {
+          "const": "footprint_positions_and_tracks_only"
+        },
+        "is_partial_snapshot": {
+          "const": true
+        },
+        "footprints": {
+          "type": "array"
+        },
+        "tracks": {
+          "type": "array"
+        }
+      }
+    },
+    "manufacturing_release_ready": {
+      "const": false
+    },
+    "run_config": {
+      "type": "object",
+      "required": [
+        "max_candidates",
+        "max_iterations",
+        "move_step_nm",
+        "component_gap_nm",
+        "move_edge_clearance_nm",
+        "propose_moves",
+        "propose_routes",
+        "require_dfm_for_acceptance",
+        "require_physics_for_acceptance",
+        "physics_evaluate_configured",
+        "dfm",
+        "router",
+        "physics_provider_id"
+      ],
+      "properties": {
+        "max_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "move_step_nm": {
+          "type": "integer"
+        },
+        "component_gap_nm": {
+          "type": "integer"
+        },
+        "move_edge_clearance_nm": {
+          "type": "integer"
+        },
+        "propose_moves": {
+          "type": "boolean"
+        },
+        "propose_routes": {
+          "type": "boolean"
+        },
+        "require_dfm_for_acceptance": {
+          "type": "boolean"
+        },
+        "require_physics_for_acceptance": {
+          "type": "boolean"
+        },
+        "physics_evaluate_configured": {
+          "type": "boolean"
+        },
+        "dfm": {
+          "type": "object",
+          "required": [
+            "copper_oz_x10",
+            "edge_type",
+            "mask_color"
+          ],
+          "properties": {
+            "copper_oz_x10": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "edge_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mask_color": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "router": {
+          "type": "object",
+          "required": [
+            "layer",
+            "grid_pitch_nm",
+            "trace_width_nm",
+            "clearance_nm",
+            "edge_clearance_nm",
+            "max_cells"
+          ],
+          "properties": {
+            "layer": {
+              "type": "string"
+            },
+            "grid_pitch_nm": {
+              "type": "integer"
+            },
+            "trace_width_nm": {
+              "type": "integer"
+            },
+            "clearance_nm": {
+              "type": "integer"
+            },
+            "edge_clearance_nm": {
+              "type": "integer"
+            },
+            "max_cells": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "physics_provider_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "final_board_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    }
+  },
+  "additionalProperties": false
+}

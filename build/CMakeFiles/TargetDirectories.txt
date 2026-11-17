@@ -1,0 +1,11 @@
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_core.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_core_tests.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_design_tests.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_catalogue_asset_tests.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_topology_tests.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_engineering_tests.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/copper_optimization_tests.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/RUN_TESTS.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/ALL_BUILD.dir
+D:/files (7)/copper_v2_patched/build/CMakeFiles/ZERO_CHECK.dir

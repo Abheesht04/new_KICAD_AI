@@ -1,0 +1,752 @@
+{
+    "SampleRoot":  "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\demos",
+    "SchematicCount":  93,
+    "BoardCount":  20,
+    "TopologyResults":  [
+                            {
+                                "Schematic":  "complex_hierarchy\\ampli_ht.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\ampli_ht"
+                            },
+                            {
+                                "Schematic":  "complex_hierarchy\\complex_hierarchy.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\complex_hierarchy"
+                            },
+                            {
+                                "Schematic":  "custom_pads_test\\custom_pads_test.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\custom_pads_test"
+                            },
+                            {
+                                "Schematic":  "ecc83\\ecc83-pp.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\ecc83-pp"
+                            },
+                            {
+                                "Schematic":  "ecc83\\ecc83-pp_v2.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\ecc83-pp_v2"
+                            },
+                            {
+                                "Schematic":  "flat_hierarchy\\flat_hierarchy.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\flat_hierarchy"
+                            },
+                            {
+                                "Schematic":  "flat_hierarchy\\pic_programmer.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pic_programmer"
+                            },
+                            {
+                                "Schematic":  "flat_hierarchy\\pic_sockets.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pic_sockets"
+                            },
+                            {
+                                "Schematic":  "interf_u\\interf_u.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\interf_u"
+                            },
+                            {
+                                "Schematic":  "kit-dev-coldfire-xilinx_5213\\in_out_conn.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\in_out_conn"
+                            },
+                            {
+                                "Schematic":  "kit-dev-coldfire-xilinx_5213\\kit-dev-coldfire-xilinx_5213.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\kit-dev-coldfire-xilinx_5213"
+                            },
+                            {
+                                "Schematic":  "kit-dev-coldfire-xilinx_5213\\xilinx.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\xilinx"
+                            },
+                            {
+                                "Schematic":  "multichannel\\channel_strip.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\channel_strip"
+                            },
+                            {
+                                "Schematic":  "multichannel\\multichannel_mixer.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\multichannel_mixer"
+                            },
+                            {
+                                "Schematic":  "pic_programmer\\pic_programmer.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pic_programmer"
+                            },
+                            {
+                                "Schematic":  "pic_programmer\\pic_sockets.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pic_sockets"
+                            },
+                            {
+                                "Schematic":  "royalblue54L_feather\\nfc_antenna\\RoyalBlue54L-NFC-Antenna\\RoyalBlue54L-NFC-Antenna.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\RoyalBlue54L-NFC-Antenna"
+                            },
+                            {
+                                "Schematic":  "royalblue54L_feather\\RoyalBlue54L-Feather.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\RoyalBlue54L-Feather"
+                            },
+                            {
+                                "Schematic":  "royalblue54L_feather\\sch\\Connectors.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\Connectors"
+                            },
+                            {
+                                "Schematic":  "royalblue54L_feather\\sch\\Debugger.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\Debugger"
+                            },
+                            {
+                                "Schematic":  "royalblue54L_feather\\sch\\nPM1300.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\nPM1300"
+                            },
+                            {
+                                "Schematic":  "royalblue54L_feather\\sch\\nRF54L15.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\nRF54L15"
+                            },
+                            {
+                                "Schematic":  "simulation\\analog-multiplier\\a-multi.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\a-multi"
+                            },
+                            {
+                                "Schematic":  "simulation\\class-d\\Class-D.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\Class-D"
+                            },
+                            {
+                                "Schematic":  "simulation\\gain_control\\mult_vca810.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\mult_vca810"
+                            },
+                            {
+                                "Schematic":  "simulation\\generic_models\\generic_opamp_bip.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\generic_opamp_bip"
+                            },
+                            {
+                                "Schematic":  "simulation\\ibis\\ibis.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\ibis"
+                            },
+                            {
+                                "Schematic":  "simulation\\laser_driver\\laser_driver.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\laser_driver"
+                            },
+                            {
+                                "Schematic":  "simulation\\power_supplies\\boost\\smps-com.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\smps-com"
+                            },
+                            {
+                                "Schematic":  "simulation\\power_supplies\\buck_conv\\buck_conv.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\buck_conv"
+                            },
+                            {
+                                "Schematic":  "simulation\\power_supplies\\hv_converter\\hv_converter.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\hv_converter"
+                            },
+                            {
+                                "Schematic":  "simulation\\power_supplies\\LM317_power_supply\\power_supply.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\power_supply"
+                            },
+                            {
+                                "Schematic":  "simulation\\power_supplies\\royer\\royer1.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\royer1"
+                            },
+                            {
+                                "Schematic":  "simulation\\pspice\\pspice.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pspice"
+                            },
+                            {
+                                "Schematic":  "simulation\\q17\\Q17ng.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\Q17ng"
+                            },
+                            {
+                                "Schematic":  "simulation\\rectifier\\rectifier.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\rectifier"
+                            },
+                            {
+                                "Schematic":  "simulation\\sallen_key\\sallen_key.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\sallen_key"
+                            },
+                            {
+                                "Schematic":  "simulation\\subsheets\\mainsheet.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\mainsheet"
+                            },
+                            {
+                                "Schematic":  "simulation\\subsheets\\subsheet1.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\subsheet1"
+                            },
+                            {
+                                "Schematic":  "simulation\\subsheets\\subsheet2.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\subsheet2"
+                            },
+                            {
+                                "Schematic":  "simulation\\up-down-counter\\up-down-c.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\up-down-c"
+                            },
+                            {
+                                "Schematic":  "simulation\\v_i_sources\\v_i_sources.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\v_i_sources"
+                            },
+                            {
+                                "Schematic":  "sonde xilinx\\sonde xilinx.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\sonde_xilinx"
+                            },
+                            {
+                                "Schematic":  "stickhub\\StickHub.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\StickHub"
+                            },
+                            {
+                                "Schematic":  "test_pads_inside_pads\\test_pads_inside_pads.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\test_pads_inside_pads"
+                            },
+                            {
+                                "Schematic":  "test_xil_95108\\carte_test.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\carte_test"
+                            },
+                            {
+                                "Schematic":  "tiny_tapeout\\rp2040.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\rp2040"
+                            },
+                            {
+                                "Schematic":  "tiny_tapeout\\tinytapeout-demo.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\tinytapeout-demo"
+                            },
+                            {
+                                "Schematic":  "video\\bus_pci.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\bus_pci"
+                            },
+                            {
+                                "Schematic":  "video\\esvideo.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\esvideo"
+                            },
+                            {
+                                "Schematic":  "video\\graphic.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\graphic"
+                            },
+                            {
+                                "Schematic":  "video\\modul.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\modul"
+                            },
+                            {
+                                "Schematic":  "video\\muxdata.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\muxdata"
+                            },
+                            {
+                                "Schematic":  "video\\pal-ntsc.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pal-ntsc"
+                            },
+                            {
+                                "Schematic":  "video\\rams.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\rams"
+                            },
+                            {
+                                "Schematic":  "video\\video.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\video"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\clocks.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\clocks"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\ddr4-ps.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\ddr4-ps"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\flash.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\flash"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fp_connectors.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fp_connectors"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-config.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-config"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-hd-banks.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-hd-banks"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-hp-banks.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-hp-banks"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-mgts.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-mgts"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-mgts-power.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-mgts-power"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-mio.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-mio"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-power.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-power"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-power-gnd.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-power-gnd"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\fpga-ps-ddr.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\fpga-ps-ddr"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\front-panel-io.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\front-panel-io"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\io_driver.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\io_driver"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\io_driver_32x.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\io_driver_32x"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\io_driver_8x.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\io_driver_8x"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\pcie_connector.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pcie_connector"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\power-supply-1.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\power-supply-1"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\power-supply-2.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\power-supply-2"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\power-supply-3.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\power-supply-3"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\pp_driver_2x.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pp_driver_2x"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\pp_driver_32x.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pp_driver_32x"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\pp_driver_8x.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\pp_driver_8x"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\sfp+.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\sfp_"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\slow_gpio.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\slow_gpio"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\user_interface.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\user_interface"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_buffers_addr.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_buffers_addr"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_buffers_aux.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_buffers_aux"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_buffers_data.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_buffers_data"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_buffers_p0_hwbyte.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_buffers_p0_hwbyte"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_buffers_userio_p2.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_buffers_userio_p2"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_interface.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_interface"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_p0.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_p0"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme_p1_p2.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme_p1_p2"
+                            },
+                            {
+                                "Schematic":  "vme-wren\\vme-wren.kicad_sch",
+                                "NetlistExitCode":  1,
+                                "TopologyExitCode":  null,
+                                "Netlist":  null,
+                                "TopologyJson":  null,
+                                "OutputDirectory":  "D:\\files (7)\\copper_v2_patched\\validation\\local_pc\\schematic_only\\20261117_170606\\topology\\vme-wren"
+                            }
+                        ],
+    "BoardCorpusOutput":  null
+}

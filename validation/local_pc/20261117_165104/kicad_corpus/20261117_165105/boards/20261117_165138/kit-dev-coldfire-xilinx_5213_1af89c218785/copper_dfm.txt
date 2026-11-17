@@ -1,0 +1,122 @@
+COPPER DFM REPORT
+Board: C:\Program Files\KiCad\9.0\share\kicad\demos\kit-dev-coldfire-xilinx_5213\kit-dev-coldfire-xilinx_5213.kicad_pcb
+Verdict: UNVERIFIED
+PASS: 14  FAIL: 0  UNVERIFIED: 19
+
+[PASS] trace_min_1oz_ml / track #636 @ (127.054000, 75.946000) mm measured 0.200000 mm / limit 0.090000 mm
+  Minimum imported track width meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] space_min_1oz_ml / board
+  Track clearance is only partially covered: pads, vias, arc tracks, zone fills, or unmodelled geometry require additional checks/native KiCad DRC
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] space_min_1oz_ml / track_pairs measured 0.090000 mm / limit 0.090000 mm
+  All tested straight-track pairs satisfy the centreline + half-width clearance threshold
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] drill_min_mech / via_hole #0 @ (129.540000, 105.410000) mm measured 0.400000 mm / limit 0.150000 mm
+  Minimum measured drill dimension meets the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] via_hole_min / via #0 @ (129.540000, 105.410000) mm measured 0.400000 mm / limit 0.150000 mm
+  Minimum measured via dimension meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] via_diameter_min / via #38 @ (127.000000, 76.000000) mm measured 0.600000 mm / limit 0.250000 mm
+  Minimum measured via dimension meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] via_annular_min / via #38 @ (127.000000, 76.000000) mm measured 0.100000 mm / limit 0.050000 mm
+  Minimum measured via dimension meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] npth_min / holes
+  No applicable holes were present
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[PASS] hole_hole_via / hole_pairs measured 0.200000 mm / limit 0.200000 mm
+  All tested hole pairs satisfy the edge-to-edge spacing rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] hole_hole_pad / oval_holes
+  Oval/slot hole spacing requires capsule geometry; the current centre-distance check cannot certify it
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] hole_hole_pad / hole_pairs measured 0.450000 mm / limit 0.450000 mm
+  All tested hole pairs satisfy the edge-to-edge spacing rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] ar_ml_1oz_abs / pth_pad #152 @ (186.690000, 89.408000) mm measured 0.275000 mm / limit 0.150000 mm
+  Minimum conservative PTH annular ring meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[PASS] smd_pad_min / smd_pad #385 @ (141.382000, 93.798000) mm measured 0.300000 mm / limit 0.250000 mm
+  Minimum SMD pad dimension meets the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] edge_routed / board_copper
+  Edge-clearance coverage is incomplete for pads, vias, zones, arc tracks, and non-linear outlines
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] edge_routed / track_edges measured 0.200000 mm / limit 0.200000 mm
+  All tested track-to-straight-outline distances meet the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_min_dimension / board_outline measured 91.821000 mm / limit 3.000000 mm
+  Minimum board dimension meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_thickness_min / board_thickness measured 1.600000 mm / limit 0.400000 mm
+  Board thickness meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_thickness_max / board_thickness measured 1.600000 mm / limit 4.500000 mm
+  Board thickness meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / unmodelled_geometry
+  KiCad contains manufacturing-relevant geometry not represented in the typed board model; retain and run native KiCad DRC
+

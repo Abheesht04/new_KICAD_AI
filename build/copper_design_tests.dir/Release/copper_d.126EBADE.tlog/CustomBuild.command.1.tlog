@@ -1,0 +1,10 @@
+^D:\FILES (7)\COPPER_V2_PATCHED\V2_SRC\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SD:/files (7)/copper_v2_patched/v2_src" "-BD:/files (7)/copper_v2_patched/build" --check-stamp-file "D:/files (7)/copper_v2_patched/build/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

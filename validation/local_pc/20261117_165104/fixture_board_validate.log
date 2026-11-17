@@ -1,0 +1,45 @@
+Copper V2 ΓÇö deterministic PCB engineering core
+
+User commands:
+  copperv2 user board-inspect <board.kicad_pcb>
+  copperv2 user parts-used <board.kicad_pcb> [--catalogue FILE.parts] [--jlc-catalogue FILE.jlc] [--jlc-max-age-days N]
+  copperv2 user dfm-check <board.kicad_pcb> --rules FILE.rules [--copper-oz 1|2|2.5|3.5|4.5] [--edge routed|vcut] [--mask-color green|red|yellow|blue|purple|black|white] [--report FILE]
+  copperv2 user manufacturing-instructions <board.kicad_pcb> --rules FILE.rules --out FILE.md [--copper-oz 1|2|2.5|3.5|4.5] [--edge routed|vcut] [--mask-color green|red|yellow|blue|purple|black|white]
+
+Design commands:
+  copper design import <project-directory> [--out FILE] [--netlist FILE] [--report FILE] [--manifest FILE]
+  copper design resolve-part <parts.sx> [--part-id ID | --kind R|C|L|D|Q|M|U|J|S] [--mpn MPN] [--text QUERY] [--out design.json]
+  copper user design prompt "<human requirements>" [--out request.json]
+  copper user topology show <design.kicad_sch> --netlist <fresh.kicad_net> [--out topology.json]
+  copper dev topology build <design.kicad_sch> --netlist <fresh.kicad_net> --out topology.json
+  copper dev topology validate <design.kicad_sch> --netlist <fresh.kicad_net>
+  copper dev engineering run <design.kicad_sch> --netlist FILE --catalogue FILE.parts [--part REF=ID] [--voltage-source REF=PIN+,PIN-:V] [--board FILE --rules FILE] [--propose-placement] [--propose-routes] [--route-grid-nm N --trace-width-nm N --clearance-nm N --edge-clearance-nm N] [--out design.json]
+  copper user engineering run <design.kicad_sch> --netlist FILE --catalogue FILE.parts [--part REF=ID] [--voltage-source REF=PIN+,PIN-:V] [--board FILE --rules FILE] [--propose-placement] [--propose-routes] [--route-grid-nm N --trace-width-nm N --clearance-nm N --edge-clearance-nm N] [--out design.json]
+  copper user optimize evaluate <board.kicad_pcb> --rules FILE --today YYYY-MM-DD --copper-oz-x10 N --edge routed|vcut [--step-nm N --component-gap-nm N --move-edge-clearance-nm N] [--propose-routes --route-grid-nm N --trace-width-nm N --clearance-nm N --route-edge-clearance-nm N] [--max-candidates N] [--out optimization.json]
+  copper user optimize apply <board.kicad_pcb> --candidate-id HEX [same evaluation options] --out action.json
+      [--user-catalogue FILE.parts] [--supplier-catalogue FILE.parts] [--source user|supplier|kicad]
+      [--symbol-root DIR] [--footprint-root DIR] [--copper-asset-root DIR] [--project-root DIR]
+      [--sym-lib-table FILE] [--fp-lib-table FILE]
+
+Developer commands:
+  copperv2 dev board inspect <board.kicad_pcb>
+  copperv2 dev board validate <board.kicad_pcb>
+  copperv2 dev rules validate <FILE.rules>
+  copper dev optimize evaluate <board.kicad_pcb> --rules FILE --today YYYY-MM-DD --copper-oz-x10 N --edge routed|vcut [--step-nm N --component-gap-nm N --move-edge-clearance-nm N] [--propose-routes --route-grid-nm N --trace-width-nm N --clearance-nm N --route-edge-clearance-nm N] [--max-candidates N] [--out optimization.json]
+  copper dev optimize apply <board.kicad_pcb> --candidate-id HEX --rules FILE --today YYYY-MM-DD --copper-oz-x10 N --edge routed|vcut --out action.json
+  copper dev optimize run <board.kicad_pcb> --policy greedy --iterations N --rules FILE --today YYYY-MM-DD --copper-oz-x10 N --edge routed|vcut --out optimization-run.json
+
+Existing asset/catalogue commands:
+  copperv2 assets inspect-symbol <library.kicad_sym> [symbol-name]
+  copperv2 assets inspect-footprint <footprint.kicad_mod>
+  copperv2 assets import-symbol-library <nickname> <library.kicad_sym> --root DIR
+  copperv2 assets import-footprint-library <nickname> <library.pretty> --root DIR
+  copperv2 assets import-kicad <symbols-dir> <footprints-dir> --root DIR
+  copperv2 catalogue create <file.parts>
+  copperv2 catalogue validate <file.parts> [--symbols-root DIR --footprints-root DIR]
+  copperv2 catalogue install <file.parts> --scope project|user [--project-root DIR] [--user-root DIR]
+  copperv2 catalogue list --scope project|user [--project-root DIR] [--user-root DIR]
+  copperv2 catalogue resolve <part-id> [--project-root DIR] [--user-root DIR] [--bundled-root DIR]
+
+Environment: COPPER_HOME, COPPER_PROJECT, COPPER_FAB_RULES
+All engineering geometry is integer nanometres internally; CLI displays millimetres.

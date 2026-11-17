@@ -1,0 +1,155 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-15T23:46:04+0530",
+    "kicad_version": "9.0.6",
+    "schematic_parity": [],
+    "source": "custom_pads_test.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Clearance violation (zone clearance 0.5000 mm; actual 0.4924 mm)",
+            "items": [
+                {
+                    "description": "Zone [GND] on F.Cu, priority 0",
+                    "pos": {
+                        "x": 62.992,
+                        "y": 48.768
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000589b2db1"
+                },
+                {
+                    "description": "Teardrop [/PAD2] on F.Cu",
+                    "pos": {
+                        "x": 122.035951,
+                        "y": 99.495
+                    },
+                    "uuid": "5e0433ee-0ff6-4737-aeb8-4226dcc2b8f4"
+                }
+            ],
+            "severity": "error",
+            "type": "clearance"
+        },
+        {
+            "description": "Clearance violation (zone clearance 0.5000 mm; actual 0.4994 mm)",
+            "items": [
+                {
+                    "description": "Zone [GND] on F.Cu, priority 0",
+                    "pos": {
+                        "x": 62.992,
+                        "y": 48.768
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000589b2db1"
+                },
+                {
+                    "description": "Teardrop [/PAD1] on F.Cu",
+                    "pos": {
+                        "x": 91.324182,
+                        "y": 99.97
+                    },
+                    "uuid": "b3f6e07e-8dbc-40ac-b72c-6b70f9da3e4f"
+                }
+            ],
+            "severity": "error",
+            "type": "clearance"
+        },
+        {
+            "description": "Clearance violation (zone clearance 0.5000 mm; actual 0.4953 mm)",
+            "items": [
+                {
+                    "description": "Zone [GND] on F.Cu, priority 0",
+                    "pos": {
+                        "x": 62.992,
+                        "y": 48.768
+                    },
+                    "uuid": "00000000-0000-0000-0000-0000589b2db1"
+                },
+                {
+                    "description": "Teardrop [/PAD2] on F.Cu",
+                    "pos": {
+                        "x": 139.494198,
+                        "y": 97.966564
+                    },
+                    "uuid": "1b1d0efc-e24f-43ce-b169-b3cc43e0a911"
+                }
+            ],
+            "severity": "error",
+            "type": "clearance"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'custom_pads_test'.",
+            "items": [
+                {
+                    "description": "Footprint R2",
+                    "pos": {
+                        "x": 136.9,
+                        "y": 101.5
+                    },
+                    "uuid": "00000000-0000-0000-0000-000056a72d3c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'custom_pads_test'.",
+            "items": [
+                {
+                    "description": "Footprint AE2",
+                    "pos": {
+                        "x": 166.3,
+                        "y": 72.5
+                    },
+                    "uuid": "00000000-0000-0000-0000-000056aa30dc"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'custom_pads_test'.",
+            "items": [
+                {
+                    "description": "Footprint AE1",
+                    "pos": {
+                        "x": 100.15,
+                        "y": 65.86
+                    },
+                    "uuid": "00000000-0000-0000-0000-000056aa42fe"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'custom_pads_test'.",
+            "items": [
+                {
+                    "description": "Footprint U***",
+                    "pos": {
+                        "x": 165.9,
+                        "y": 123.6
+                    },
+                    "uuid": "00000000-0000-0000-0000-000056ae982a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'custom_pads_test'.",
+            "items": [
+                {
+                    "description": "Footprint SW1",
+                    "pos": {
+                        "x": 104.299,
+                        "y": 99.72
+                    },
+                    "uuid": "00000000-0000-0000-0000-00005a34c6d0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        }
+    ]
+}

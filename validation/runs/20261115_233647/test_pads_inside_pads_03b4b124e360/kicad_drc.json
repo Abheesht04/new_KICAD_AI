@@ -1,0 +1,71 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-15T23:37:09+0530",
+    "kicad_version": "9.0.6",
+    "schematic_parity": [],
+    "source": "test_pads_inside_pads.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "The current configuration does not include the footprint library 'Connect'.",
+            "items": [
+                {
+                    "description": "Footprint P1",
+                    "pos": {
+                        "x": 89.535,
+                        "y": 45.593
+                    },
+                    "uuid": "00000000-0000-0000-0000-00004ee505ba"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'Connect'.",
+            "items": [
+                {
+                    "description": "Footprint P2",
+                    "pos": {
+                        "x": 107.696,
+                        "y": 45.593
+                    },
+                    "uuid": "00000000-0000-0000-0000-00004ee505bc"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'Connect'.",
+            "items": [
+                {
+                    "description": "Footprint P3",
+                    "pos": {
+                        "x": 87.122,
+                        "y": 61.468
+                    },
+                    "uuid": "00000000-0000-0000-0000-00004ee505be"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'Connect'.",
+            "items": [
+                {
+                    "description": "Footprint P4",
+                    "pos": {
+                        "x": 107.061,
+                        "y": 61.468
+                    },
+                    "uuid": "00000000-0000-0000-0000-00004ee505c0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        }
+    ]
+}

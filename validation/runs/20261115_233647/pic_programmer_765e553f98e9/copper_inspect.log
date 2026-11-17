@@ -1,0 +1,8 @@
+KiCad board version: 20241229
+Copper layers: 2  Total layer records: 20
+Nets: 112  Footprints: 63  Pads: 247
+Tracks: 370  Arc tracks: 0  Vias: 6  Zones: 1
+Edge.Cuts primitives: 5  Board thickness: 1.600000 mm
+Importer coverage: skipped records=1331, unmodelled geometry=1326, inexact pad rotations=0, unsupported layers=0
+First unmodelled record: legacy_teardrops
+Raw KiCad syntax tree: retained in arena for loss-preserving consumers

@@ -1,0 +1,383 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copper.local/schemas/copper.engineering-design.v1.schema.json",
+  "title": "Copper Engineering Design",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "status",
+    "design_ready",
+    "findings_truncated",
+    "summary",
+    "parity",
+    "topology",
+    "resolved_components",
+    "circuit",
+    "simulation",
+    "component_stress",
+    "physical",
+    "feedback"
+  ],
+  "properties": {
+    "schema": {
+      "const": "copper.engineering-design"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "PARTIAL",
+        "REJECTED",
+        "ERR_ARGUMENT",
+        "ERR_MEMORY",
+        "ERR_TOPOLOGY",
+        "ERR_CIRCUIT",
+        "ERR_SIMULATION"
+      ]
+    },
+    "design_ready": {
+      "type": "boolean"
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "components",
+        "nets",
+        "terminals",
+        "connections",
+        "feedback_pass",
+        "feedback_fail",
+        "feedback_unverified"
+      ],
+      "properties": {
+        "components": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "terminals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "connections": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "feedback_pass": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "feedback_fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "feedback_unverified": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "topology": {
+      "type": "object"
+    },
+    "resolved_components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "reference",
+          "part_id",
+          "kind",
+          "manufacturer",
+          "mpn",
+          "symbol_id",
+          "footprint_id",
+          "model_id",
+          "circuit_model",
+          "catalogue_part_resolved",
+          "explicit_model_supplied",
+          "identity_source_status",
+          "datasheet",
+          "supplier",
+          "ratings"
+        ],
+        "properties": {
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "part_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mpn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "symbol_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "footprint_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "circuit_model": {
+            "type": "string"
+          },
+          "catalogue_part_resolved": {
+            "type": "boolean"
+          },
+          "explicit_model_supplied": {
+            "type": "boolean"
+          },
+          "identity_source_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "datasheet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supplier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ratings": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "circuit": {
+      "type": "object"
+    },
+    "simulation": {
+      "type": "object"
+    },
+    "component_stress": {
+      "type": "array"
+    },
+    "physical": {
+      "type": "object",
+      "required": [
+        "board_supplied",
+        "placement_attempted",
+        "placement_status",
+        "placement_count",
+        "placed_count",
+        "placements",
+        "routes_attempted",
+        "route_count",
+        "routes",
+        "dfm_attempted",
+        "dfm_verdict",
+        "dfm_findings"
+      ],
+      "properties": {
+        "board_supplied": {
+          "type": "boolean"
+        },
+        "placement_attempted": {
+          "type": "boolean"
+        },
+        "placement_status": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "placement_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "placed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "placements": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "routes_attempted": {
+          "type": "boolean"
+        },
+        "route_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "topology_net_index",
+              "net_name",
+              "status",
+              "expanded_nodes",
+              "cost",
+              "message",
+              "points"
+            ],
+            "properties": {
+              "topology_net_index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "net_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "OK",
+                  "ERR_ARGUMENT",
+                  "ERR_MEMORY",
+                  "ERR_RANGE",
+                  "ERR_NO_PATH",
+                  "UNVERIFIED",
+                  "ERR_GEOMETRY",
+                  "UNKNOWN"
+                ]
+              },
+              "expanded_nodes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cost": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "x_nm",
+                    "y_nm"
+                  ],
+                  "properties": {
+                    "x_nm": {
+                      "type": "integer"
+                    },
+                    "y_nm": {
+                      "type": "integer"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "dfm_attempted": {
+          "type": "boolean"
+        },
+        "dfm_verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dfm_findings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "feedback": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "findings_truncated": {
+      "type": "boolean"
+    },
+    "parity": {
+      "type": "object",
+      "required": [
+        "checked",
+        "matched_components",
+        "missing_footprints",
+        "pad_net_mismatches"
+      ],
+      "properties": {
+        "checked": {
+          "type": "boolean"
+        },
+        "matched_components": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_footprints": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pad_net_mismatches": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

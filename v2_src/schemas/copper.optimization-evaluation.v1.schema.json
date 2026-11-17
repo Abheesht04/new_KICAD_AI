@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copper.local/schemas/copper.optimization-evaluation.v1.schema.json",
+  "title": "Copper Optimization Evaluation",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "status",
+    "decision_authority",
+    "board_hash",
+    "baseline",
+    "summary",
+    "candidates",
+    "manufacturing_release_ready",
+    "evaluation_config",
+    "evaluation_hash"
+  ],
+  "properties": {
+    "schema": {
+      "const": "copper.optimization-evaluation"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "type": "string"
+    },
+    "decision_authority": {
+      "const": "external_agent_or_user"
+    },
+    "board_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "baseline": {
+      "$ref": "#/$defs/metrics"
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "candidate_count",
+        "eligible_count",
+        "candidates_truncated"
+      ],
+      "properties": {
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eligible_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidates_truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action",
+          "router_status",
+          "added_track_count",
+          "metrics",
+          "reason",
+          "eligible_for_iteration",
+          "manufacturing_release_ready"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/$defs/action"
+          },
+          "router_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "added_track_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "metrics": {
+            "$ref": "#/$defs/metrics"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "eligible_for_iteration": {
+            "type": "boolean"
+          },
+          "manufacturing_release_ready": {
+            "const": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "manufacturing_release_ready": {
+      "const": false
+    },
+    "evaluation_config": {
+      "type": "object",
+      "required": [
+        "max_candidates",
+        "max_iterations",
+        "move_step_nm",
+        "component_gap_nm",
+        "move_edge_clearance_nm",
+        "propose_moves",
+        "propose_routes",
+        "require_dfm_for_acceptance",
+        "require_physics_for_acceptance",
+        "physics_evaluate_configured",
+        "dfm",
+        "router",
+        "physics_provider_id"
+      ],
+      "properties": {
+        "max_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "move_step_nm": {
+          "type": "integer"
+        },
+        "component_gap_nm": {
+          "type": "integer"
+        },
+        "move_edge_clearance_nm": {
+          "type": "integer"
+        },
+        "propose_moves": {
+          "type": "boolean"
+        },
+        "propose_routes": {
+          "type": "boolean"
+        },
+        "require_dfm_for_acceptance": {
+          "type": "boolean"
+        },
+        "require_physics_for_acceptance": {
+          "type": "boolean"
+        },
+        "physics_evaluate_configured": {
+          "type": "boolean"
+        },
+        "dfm": {
+          "type": "object",
+          "required": [
+            "copper_oz_x10",
+            "edge_type",
+            "mask_color"
+          ],
+          "properties": {
+            "copper_oz_x10": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "edge_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mask_color": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "router": {
+          "type": "object",
+          "required": [
+            "layer",
+            "grid_pitch_nm",
+            "trace_width_nm",
+            "clearance_nm",
+            "edge_clearance_nm",
+            "max_cells"
+          ],
+          "properties": {
+            "layer": {
+              "type": "string"
+            },
+            "grid_pitch_nm": {
+              "type": "integer"
+            },
+            "trace_width_nm": {
+              "type": "integer"
+            },
+            "clearance_nm": {
+              "type": "integer"
+            },
+            "edge_clearance_nm": {
+              "type": "integer"
+            },
+            "max_cells": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "physics_provider_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "evaluation_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    }
+  },
+  "$defs": {
+    "metrics": {
+      "type": "object",
+      "required": [
+        "board_valid",
+        "dfm_available",
+        "dfm_fail_count",
+        "dfm_unverified_count",
+        "hpwl_nm",
+        "track_manhattan_nm",
+        "two_pad_nets_without_tracks",
+        "footprint_count",
+        "track_count",
+        "physics_available",
+        "physics_fail_count",
+        "physics_unverified_count",
+        "has_physics_objective",
+        "physics_objective",
+        "physics_summary"
+      ],
+      "properties": {
+        "board_valid": {
+          "type": "boolean"
+        },
+        "dfm_available": {
+          "type": "boolean"
+        },
+        "dfm_fail_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dfm_unverified_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hpwl_nm": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "track_manhattan_nm": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "two_pad_nets_without_tracks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "footprint_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "track_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "physics_available": {
+          "type": "boolean"
+        },
+        "physics_fail_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "physics_unverified_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_physics_objective": {
+          "type": "boolean"
+        },
+        "physics_objective": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "physics_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "base_board_hash",
+        "kind",
+        "footprint_index",
+        "delta_nm",
+        "net_id",
+        "router",
+        "evaluation_hash"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "base_board_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "kind": {
+          "enum": [
+            "MOVE_FOOTPRINT",
+            "ROUTE_TWO_PAD_NET"
+          ]
+        },
+        "footprint_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delta_nm": {
+          "type": "object",
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "net_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "router": {
+          "type": "object",
+          "required": [
+            "layer",
+            "grid_pitch_nm",
+            "trace_width_nm",
+            "clearance_nm",
+            "edge_clearance_nm",
+            "max_cells"
+          ],
+          "properties": {
+            "layer": {
+              "type": "string"
+            },
+            "grid_pitch_nm": {
+              "type": "integer"
+            },
+            "trace_width_nm": {
+              "type": "integer"
+            },
+            "clearance_nm": {
+              "type": "integer"
+            },
+            "edge_clearance_nm": {
+              "type": "integer"
+            },
+            "max_cells": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "evaluation_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

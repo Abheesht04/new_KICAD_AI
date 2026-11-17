@@ -1,0 +1,45 @@
+{
+  "base_archive": "v2_src (3).zip",
+  "files": [
+    "v2_src/CMakeLists.txt",
+    "v2_src/copper_cli.c",
+    "v2_src/topology.h",
+    "v2_src/topology.c",
+    "v2_src/topology_json.h",
+    "v2_src/topology_json.c",
+    "v2_src/tests/test_topology.c",
+    "v2_src/tests/fixtures/topology_sample.kicad_net",
+    "v2_src/tests/run_kicad_sample_corpus.ps1",
+    "v2_src/schemas/copper.topology.v1.schema.json",
+    "v2_src/part_catalogue.h",
+    "v2_src/part_catalogue.c",
+    "v2_src/design_resolver.h",
+    "v2_src/design_resolver.c",
+    "v2_src/kicad_assets.h",
+    "v2_src/kicad_assets.c",
+    "v2_src/kicad_asset_resolver.h",
+    "v2_src/kicad_asset_resolver.c",
+    "v2_src/design_resolution_json.h",
+    "v2_src/design_resolution_json.c",
+    "v2_src/tests/test_catalogue_assets.c",
+    "v2_src/tests/test_design.c",
+    "v2_src/schemas/copper.design-resolution.v2.schema.json",
+    "v2_src/tests/fixtures/catalogue_resolution/parts.sx",
+    "v2_src/tests/fixtures/catalogue_resolution/kicad/symbols/Device.kicad_sym",
+    "v2_src/tests/fixtures/catalogue_resolution/kicad/footprints/Resistor_SMD.pretty/R_0603_1608Metric.kicad_mod",
+    "v2_src/tests/fixtures/catalogue_resolution/project/sym-lib-table",
+    "v2_src/tests/fixtures/catalogue_resolution/project/fp-lib-table",
+    "v2_src/tests/fixtures/catalogue_resolution/project/local_symbols/Device.kicad_sym",
+    "v2_src/tests/fixtures/catalogue_resolution/project/local_footprints/Resistor_SMD.pretty/R_0603_1608Metric.kicad_mod"
+  ],
+  "builds": [
+    "GCC 14.2 C17 -Werror",
+    "Clang C17 -Werror",
+    "ASan+UBSan"
+  ],
+  "tests": {
+    "ctest": 4,
+    "status": "all_passed"
+  },
+  "scope": "topology model, generated-design builder, KiCad schematic/netlist adapter, JSON, CLI, corpus harness"
+}

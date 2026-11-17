@@ -1,0 +1,222 @@
+COPPER DFM REPORT
+Board: C:\Program Files\KiCad\9.0\share\kicad\demos\complex_hierarchy\complex_hierarchy.kicad_pcb
+Verdict: FAIL
+PASS: 8  FAIL: 27  UNVERIFIED: 23
+
+[PASS] trace_min_1oz_2l / track #26 @ (173.355000, 89.045000) mm measured 0.400000 mm / limit 0.100000 mm
+  Minimum imported track width meets this rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] space_min_1oz_2l / board
+  Track clearance is only partially covered: pads, vias, arc tracks, zone fills, or unmodelled geometry require additional checks/native KiCad DRC
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] space_min_1oz_2l / track_pairs measured 0.100000 mm / limit 0.100000 mm
+  All tested straight-track pairs satisfy the centreline + half-width clearance threshold
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] drill_min_mech / pad_hole #35 @ (126.111000, 94.996000) mm measured 0.700000 mm / limit 0.150000 mm
+  Minimum measured drill dimension meets the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] via_hole_min / vias
+  No vias on this board
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] via_diameter_min / vias
+  No vias on this board
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] via_annular_min / vias
+  No vias on this board
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] npth_min / holes
+  No applicable holes were present
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] hole_hole_via / hole_pairs
+  No applicable hole pairs present
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] hole_hole_pad / hole_pairs measured 0.450000 mm / limit 0.450000 mm
+  All tested hole pairs satisfy the edge-to-edge spacing rule
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #8 @ (131.445000, 115.316000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #9 @ (132.715000, 114.046000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #10 @ (133.985000, 115.316000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #11 @ (151.765000, 123.825000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #12 @ (150.495000, 125.095000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #13 @ (149.225000, 123.825000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #14 @ (131.445000, 88.646000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #15 @ (132.715000, 87.376000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #16 @ (133.985000, 88.646000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #17 @ (150.495000, 89.916000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #18 @ (151.765000, 88.646000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #19 @ (153.035000, 89.916000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #20 @ (151.003000, 100.965000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #21 @ (149.733000, 102.235000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #22 @ (148.463000, 100.965000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #23 @ (129.794000, 96.520000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #24 @ (131.064000, 95.250000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #25 @ (132.334000, 96.520000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #32 @ (124.206000, 70.866000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #33 @ (122.936000, 69.596000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #34 @ (124.206000, 68.326000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #157 @ (149.225000, 115.062000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #158 @ (150.495000, 113.792000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #159 @ (151.765000, 115.062000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #160 @ (130.556000, 125.730000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #161 @ (131.826000, 124.460000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[FAIL] ar_2l_1oz_abs / pth_pad #162 @ (133.096000, 125.730000) mm measured 0.000000 mm / limit 0.180000 mm
+  Conservative minimum annular ring is below limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] smd_pad_min / smd_pads
+  No SMD pads found
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] NO_RULE / board
+  Rule exists in dataset, but this DFM geometry check is not implemented yet
+
+[UNVERIFIED] edge_routed / board_copper
+  Edge-clearance coverage is incomplete for pads, vias, zones, arc tracks, and non-linear outlines
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] edge_routed / track_edges measured 0.200000 mm / limit 0.200000 mm
+  All tested track-to-straight-outline distances meet the limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_min_dimension / board_outline measured 80.229200 mm / limit 3.000000 mm
+  Minimum board dimension meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_thickness_min / board_thickness measured 1.600000 mm / limit 0.400000 mm
+  Board thickness meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[PASS] board_thickness_max / board_thickness measured 1.600000 mm / limit 4.500000 mm
+  Board thickness meets limit
+  Source: https://jlcpcb.com/capabilities/Capabilities (retrieved 2026-11-15)
+
+[UNVERIFIED] NO_RULE / unmodelled_geometry
+  KiCad contains manufacturing-relevant geometry not represented in the typed board model; retain and run native KiCad DRC
+
