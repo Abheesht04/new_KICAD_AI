@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copper Workbench</title>
+<!-- Copper browser front end. Served by `copper-core serve-http --ui apps/web/index.html` at GET /; every action is a
+     call to the C tool server on the same origin (/v1/tools/...). The page decides nothing: verdicts, limits and
+     findings are shown exactly as the engine returns them. No external resources. -->
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5b6573; --line: #dde1e6; --accent: #b4532a;
+  --accent-ink: #ffffff; --pass: #1f7a3d; --pass-bg: #e3f4e8; --fail: #b42318; --fail-bg: #fde7e5;
+  --unv: #8a5a00; --unv-bg: #fff3d6; --info: #2b5c9e; --info-bg: #e5eefb; --board: #e9efe6; --board-line: #6f8f63;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b; --panel: #1c2127; --text: #e6e9ed; --muted: #9aa4b1; --line: #2e353e; --accent: #e07a4a;
+    --accent-ink: #14171b; --pass: #6fcf8e; --pass-bg: #18311f; --fail: #ff8a80; --fail-bg: #3a1c1a;
+    --unv: #f2c25b; --unv-bg: #3a2e12; --info: #8ab4f8; --info-bg: #1a2a40; --board: #1f2a1c; --board-line: #7fa871;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line);
+         background: var(--panel); position: sticky; top: 0; z-index: 1; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+header .sub { color: var(--muted); font-size: 13px; }
+#server { margin-left: auto; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.dot.ok { background: var(--pass); } .dot.bad { background: var(--fail); }
+main { max-width: 1180px; margin: 0 auto; padding: 18px 16px 48px; display: grid; gap: 16px; }
+.note { font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--line);
+        border-radius: 8px; padding: 10px 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+section h2 { font-size: 15px; margin: 0 0 4px; }
+section p.hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+.field { flex: 1 1 320px; min-width: 0; }
+input[type=text] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+                   background: var(--bg); color: var(--text); font: 13px var(--mono); }
+button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent);
+         color: var(--accent-ink); font-weight: 600; cursor: pointer; font-size: 13px; align-self: flex-end; }
+button.ghost { background: transparent; color: var(--text); border-color: var(--line); font-weight: 500; }
+button:disabled { opacity: .55; cursor: progress; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.grid2.wide { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+@media (max-width: 900px) { .grid2, .grid2.wide { grid-template-columns: 1fr; } }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.stat .k { font-size: 12px; color: var(--muted); } .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .3px; }
+.PASS { color: var(--pass); background: var(--pass-bg); } .FAIL, .ERROR { color: var(--fail); background: var(--fail-bg); }
+.UNVERIFIED, .NOT_IMPLEMENTED { color: var(--unv); background: var(--unv-bg); } .INVALID_INPUT { color: var(--fail); background: var(--fail-bg); }
+.INFO { color: var(--info); background: var(--info-bg); }
+.verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.verdict .big { font-size: 16px; padding: 4px 12px; }
+.counts span { margin-right: 6px; }
+.meaning { font-size: 12px; color: var(--muted); margin-top: 6px; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+tr.hl td { background: var(--unv-bg); }
+.tablewrap { overflow-x: auto; }
+.error { margin-top: 12px; border: 1px solid var(--fail); background: var(--fail-bg); color: var(--text);
+         border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.error b { color: var(--fail); }
+.empty { color: var(--muted); font-size: 13px; margin-top: 10px; }
+svg.map { width: 100%; height: auto; margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+pre { margin: 6px 0 0; padding: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+      overflow: auto; max-height: 320px; font: 12px/1.45 var(--mono); }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Copper Workbench</h1>
+  <span class="sub">board · DFM · drill · fabrication, checked by the C engine</span>
+  <div id="server"><span class="dot" id="dot"></span><span id="serverText">connecting…</span></div>
+</header>
+<main>
+  <div class="note">
+    Paths are files on this computer: absolute (<span class="mono">C:\work\board.kicad_pcb</span>) or relative to the
+    server's root folder. Verdicts come from the engine unchanged: <b>PASS</b> means the implemented rules ran and passed,
+    <b>UNVERIFIED</b> means something could not be decided, and neither is a fabricator's acceptance.
+  </div>
+
+  <section>
+    <h2>1 · Board</h2>
+    <p class="hint">Load a KiCad <span class="mono">.kicad_pcb</span>. The engine reads it exactly (integer nanometres) and reports what it holds.</p>
+    <div class="row">
+      <div class="field"><label for="boardPath">Board file</label>
+        <input type="text" id="boardPath" value="examples/generated/divider/design.kicad_pcb" spellcheck="false"></div>
+      <button id="loadBtn">Load board</button>
+    </div>
+    <div id="boardOut"></div>
+  </section>
+
+  <div class="grid2 wide">
+    <section>
+      <h2>2 · DFM against a fabricator</h2>
+      <p class="hint">Checks the loaded board against a fab profile whose every limit cites the fabricator's page.</p>
+      <div class="row">
+        <div class="field"><label for="profilePath">Fab profile</label>
+          <input type="text" id="profilePath" value="fab_profiles/jlcpcb_2layer.json" spellcheck="false"></div>
+        <button id="dfmBtn">Run DFM</button>
+      </div>
+      <div id="dfmOut"></div>
+    </section>
+
+    <section>
+      <h2>Board map</h2>
+      <p class="hint">Outline bounds and the location of each finding (mm, KiCad coordinates).</p>
+      <div id="mapOut"><div class="empty">Load a board, then run DFM.</div></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section>
+      <h2>3 · Drill file check</h2>
+      <p class="hint">Reads an Excellon file; with the loaded board, every hole must match a board hole.</p>
+      <div class="row">
+        <div class="field"><label for="drillPath">Excellon file (.drl)</label>
+          <input type="text" id="drillPath" value="manufacturing_audit/drill_test/design.drl" spellcheck="false"></div>
+        <button id="drillBtn">Check drill</button>
+      </div>
+      <label style="margin-top:8px"><input type="checkbox" id="drillWithBoard"> compare with the loaded board</label>
+      <div id="drillOut"></div>
+    </section>
+
+    <section>
+      <h2>4 · Fabrication export</h2>
+      <p class="hint">Gerbers and drill files through kicad-cli (start the server with <span class="mono">--kicad-cli</span>). The output folder must not exist yet: nothing is overwritten.</p>
+      <div class="row">
+        <div class="field"><label for="outPath">Output folder</label>
+          <input type="text" id="outPath" value="" placeholder="D:\copper-demo\fab-out-1" spellcheck="false"></div>
+        <button id="exportBtn">Export</button>
+      </div>
+      <div id="exportOut"></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Engine tools</h2>
+    <p class="hint">What this server offers (from <span class="mono">GET /v1/tools</span>).</p>
+    <div id="toolsOut" class="empty">…</div>
+  </section>
+</main>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let board = null;            // board.load result
+let lastFindings = [];       // findings to plot
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mm = (nm) => (nm / 1e6).toFixed(3).replace(/\.?0+$/, '');
+const badge = (v, cls = '') => `<span class="badge ${esc(v)} ${cls}">${esc(v)}</span>`;
+const MEANING = {
+  PASS: 'Every implemented rule ran and passed. Not a fabricator acceptance.',
+  FAIL: 'At least one rule ran and found a violation.',
+  UNVERIFIED: 'Something could not be decided (missing data, limit or tool). Not a pass.',
+  INVALID_INPUT: 'The input violates its format or contract.',
+  NOT_IMPLEMENTED: 'The capability does not exist yet.',
+};
+
+async function call(path, body) {
+  const init = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  let res;
+  try { res = await fetch(path, init); } catch (e) { return { ok: false, status: 0, error: { message: 'cannot reach the server: ' + e.message, data: { kind: 'NETWORK' } } }; }
+  let json = null;
+  try { json = await res.json(); } catch { /* not JSON */ }
+  if (res.ok && json && 'result' in json) return { ok: true, status: res.status, result: json.result };
+  if (res.ok && json) return { ok: true, status: res.status, result: json };
+  return { ok: false, status: res.status, error: (json && json.error) || { message: res.statusText, data: {} } };
+}
+
+function errorBox(r) {
+  const d = (r.error && r.error.data) || {};
+  return `<div class="error"><b>${esc(d.kind || 'ERROR')}</b> (HTTP ${r.status}) ${esc(r.error && r.error.message)}` +
+    (d.hint ? `<br><span class="mono">hint:</span> ${esc(d.hint)}` : '') + '</div>';
+}
+const raw = (obj) => `<details><summary>Raw engine response</summary><pre>${esc(JSON.stringify(obj, null, 2))}</pre></details>`;
+
+function reportBlock(rep) {
+  if (!rep) return '';
+  const c = rep.counts || {};
+  const counts = Object.entries(c).filter(([, n]) => n).map(([k, n]) => `${n} ${esc(k)}`).join(' · ');
+  return `<div class="verdict">${badge(rep.verdict, 'big')}<span class="counts meaning">${counts ? 'findings: ' + counts : 'no findings'}</span>
+    ${rep.complete === false ? badge('INCOMPLETE', 'UNVERIFIED') : ''}</div>
+    <div class="meaning">${esc(MEANING[rep.verdict] || '')}</div>`;
+}
+
+function findingsTable(findings) {
+  if (!findings || !findings.length) return '<div class="empty">No findings.</div>';
+  const rows = findings.map((f, i) => `<tr data-i="${i}">
+      <td>${badge(f.status)}</td>
+      <td class="mono">${esc(f.rule || f.source)}</td>
+      <td class="mono">${f.at_nm ? `${mm(f.at_nm[0])}, ${mm(f.at_nm[1])}` : '—'}</td>
+      <td class="mono">${f.limit_nm != null ? mm(f.limit_nm) + ' mm' : '—'}${f.measured_nm != null && f.measured_nm >= 0 ? `<br>measured ${mm(f.measured_nm)} mm` : ''}</td>
+      <td>${esc(f.message)}${f.items && f.items.length ? `<br><span class="mono">${esc(f.items.join(' · '))}</span>` : ''}
+          ${f.fabricator_says ? `<br><span class="meaning">fabricator: “${esc(f.fabricator_says)}”</span>` : ''}</td>
+    </tr>`).join('');
+  return `<div class="tablewrap"><table><thead><tr><th>Status</th><th>Rule</th><th>At (mm)</th><th>Limit</th><th>What</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function drawMap(highlight = -1) {
+  const out = $('mapOut');
+  const b = board && board.outline && board.outline.bounds_nm;
+  if (!b || b.length !== 4 || b[2] <= b[0] || b[3] <= b[1]) {
+    out.innerHTML = '<div class="empty">' + (board ? 'This board has no closed outline with bounds.' : 'Load a board, then run DFM.') + '</div>';
+    return;
+  }
+  const [x0, y0, x1, y1] = b, w = x1 - x0, h = y1 - y0, pad = Math.max(w, h) * 0.06;
+  const vb = `${x0 - pad} ${y0 - pad} ${w + 2 * pad} ${h + 2 * pad}`;
+  const r = Math.max(w, h) * 0.018;
+  const pts = lastFindings.map((f, i) => f.at_nm ? `<g><circle cx="${f.at_nm[0]}" cy="${f.at_nm[1]}" r="${i === highlight ? r * 1.7 : r}"
+      fill="${f.status === 'FAIL' ? 'var(--fail)' : 'var(--unv)'}" fill-opacity="0.85" stroke="var(--panel)" stroke-width="${r * 0.25}">
+      <title>${esc(f.status + ' ' + (f.rule || '') + ' at ' + mm(f.at_nm[0]) + ', ' + mm(f.at_nm[1]) + ' mm')}</title></circle></g>` : '').join('');
+  const unplaced = lastFindings.filter((f) => !f.at_nm).length;
+  out.innerHTML = `<svg class="map" viewBox="${vb}" role="img" aria-label="Board outline with finding locations">
+      <rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="var(--board)" stroke="var(--board-line)" stroke-width="${Math.max(w, h) * 0.006}" rx="${Math.max(w, h) * 0.006}"/>
+      ${pts}</svg>
+    <div class="meaning">${mm(w)} × ${mm(h)} mm · ${lastFindings.length - unplaced} located finding(s)` +
+    (unplaced ? ` · ${unplaced} without a location (board-wide)` : '') + '</div>';
+}
+
+function busy(btn, on) { btn.disabled = on; btn.dataset.label = btn.dataset.label || btn.textContent; btn.textContent = on ? 'Working…' : btn.dataset.label; }
+
+$('loadBtn').onclick = async () => {
+  const btn = $('loadBtn'); busy(btn, true);
+  const r = await call('/v1/tools/board.load', { path: $('boardPath').value.trim() });
+  busy(btn, false);
+  lastFindings = [];
+  $('dfmOut').innerHTML = '';
+  if (!r.ok) { board = null; $('boardOut').innerHTML = errorBox(r); drawMap(); return; }
+  board = r.result;
+  const o = board.outline || {};
+  const stat = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`;
+  $('boardOut').innerHTML = `<div class="stats">
+      ${stat('Footprints', board.footprints)}${stat('Pads', board.pads)}${stat('Nets', board.nets)}
+      ${stat('Tracks', board.tracks)}${stat('Vias', board.vias)}${stat('Zones', board.zones)}
+      ${stat('Copper layers', board.copper_layers)}
+      ${stat('Outline', o.closed ? 'closed' : 'OPEN')}
+      ${o.bounds_nm ? stat('Size (mm)', mm(o.bounds_nm[2] - o.bounds_nm[0]) + ' × ' + mm(o.bounds_nm[3] - o.bounds_nm[1])) : ''}
+    </div>
+    <div class="meaning">id <span class="mono">${esc(board.board_id)}</span> · file version ${esc(board.version)} · written by ${esc(board.generator)}</div>
+    ${reportBlock(board.report)}
+    ${board.report && board.report.findings && board.report.findings.length ? findingsTable(board.report.findings) : ''}
+    ${raw(board)}`;
+  drawMap();
+};
+
+$('dfmBtn').onclick = async () => {
+  if (!board) { $('dfmOut').innerHTML = '<div class="error"><b>NO BOARD</b> Load a board first (section 1).</div>'; return; }
+  const btn = $('dfmBtn'); busy(btn, true);
+  const r = await call('/v1/tools/dfm.check', { board_id: board.board_id, profile: $('profilePath').value.trim() });
+  busy(btn, false);
+  if (!r.ok) { $('dfmOut').innerHTML = errorBox(r); lastFindings = []; drawMap(); return; }
+  const p = r.result.profile || {}, rep = r.result.report || {};
+  const src = (rep.sources || [])[0] || {};
+  lastFindings = rep.findings || [];
+  $('dfmOut').innerHTML = `<div class="meaning">Profile <b>${esc(p.name)}</b> (${esc(p.fabricator)}), limits from
+      <a href="${esc(p.source)}" target="_blank" rel="noopener noreferrer">${esc(p.source)}</a>, retrieved ${esc(p.retrieved)}</div>
+    ${reportBlock(rep)}
+    ${src.rules_passed != null ? `<div class="meaning">${src.rules_passed} rule(s) passed outright.</div>` : ''}
+    ${findingsTable(lastFindings)}${raw(r.result)}`;
+  $('dfmOut').querySelectorAll('tbody tr').forEach((tr) => {
+    tr.onmouseenter = () => { tr.classList.add('hl'); drawMap(+tr.dataset.i); };
+    tr.onmouseleave = () => { tr.classList.remove('hl'); drawMap(); };
+  });
+  drawMap();
+};
+
+$('drillBtn').onclick = async () => {
+  const btn = $('drillBtn'); busy(btn, true);
+  const args = { path: $('drillPath').value.trim() };
+  if ($('drillWithBoard').checked) {
+    if (!board) { busy(btn, false); $('drillOut').innerHTML = '<div class="error"><b>NO BOARD</b> Load a board first, or untick the comparison.</div>'; return; }
+    args.board_id = board.board_id;
+  }
+  const r = await call('/v1/tools/excellon.check', args);
+  busy(btn, false);
+  if (!r.ok) { $('drillOut').innerHTML = errorBox(r); return; }
+  const x = r.result;
+  $('drillOut').innerHTML = `<div class="meaning">${esc(x.units)} · ${esc(x.tools)} tool(s) · ${esc(x.holes)} hole(s)</div>
+    ${reportBlock(x.report)}${findingsTable((x.report || {}).findings)}${raw(x)}`;
+};
+
+$('exportBtn').onclick = async () => {
+  if (!board) { $('exportOut').innerHTML = '<div class="error"><b>NO BOARD</b> Load a board first (section 1).</div>'; return; }
+  const out = $('outPath').value.trim();
+  if (!out) { $('exportOut').innerHTML = '<div class="error"><b>NO FOLDER</b> Give an output folder that does not exist yet.</div>'; return; }
+  const btn = $('exportBtn'); busy(btn, true);
+  const r = await call('/v1/tools/export.fab', { board_id: board.board_id, out });
+  busy(btn, false);
+  if (!r.ok) { $('exportOut').innerHTML = errorBox(r); return; }
+  const x = r.result, k = x.kicad_cli || {};
+  const gerbers = x.gerbers || [], drills = x.drill || [];
+  $('exportOut').innerHTML = `<div class="meaning">Written to <span class="mono">${esc(x.out)}</span>: ${gerbers.length} Gerber file(s),
+      ${drills.length} drill file(s); every file was read back and checked.</div>
+    <div class="meaning">kicad-cli ${esc(k.version || '?')} ${k.kicad9 === false ? badge('NOT KICAD 9', 'UNVERIFIED') + ' a development check only, not native evidence' : ''}</div>
+    ${reportBlock(x.report)}${raw(x)}`;
+};
+
+(async function init() {
+  const h = await call('/v1/health');
+  $('dot').className = 'dot ' + (h.ok ? 'ok' : 'bad');
+  $('serverText').textContent = h.ok ? `${h.result.server} · ${location.host}` : 'server not reachable';
+  const t = await call('/v1/tools');
+  if (!t.ok) { $('toolsOut').innerHTML = errorBox(t); return; }
+  const tools = t.result.tools || [];
+  $('toolsOut').className = '';
+  $('toolsOut').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Tool</th><th>Does</th><th>Arguments</th></tr></thead><tbody>${
+    tools.map((x) => `<tr><td class="mono">${esc(x.name)}</td><td>${esc(x.description)}</td>
+      <td class="mono">${esc(Object.keys((x.inputSchema || {}).properties || {}).join(', '))}</td></tr>`).join('')}</tbody></table></div>`;
+})();
+</script>
+</body>
+</html>

@@ -110,6 +110,22 @@ copper-core serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--
 
 Other paths are 404, other methods 405, and bodies over 16 MiB are 413. The server is single-threaded, and every response closes the connection.
 
+**Browser page (2026-11-18).** `copper-core serve-http --ui apps/web/index.html` serves the Copper Workbench page at `GET /` (and `/index.html`) as `text/html`. Without `--ui` that path is 404 `NO_PAGE`, and an unreadable `--ui` file exits 64. The page lives in `apps/web/index.html`: one file, no external resources. It only calls the routes above on the same origin. Every verdict, limit and finding it shows comes unchanged from the engine.
+
+**Hardening for browser use:**
+- **POSTs must be JSON.** Over sockets, a `POST` must carry `Content-Type: application/json`, otherwise the answer is 415 `UNSUPPORTED_MEDIA_TYPE`. A page on another origin can only send that type after a CORS preflight, which this server refuses (`OPTIONS` gets 405). So other web sites cannot drive the tools from your browser.
+- **Idle connections are dropped.** Each accepted connection has a 2-second receive timeout. A connection that sends nothing (a browser's speculative preconnect) is closed silently. Before this, one idle socket blocked the single-threaded loop indefinitely.
+
+Both are tested in `rest_server` and `rest_server_http`.
+
+Start it with `D:\copper-demo\Copper Web UI.cmd` on the development machine, or with:
+
+```
+copper-core serve-http --root <repo> --ui <repo>/apps/web/index.html [--kicad-cli <path>]
+```
+
+Then open `http://127.0.0.1:8765/`.
+
 **Tests:**
 - `rest_server` drives the pure `rest_handle` through every route and error status.
 - `rest_server_http` (`tests/test_rest_server.py`) starts the real process on a free port, drives it with urllib, and expects a clean exit after `/v1/shutdown`.

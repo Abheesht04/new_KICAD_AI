@@ -22,6 +22,7 @@ typedef SOCKET Sock;
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 typedef int Sock;
@@ -30,10 +31,11 @@ typedef int Sock;
 #endif
 
 #define MAX_REQUEST (16u << 20)
+#define RECV_TIMEOUT_MS 2000   /* per recv: a request arrives at once; an idle socket must not block the loop */
 
 static RestResponse json_response(int status, const char *body, size_t len)
 {
-    RestResponse r = {status, body, len, false};
+    RestResponse r = {status, body, len, false, NULL};
     return r;
 }
 
@@ -129,8 +131,20 @@ static RestResponse from_rpc(Arena *a, const JsonValue *resp)
 
 RestResponse rest_handle(ToolServer *s, Arena *a, const char *method, const char *path, const char *body, size_t len)
 {
+    return rest_handle_ui(s, NULL, a, method, path, body, len);
+}
+
+RestResponse rest_handle_ui(ToolServer *s, const RestUi *ui, Arena *a, const char *method, const char *path,
+                            const char *body, size_t len)
+{
     if (!s || !a || !method || !path) return json_response(500, "{}", 2);
     bool get = !strcmp(method, "GET"), post = !strcmp(method, "POST");
+    if (!strcmp(path, "/") || !strcmp(path, "/index.html")) {
+        if (!ui || !ui->html) return error(a, 404, "NO_PAGE", "no browser page: start copper-core serve-http with --ui FILE");
+        if (!get) return error(a, 405, "METHOD_NOT_ALLOWED", "use GET");
+        RestResponse r = {200, ui->html, ui->len, false, "text/html; charset=utf-8"};
+        return r;
+    }
     if (!strcmp(path, "/v1/health")) {
         if (!get) return error(a, 405, "METHOD_NOT_ALLOWED", "use GET");
         static const char ok[] = "{\"status\":\"ok\",\"server\":\"copper-core\"}";
@@ -203,6 +217,7 @@ static const char *reason(int status)
     switch (status) {
     case 200: return "OK"; case 204: return "No Content"; case 400: return "Bad Request"; case 404: return "Not Found";
     case 405: return "Method Not Allowed"; case 409: return "Conflict"; case 413: return "Payload Too Large";
+    case 415: return "Unsupported Media Type";
     case 422: return "Unprocessable Entity"; case 502: return "Bad Gateway"; case 503: return "Service Unavailable";
     default: return "Error";
     }
@@ -210,14 +225,43 @@ static const char *reason(int status)
 
 static void respond(Sock c, const RestResponse *r)
 {
-    char head[256];
-    int n = snprintf(head, sizeof head, "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
-                     r->status, reason(r->status), r->body_len);
+    char head[384];
+    int n = snprintf(head, sizeof head, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
+                     "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+                     r->status, reason(r->status), r->content_type ? r->content_type : "application/json", r->body_len);
+    if (n < 0 || (size_t)n >= sizeof head) return;
     if (send_all(c, head, (size_t)n) && r->body_len) send_all(c, r->body, r->body_len);
 }
 
-/* Read one request: request line, headers, Content-Length body. False on a malformed or oversized request. */
-static bool read_request(Sock c, Arena *a, char **method, char **path, char **body, size_t *blen, int *bad_status)
+/* Bound every recv on `c` (a browser may open a connection and send nothing). False if the option is refused. */
+static bool set_recv_timeout(Sock c, int ms)
+{
+#ifdef _WIN32
+    DWORD v = (DWORD)ms;
+    return setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, (const char *)&v, sizeof v) == 0;
+#else
+    struct timeval v;
+    v.tv_sec = ms / 1000;
+    v.tv_usec = (ms % 1000) * 1000;
+    return setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &v, sizeof v) == 0;
+#endif
+}
+
+/* True when `p` starts with `lower` (ASCII, case-insensitive). */
+static bool header_name_is(const char *p, const char *lower)
+{
+    for (; *lower; p++, lower++) {
+        char ch = *p;
+        if (ch >= 'A' && ch <= 'Z') ch = (char)(ch - 'A' + 'a');
+        if (ch != *lower) return false;
+    }
+    return true;
+}
+
+/* Read one request: request line, headers, Content-Length body. False on a malformed or oversized request;
+ * *bad_status is 0 when the peer sent nothing at all (closed, or idle past the receive timeout). */
+static bool read_request(Sock c, Arena *a, char **method, char **path, char **body, size_t *blen, int *bad_status,
+                         bool *json_type)
 {
     size_t cap = 1 << 14, n = 0, header_end = 0, need = 0;
     char *buf = arena_alloc(a, cap);
@@ -232,7 +276,7 @@ static bool read_request(Sock c, Arena *a, char **method, char **path, char **bo
             cap *= 2;
         }
         int k = recv(c, buf + n, (int)(cap - n), 0);
-        if (k <= 0) return false;
+        if (k <= 0) { if (n == 0) *bad_status = 0; return false; }
         n += (size_t)k;
         if (!header_end) {
             for (size_t i = 3; i < n; i++) if (buf[i - 3] == '\r' && buf[i - 2] == '\n' && buf[i - 1] == '\r' && buf[i] == '\n') { header_end = i + 1; break; }
@@ -241,6 +285,12 @@ static bool read_request(Sock c, Arena *a, char **method, char **path, char **bo
             for (size_t i = 0; i + 15 < header_end; i++) {
                 if ((i == 0 || buf[i - 1] == '\n') && (buf[i] | 32) == 'c' && !strncmp(buf + i + 1, "ontent-", 7) && ((buf[i + 8] | 32) == 'l') && !strncmp(buf + i + 9, "ength:", 6))
                     content = strtoul(buf + i + 15, NULL, 10);
+                /* Content-Type: application/json (case-insensitive name and type; parameters such as charset allowed) */
+                if ((i == 0 || buf[i - 1] == '\n') && i + 13 < header_end && header_name_is(buf + i, "content-type:")) {
+                    const char *v = buf + i + 13;
+                    while (*v == ' ' || *v == '\t') v++;
+                    *json_type = header_name_is(v, "application/json") && (v[16] == '\r' || v[16] == ';' || v[16] == ' ');
+                }
             }
             if (content > MAX_REQUEST) { *bad_status = 413; return false; }
             need = header_end + content;
@@ -266,6 +316,11 @@ static bool read_request(Sock c, Arena *a, char **method, char **path, char **bo
 }
 
 RestStatus rest_serve(ToolServer *s, const char *host, int port, void (*ready)(void *, int), void *ctx)
+{
+    return rest_serve_ui(s, NULL, host, port, ready, ctx);
+}
+
+RestStatus rest_serve_ui(ToolServer *s, const RestUi *ui, const char *host, int port, void (*ready)(void *, int), void *ctx)
 {
 #ifdef _WIN32
     WSADATA wsa;
@@ -295,14 +350,22 @@ RestStatus rest_serve(ToolServer *s, const char *host, int port, void (*ready)(v
     for (bool stop = false; !stop;) {
         Sock c = accept(l, NULL, NULL);
         if (c == BAD_SOCK) { st = REST_SOCKET_ERROR; break; }
+        if (!set_recv_timeout(c, RECV_TIMEOUT_MS)) { close_sock(c); continue; }
         Arena a;
         arena_init(&a, 1 << 16);
         char *method, *path, *body;
         size_t blen;
         int bad;
+        bool json_type = false;
         RestResponse r;
-        if (read_request(c, &a, &method, &path, &body, &blen, &bad)) r = rest_handle(s, &a, method, path, body, blen);
-        else r = error(&a, bad, bad == 413 ? "TOO_LARGE" : "BAD_HTTP", bad == 413 ? "the request is larger than 16 MiB" : "not an HTTP/1.1 request");
+        bool ok = read_request(c, &a, &method, &path, &body, &blen, &bad, &json_type);
+        if (!ok && bad == 0) { close_sock(c); arena_destroy(&a); continue; }   /* idle: nothing to answer */
+        if (!ok)
+            r = error(&a, bad, bad == 413 ? "TOO_LARGE" : "BAD_HTTP", bad == 413 ? "the request is larger than 16 MiB" : "not an HTTP/1.1 request");
+        else if (!strcmp(method, "POST") && !json_type)
+            r = error(&a, 415, "UNSUPPORTED_MEDIA_TYPE", "a POST needs Content-Type: application/json");
+        else
+            r = rest_handle_ui(s, ui, &a, method, path, body, blen);
         respond(c, &r);
         stop = r.stop;
         close_sock(c);

@@ -72,6 +72,24 @@ int main(void)
     CHECK(r.status == 200 && v && json_get(v, "result") && !strcmp(json_get(v, "id")->text, "5"));
     r = call(&s, &a, "POST", "/v1/rpc", "{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\"}");
     CHECK(r.status == 204 && r.body_len == 0);
+    /* The browser page at GET / (rest_handle_ui); rest_handle has none. JSON routes keep the JSON type. */
+    static const char page[] = "<!doctype html><title>t</title><p>page</p>";
+    RestUi ui = {page, sizeof page - 1};
+    r = call(&s, &a, "GET", "/", NULL);
+    CHECK(r.status == 404 && !strcmp(kind(&a, &r), "NO_PAGE"));
+    r = rest_handle_ui(&s, NULL, &a, "GET", "/", NULL, 0);
+    CHECK(r.status == 404 && !strcmp(kind(&a, &r), "NO_PAGE"));
+    r = rest_handle_ui(&s, &ui, &a, "GET", "/", NULL, 0);
+    CHECK(r.status == 200 && r.content_type && !strncmp(r.content_type, "text/html", 9) && r.body_len == ui.len &&
+          !memcmp(r.body, page, ui.len));
+    r = rest_handle_ui(&s, &ui, &a, "GET", "/index.html", NULL, 0);
+    CHECK(r.status == 200 && r.body == page);
+    r = rest_handle_ui(&s, &ui, &a, "POST", "/", "{}", 2);
+    CHECK(r.status == 405);
+    r = rest_handle_ui(&s, &ui, &a, "GET", "/index.htm", NULL, 0);
+    CHECK(r.status == 404 && !strcmp(kind(&a, &r), "NOT_FOUND"));
+    r = rest_handle_ui(&s, &ui, &a, "GET", "/v1/health", NULL, 0);
+    CHECK(r.status == 200 && r.content_type == NULL && strstr(r.body, "\"ok\""));
     r = call(&s, &a, "POST", "/v1/shutdown", NULL);
     CHECK(r.status == 200 && r.stop);
     tool_server_destroy(&s);

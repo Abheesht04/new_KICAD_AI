@@ -11,6 +11,10 @@
  *   POST /v1/rpc                 body: one JSON-RPC 2.0 message -> 200 with the JSON-RPC response (204 for a
  *                                notification)
  *   POST /v1/shutdown            stops rest_serve after this response
+ *   GET  /  (or /index.html)     the browser page given to rest_handle_ui / rest_serve_ui (text/html); 404 when
+ *                                none was given
+ * Over sockets, a POST must carry Content-Type: application/json (415 otherwise): a page on another origin can
+ * only send that header after a CORS preflight, which this server refuses, so other sites cannot drive it.
  * A tool error is {"error": {code, message, data: {kind, hint, ...}}} with an HTTP status from its kind:
  * 400 bad request / params, 404 unknown tool / input not found / unknown board_id, 409 output exists,
  * 422 invalid input, 502 kicad-cli failed, 503 kicad-cli unavailable. Other paths 404, other methods 405.
@@ -36,14 +40,27 @@ typedef struct RestResponse {
     const char *body;         /* JSON (or empty for 204) */
     size_t body_len;
     bool stop;                /* /v1/shutdown */
+    const char *content_type; /* NULL: application/json */
 } RestResponse;
 
+/* A browser page served at GET / (owned by the caller, unchanged while serving). */
+typedef struct RestUi {
+    const char *html;
+    size_t len;
+} RestUi;
+
 RestResponse rest_handle(ToolServer *server, Arena *arena, const char *method, const char *path, const char *body, size_t len);
+/* rest_handle plus GET / for `ui` (NULL: no page). */
+RestResponse rest_handle_ui(ToolServer *server, const RestUi *ui, Arena *arena, const char *method, const char *path,
+                            const char *body, size_t len);
 
 typedef enum RestStatus { REST_OK = 0, REST_BIND_FAILED, REST_SOCKET_ERROR } RestStatus;
 
 /* Serve until /v1/shutdown. `ready` (may be NULL) is called once the socket listens, with the bound port. */
 RestStatus rest_serve(ToolServer *server, const char *host, int port, void (*ready)(void *ctx, int port), void *ctx);
+/* rest_serve that also serves `ui` (NULL: no page) at GET /. */
+RestStatus rest_serve_ui(ToolServer *server, const RestUi *ui, const char *host, int port,
+                         void (*ready)(void *ctx, int port), void *ctx);
 
 #ifdef __cplusplus
 }

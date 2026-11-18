@@ -368,25 +368,48 @@ static int agent_eval(int argc,char **argv) {
     (void)dummy; arena_destroy(&arena);
     return pass==total?0:2;
 }
-/* serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--log FILE]: the REST front end
+/* serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--log FILE] [--ui FILE]: the REST front end
  * (src/v2_src/rest_server.c) on http://H:N (127.0.0.1:8765 by default; port 0 picks a free one). Prints the
- * listening URL on stdout once ready; stops on POST /v1/shutdown. No authentication: keep it on a trusted host. */
+ * listening URL on stdout once ready; stops on POST /v1/shutdown. No authentication: keep it on a trusted host.
+ * --ui serves that HTML file at GET / (apps/web/index.html is the Copper browser page); it is read once, at start. */
 static void http_ready(void *ctx,int port) { (void)ctx; printf("listening on port %d\n",port); fflush(stdout); }
+static char *read_whole_file(const char *path,size_t *len) {
+    FILE *f=fopen(path,"rb"); if(!f) return NULL;
+    char *buf=NULL; size_t cap=0,n=0;
+    for(;;) {
+        if(n+65536>cap) { size_t nc=cap?cap*2:131072; char *more=realloc(buf,nc); if(!more) { free(buf); fclose(f); return NULL; } buf=more; cap=nc; }
+        size_t got=fread(buf+n,1,cap-n,f); n+=got;
+        if(got==0) break;
+        if(n>(8u<<20)) { free(buf); fclose(f); return NULL; }   /* a page, not an archive */
+    }
+    int bad=ferror(f); fclose(f);
+    if(bad) { free(buf); return NULL; }
+    *len=n; return buf;
+}
 static int serve_http(int argc,char **argv) {
     ToolServerConfig cfg; memset(&cfg,0,sizeof cfg); cfg.version="2.0.0-dev"; FILE *log=NULL; const char *host="127.0.0.1"; int port=8765;
+    const char *ui_path=NULL;
     for(int i=2;i<argc;i++) {
-        if(i+1<argc && !strcmp(argv[i],"--host")) host=argv[++i];
+        if(i+1<argc && !strcmp(argv[i],"--ui")) ui_path=argv[++i];
+        else if(i+1<argc && !strcmp(argv[i],"--host")) host=argv[++i];
         else if(i+1<argc && !strcmp(argv[i],"--port")) port=atoi(argv[++i]);
         else if(i+1<argc && !strcmp(argv[i],"--root")) cfg.root=argv[++i];
         else if(i+1<argc && !strcmp(argv[i],"--kicad-cli")) cfg.kicad_cli=argv[++i];
         else if(i+1<argc && !strcmp(argv[i],"--log")) { log=fopen(argv[++i],"ab"); if(!log) { fprintf(stderr,"serve-http: cannot open the log %s\n",argv[i]); return 64; } }
-        else { fprintf(stderr,"copper-core serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--log FILE]\n"); return 64; }
+        else { fprintf(stderr,"copper-core serve-http [--host H] [--port N] [--root DIR] [--kicad-cli PATH] [--log FILE] [--ui FILE]\n"); if(log) fclose(log); return 64; }
     }
-    if(port<0||port>65535) { fprintf(stderr,"serve-http: --port is 0..65535\n"); return 64; }
+    if(port<0||port>65535) { fprintf(stderr,"serve-http: --port is 0..65535\n"); if(log) fclose(log); return 64; }
+    RestUi ui={NULL,0};
+    char *page=NULL;
+    if(ui_path) {
+        page=read_whole_file(ui_path,&ui.len);
+        if(!page) { fprintf(stderr,"serve-http: cannot read the page %s\n",ui_path); if(log) fclose(log); return 64; }
+        ui.html=page;
+    }
     if(log) { cfg.log=serve_log; cfg.log_ctx=log; }
     ToolServer s; tool_server_init(&s,&cfg);
-    RestStatus st=rest_serve(&s,host,port,http_ready,NULL);
-    tool_server_destroy(&s); if(log) fclose(log);
+    RestStatus st=rest_serve_ui(&s,ui_path?&ui:NULL,host,port,http_ready,NULL);
+    tool_server_destroy(&s); if(log) fclose(log); free(page);
     if(st!=REST_OK) { fprintf(stderr,"serve-http: %s on %s:%d\n",st==REST_BIND_FAILED?"cannot listen":"socket error",host,port); return 1; }
     return 0;
 }
@@ -460,7 +483,7 @@ int main(int argc,char **argv) {
     if(argc==3 && !strcmp(argv[1],"gerber")) return gerber_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
     if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] | serve-http [--port N] [--root DIR] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR | place PROBLEM ITERATIONS SEEDS\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] | serve-http [--port N] [--root DIR] [--ui FILE] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR | place PROBLEM ITERATIONS SEEDS\n");return 64;}
     if(argc==5 && !strcmp(argv[1],"place")) return place(argv[2],argv[3],argv[4]);
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);
