@@ -35,6 +35,17 @@ typedef struct CopperProject {
   const char *copper_dir;
   const char *cache_dir;
   const char *logs_dir;
+  const char *derived_dir;
+  const char *reports_dir;
+  const char *physics_dir;
+  const char *history_dir;
+  const char *manifest_file;
+  const char *design_file;
+  const char *import_report_file;
+  const char *fabrication_dir;
+  const char *gerbers_dir;
+  const char *drill_dir;
+  const char *fabrication_reports_dir;
   const char *symbol_table_file;
   const char *footprint_table_file;
   const char *kicad_cli_path;
@@ -49,7 +60,7 @@ typedef struct CopperProjectCreateOptions {
   const char *parent_directory;
   const char *project_name;
 
-  /* Creates .copper/cache and .copper/logs when true. */
+  /* Creates the standard .copper workspace and top-level fabrication folders. */
   bool create_copper_workspace;
 
   /* Optional explicit path to kicad-cli[.exe]. NULL triggers discovery. */
@@ -77,11 +88,16 @@ CopperProjectStatus copper_project_open(Arena *arena,
                                         CopperProject *out,
                                         CopperProjectError *error);
 
+/* Creates the standard Copper workspace directories without modifying any
+ * native KiCad file. Existing directories are accepted. */
+CopperProjectStatus copper_project_ensure_workspace(
+    const CopperProject *project, CopperProjectError *error);
+
 bool copper_project_name_is_valid(const char *name);
 
 /*
- * Resolves an explicit path, KICAD_CLI_PATH, PATH, then common KiCad 9
- * Windows install locations. The resulting path is arena-owned.
+ * Resolves an explicit path, KICAD_CLI_PATH, then PATH. Installation roots
+ * are never hardcoded; the resulting path is arena-owned.
  */
 CopperProjectStatus copper_project_find_kicad_cli(
     Arena *arena, const char *explicit_path, const char **out_path);

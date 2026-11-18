@@ -15,6 +15,11 @@ double nm_rsqrt(double s);
 /* sqrt(s) for s >= 0 (returns 0 for s == 0), computed as s * nm_rsqrt(s). */
 double nm_sqrt(double s);
 
+/* Exact unsigned magnitude, including INT64_MIN -> 2^63. */
+uint64_t nm_abs_i64_magnitude(int64_t v);
+
+/* Saturating legacy helper: INT64_MIN maps to INT64_MAX, avoiding UB.
+ * Use nm_abs_i64_magnitude when the exact magnitude matters. */
 int64_t nm_abs_i64(int64_t v);
 double nm_abs_f64(double v);
 double nm_min_f64(double a, double b);

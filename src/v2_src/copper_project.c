@@ -20,6 +20,32 @@
 
 #define COPPER_STAGING_SUFFIX ".copper-staging-"
 
+static bool copy_environment_value(char *out, size_t capacity,
+                                   const char *name) {
+  if (out == NULL || capacity == 0 || name == NULL) return false;
+  out[0] = '\0';
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(_UCRT)) /* _dupenv_s: MSVC and UCRT runtimes */
+  char *value = NULL;
+  size_t value_size = 0;
+  if (_dupenv_s(&value, &value_size, name) != 0 || value == NULL) {
+    free(value);
+    return false;
+  }
+  size_t length = strlen(value);
+  bool fits = length < capacity;
+  if (fits) memcpy(out, value, length + 1u);
+  free(value);
+  return fits;
+#else
+  const char *value = getenv(name);
+  if (value == NULL) return false;
+  size_t length = strlen(value);
+  if (length >= capacity) return false;
+  memcpy(out, value, length + 1u);
+  return true;
+#endif
+}
+
 static void set_error(CopperProjectError *error, CopperProjectStatus code,
                       FsStatus fs_code) {
   if (error == NULL) return;
@@ -178,7 +204,18 @@ static CopperProjectStatus build_project_paths(Arena *arena,
   out->copper_dir = arena_strdup(arena, path_buffer);
   if (out->copper_dir == NULL ||
       !make_project_path(arena, out->copper_dir, "cache", &out->cache_dir) ||
-      !make_project_path(arena, out->copper_dir, "logs", &out->logs_dir)) {
+      !make_project_path(arena, out->copper_dir, "logs", &out->logs_dir) ||
+      !make_project_path(arena, out->copper_dir, "derived", &out->derived_dir) ||
+      !make_project_path(arena, out->copper_dir, "reports", &out->reports_dir) ||
+      !make_project_path(arena, out->copper_dir, "physics", &out->physics_dir) ||
+      !make_project_path(arena, out->copper_dir, "history", &out->history_dir) ||
+      !make_project_path(arena, out->copper_dir, "manifest.json", &out->manifest_file) ||
+      !make_project_path(arena, out->copper_dir, "design.json", &out->design_file) ||
+      !make_project_path(arena, out->reports_dir, "import.json", &out->import_report_file) ||
+      !make_project_path(arena, root_directory, "fabrication", &out->fabrication_dir) ||
+      !make_project_path(arena, out->fabrication_dir, "gerbers", &out->gerbers_dir) ||
+      !make_project_path(arena, out->fabrication_dir, "drill", &out->drill_dir) ||
+      !make_project_path(arena, out->fabrication_dir, "reports", &out->fabrication_reports_dir)) {
     return COPPER_PROJECT_ERR_MEMORY;
   }
   return COPPER_PROJECT_OK;
@@ -187,7 +224,7 @@ static CopperProjectStatus build_project_paths(Arena *arena,
 CopperProjectStatus copper_project_find_kicad_cli(
     Arena *arena, const char *explicit_path, const char **out_path) {
   char candidate[FS_PATH_MAX];
-  const char *configured;
+  char configured[FS_PATH_MAX];
   FsStatus fs_status;
   if (out_path == NULL || arena == NULL) return COPPER_PROJECT_ERR_ARGUMENT;
   *out_path = NULL;
@@ -201,9 +238,9 @@ CopperProjectStatus copper_project_find_kicad_cli(
     return *out_path != NULL ? COPPER_PROJECT_OK : COPPER_PROJECT_ERR_MEMORY;
   }
 
-  configured = getenv("KICAD_CLI_PATH");
-  if (configured != NULL && configured[0] != '\0' &&
-      fs_is_executable(configured)) {
+  if (copy_environment_value(configured, sizeof(configured),
+                             "KICAD_CLI_PATH") &&
+      configured[0] != '\0' && fs_is_executable(configured)) {
     fs_status = fs_path_absolute(candidate, sizeof(candidate), configured);
     if (fs_status == FS_OK) {
       *out_path = arena_strdup(arena, candidate);
@@ -222,34 +259,8 @@ CopperProjectStatus copper_project_find_kicad_cli(
     }
   }
 
-#ifdef _WIN32
-  {
-    const char *program_files = getenv("ProgramFiles");
-    const char *program_files_x86 = getenv("ProgramFiles(x86)");
-    const char *roots[3] = {program_files, program_files_x86, "C:\\Program Files"};
-    const char *versions[] = {"9.0", "9.0\\bin"};
-    for (size_t r = 0; r < 3; ++r) {
-      if (roots[r] == NULL || roots[r][0] == '\0') continue;
-      for (size_t v = 0; v < 2; ++v) {
-        char install_dir[FS_PATH_MAX];
-        char bin_dir[FS_PATH_MAX];
-        if (fs_path_join(install_dir, sizeof(install_dir), roots[r], "KiCad") !=
-                FS_OK ||
-            fs_path_join(bin_dir, sizeof(bin_dir), install_dir, versions[v]) !=
-                FS_OK ||
-            fs_path_join(candidate, sizeof(candidate), bin_dir,
-                         "kicad-cli.exe") != FS_OK) {
-          continue;
-        }
-        if (fs_is_executable(candidate)) {
-          *out_path = arena_strdup(arena, candidate);
-          return *out_path != NULL ? COPPER_PROJECT_OK
-                                   : COPPER_PROJECT_ERR_MEMORY;
-        }
-      }
-    }
-  }
-#endif
+  /* Installation paths are intentionally not guessed: users select an exact
+     executable with --kicad-cli or KICAD_CLI_PATH, or expose it through PATH. */
   return COPPER_PROJECT_ERR_CLI_NOT_FOUND;
 }
 
@@ -301,6 +312,36 @@ CopperProjectStatus copper_project_open(Arena *arena,
   out->has_symbol_table = fs_file_exists(out->symbol_table_file);
   out->has_footprint_table = fs_file_exists(out->footprint_table_file);
   (void)copper_project_find_kicad_cli(arena, NULL, &out->kicad_cli_path);
+  set_error(error, COPPER_PROJECT_OK, FS_OK);
+  return COPPER_PROJECT_OK;
+}
+
+CopperProjectStatus copper_project_ensure_workspace(
+    const CopperProject *project, CopperProjectError *error) {
+  const char *directories[11];
+  if (!project || !project->copper_dir || !project->fabrication_dir) {
+    set_error(error, COPPER_PROJECT_ERR_ARGUMENT, FS_ERR_ARGUMENT);
+    return COPPER_PROJECT_ERR_ARGUMENT;
+  }
+  directories[0] = project->copper_dir;
+  directories[1] = project->cache_dir;
+  directories[2] = project->logs_dir;
+  directories[3] = project->derived_dir;
+  directories[4] = project->reports_dir;
+  directories[5] = project->physics_dir;
+  directories[6] = project->history_dir;
+  directories[7] = project->fabrication_dir;
+  directories[8] = project->gerbers_dir;
+  directories[9] = project->drill_dir;
+  directories[10] = project->fabrication_reports_dir;
+  for (size_t i = 0; i < 11u; ++i) {
+    FsStatus fs = fs_create_directories(directories[i]);
+    if (fs != FS_OK && fs != FS_ERR_ALREADY_EXISTS) {
+      CopperProjectStatus status = map_fs_status(fs);
+      set_error(error, status, fs);
+      return status;
+    }
+  }
   set_error(error, COPPER_PROJECT_OK, FS_OK);
   return COPPER_PROJECT_OK;
 }
@@ -505,6 +546,10 @@ CopperProjectStatus copper_project_create(
 
   status = copper_project_open(arena, final_root, out, error);
   if (status != COPPER_PROJECT_OK) return status;
+  if (options->create_copper_workspace) {
+    status = copper_project_ensure_workspace(out, error);
+    if (status != COPPER_PROJECT_OK) return status;
+  }
   if (options->kicad_cli_path != NULL && options->kicad_cli_path[0] != '\0') {
     const char *cli_path = NULL;
     if (copper_project_find_kicad_cli(arena, options->kicad_cli_path,

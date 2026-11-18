@@ -1,3 +1,6 @@
+#ifndef COPPER_EXCELLON_H
+#define COPPER_EXCELLON_H
+
 #pragma once
 
 #include <stdbool.h>
@@ -150,3 +153,5 @@ ExcIssueCode exc_decimal_to_nm(const char *text, size_t length, ExcUnits units,
 const ExcTool *exc_find_tool(const ExcFile *file, uint32_t number);
 const char *exc_status_name(ExcStatus status);
 const char *exc_issue_text(ExcIssueCode code);
+
+#endif /* COPPER_EXCELLON_H */

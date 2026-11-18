@@ -1,0 +1,5 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Resistor_SMD") (type "KiCad")
+       (uri "${KIPRJMOD}/local_footprints/Resistor_SMD.pretty")
+       (options "") (descr "Project-local test footprint library")))

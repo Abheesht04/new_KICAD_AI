@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copper.local/schemas/copper.optimization-apply.v1.schema.json",
+  "title": "Copper Optimization Apply Result",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "status",
+    "committed",
+    "action",
+    "before",
+    "after",
+    "board_state",
+    "native_kicad_export",
+    "manufacturing_release_ready"
+  ],
+  "properties": {
+    "schema": {
+      "const": "copper.optimization-apply"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "type": "string"
+    },
+    "committed": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "base_board_hash",
+        "evaluation_hash",
+        "kind",
+        "footprint_index",
+        "delta_nm",
+        "net_id",
+        "router"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "base_board_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "evaluation_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "footprint_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delta_nm": {
+          "type": "object",
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "net_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "router": {
+          "type": "object"
+        }
+      }
+    },
+    "added_track_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "router_status": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "before": {
+      "type": "object"
+    },
+    "after": {
+      "type": "object"
+    },
+    "board_state": {
+      "type": "object",
+      "required": [
+        "footprints",
+        "tracks",
+        "snapshot_scope",
+        "is_partial_snapshot",
+        "board_hash"
+      ],
+      "properties": {
+        "footprints": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "snapshot_scope": {
+          "const": "footprint_positions_and_tracks_only"
+        },
+        "is_partial_snapshot": {
+          "const": true
+        },
+        "board_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{16}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_kicad_export": {
+      "const": "NOT_IMPLEMENTED"
+    },
+    "manufacturing_release_ready": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,13 @@
+(copper_jlc_catalogue
+  (schema 1)
+  (source "unit-test")
+  (parts
+    (part (lcsc_id "C100") (part_id "PART_A") (mpn "A1")
+      (manufacturer "Example") (jlc_package "0603") (footprint "R_0603")
+      (class basic) (unit_price_micro_usd 1000) (stock 500)
+      (observed_date "2025-01-01") (source "unit-test"))
+    (part (lcsc_id "C200") (part_id "PART_B") (mpn "B1")
+      (manufacturer "Example") (jlc_package "0603") (footprint "R_0603")
+      (class basic) (unit_price_micro_usd 2000) (stock 600)
+      (observed_date "2026-11-14") (source "unit-test"))
+  ))

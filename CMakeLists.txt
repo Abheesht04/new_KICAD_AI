@@ -91,6 +91,7 @@ add_library(copper_v2 STATIC
     src/v2_src/dfm_cpu_ref.c
     src/v2_src/rest_server.c
     src/v2_src/placement.c
+    src/v2_src/sha256.c  # filesystem.c: fs_sha256_* (design overlay)
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
 # Track H: the CUDA clearance kernel is opt-in (-DCOPPER_CUDA=ON, needs nvcc and CUDA 11.5+). Without it a stub
@@ -411,4 +412,72 @@ option(COPPER_BUILD_DESKTOP "Build GLFW + Vulkan Copper Studio" OFF)
 if(COPPER_BUILD_DESKTOP)
   enable_language(CXX)
   add_subdirectory(desktop)
+endif()
+
+# Copper design overlay (ported from orphan branch feature/update, commit 71c22bb): topology, part catalogue and
+# KiCad asset resolution, design resolver, a second board model (design_board), integer DFM check, placer, router,
+# SPICE/MNA and the engineering and optimization loops, with the `copper` CLI (apps/copper_cli.c).
+# It is its own library: its board model and MNA define symbols (board_rotate, mna_*) that copper_v2 and hwcore also
+# define, so copper_design is never linked into the same executable as either. It compiles the shared base modules
+# (src/, identical to src/v2_src/) and the reconciled V2 shared modules itself. Policy as shipped with the overlay:
+# strict warnings as errors, no FP contraction, assertions kept on in its tests.
+set(COPPER_DESIGN_SOURCES
+    src/IR.c src/arena.c src/cplx.c src/nmath.c src/sexpr.c src/u128.c
+    src/v2_src/g2_types.c src/v2_src/excellon.c src/v2_src/kicad_library_table.c src/v2_src/filesystem.c
+    src/v2_src/copper_project.c
+    src/v2_src/design_board.c src/v2_src/board_kicad.c src/v2_src/circuit.c src/v2_src/copper_linalg.c
+    src/v2_src/schematic.c src/v2_src/project_kicad.c src/v2_src/netlist_kicad.c src/v2_src/design_parity.c
+    src/v2_src/copper_design.c src/v2_src/copper_design_json.c src/v2_src/topology.c src/v2_src/topology_json.c
+    src/v2_src/engineering_loop.c src/v2_src/engineering_loop_json.c src/v2_src/optimization_loop.c
+    src/v2_src/optimization_loop_json.c src/v2_src/design_resolver.c src/v2_src/kicad_asset_resolver.c
+    src/v2_src/design_resolution_json.c src/v2_src/copper_spice.c src/v2_src/copper_spice_expand.c
+    src/v2_src/copper_spice_fs.c src/v2_src/dfm_check.c src/v2_src/fab_rules.c src/v2_src/jlc_catalogue.c
+    src/v2_src/kicad_assets.c src/v2_src/spice_mna.c src/v2_src/part_catalogue.c src/v2_src/placer.c
+    src/v2_src/report.c src/v2_src/router.c src/v2_src/sha256.c)
+add_library(copper_design STATIC ${COPPER_DESIGN_SOURCES})
+target_include_directories(copper_design PUBLIC src/v2_src)
+function(copper_design_policy target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /fp:strict)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -ffp-contract=off -fno-fast-math)
+    endif()
+endfunction()
+copper_design_policy(copper_design)
+if(UNIX)
+    target_link_libraries(copper_design PUBLIC m)   # solver physics only; geometry modules are linted below
+endif()
+if(WIN32)
+    target_link_libraries(copper_design PUBLIC ole32)   # CoCreateGuid (copper_project.c)
+endif()
+# Geometry and DFM modules of the overlay: no floating point or libm (CLAUDE.md section 2).
+foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c fab_rules.c jlc_catalogue.c)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/v2_src/${module}" module_source)
+    if(module_source MATCHES "#[ \t]*include[ \t]*<math\\.h>" OR
+       module_source MATCHES "(^|[^A-Za-z0-9_])(double|float)([^A-Za-z0-9_]|$)" OR
+       module_source MATCHES "\\b(sin|cos|sqrt|hypot|fabs|floor|ceil|atan2|llround)\\s*\\(")
+        message(FATAL_ERROR "Floating point/libm use is forbidden in src/v2_src/${module}")
+    endif()
+endforeach()
+add_executable(copper apps/copper_cli.c)
+target_link_libraries(copper PRIVATE copper_design)
+copper_design_policy(copper)
+if(HWCOMPILER_BUILD_TESTS)
+    # The overlay's tests use assert(); NDEBUG is undefined for them so Release builds still check.
+    foreach(pair core:test_core design:test_design catalogue_asset:test_catalogue_assets topology:test_topology
+                 engineering:test_engineering_loop optimization:test_optimization_loop)
+        string(REPLACE ":" ";" parts "${pair}")
+        list(GET parts 0 name)
+        list(GET parts 1 source)
+        add_executable(copper_${name}_tests src/v2_src/tests/${source}.c)
+        target_link_libraries(copper_${name}_tests PRIVATE copper_design)
+        target_compile_definitions(copper_${name}_tests PRIVATE COPPER_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/v2_src")
+        copper_design_policy(copper_${name}_tests)
+        if(MSVC)
+            target_compile_options(copper_${name}_tests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(copper_${name}_tests PRIVATE -UNDEBUG)
+        endif()
+        add_test(NAME copper_${name}_tests COMMAND copper_${name}_tests)
+    endforeach()
 endif()

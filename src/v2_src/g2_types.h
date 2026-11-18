@@ -159,6 +159,22 @@ typedef struct {
 
 } G2Shape;
 
+/* Declarations of functions already defined in g2_types.c (added with the feature/update design overlay). */
+G2Status g2_circle_validate(G2Circle circle);
+G2Status g2_capsule_validate(G2Capsule capsule);
+G2Status g2_circle_aabb(G2Circle circle, G2Aabb *out_box);
+G2Status g2_capsule_aabb(G2Capsule capsule, G2Aabb *out_box);
+
+/* AABB BVH API used by the shape BVH wrappers. */
+G2Status g2_bvh_build(Arena *arena, const G2Aabb *bounds, size_t count,
+                      size_t leaf_capacity, G2Bvh *out_tree);
+G2Status g2_bvh_query(const G2Bvh *tree, G2Aabb query, size_t *out_ids,
+                      size_t capacity, size_t *out_count);
+
+/* Demonstration helper retained from the source drop; not used by the engine. */
+void g2_bvh_usage_example(const G2Shape *shapes, size_t shape_count,
+                          G2Shape query_shape, G2Nm required_clearance_nm);
+
 G2Status g2_vector_between(G2Point from, G2Point to, G2Vector *out);
 
 G2Status g2_vector_dot(G2Vector a, G2Vector b, int64_t *out_dot);
@@ -168,9 +184,6 @@ G2Status g2_vector_cross(G2Vector a, G2Vector b, int64_t *out_cross);
 G2Status g2_orient2d(G2Point a, G2Point b, G2Point c, G2Order *out_order);
 
 G2Status g2_distance_squared(G2Point a, G2Point b, uint64_t *out_squared);
-
-G2Status g2_compare_distance(G2Point a, G2Point b, G2Nm threshold,
-                             G2Order *out_order);
 
 G2Status g2_compare_distance(G2Point a, G2Point b, G2Nm threshold,
                              G2Order *out_order);

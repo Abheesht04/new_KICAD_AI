@@ -66,7 +66,18 @@ double nm_sqrt(double s) {
 /**
  * Absolute value for 64-bit signed integer.
  */
-int64_t nm_abs_i64(int64_t v) { return (v < 0) ? -v : v; }
+uint64_t nm_abs_i64_magnitude(int64_t v)
+{
+    if (v >= 0) return (uint64_t)v;
+    /* Avoid negating INT64_MIN: -(v + 1) is always representable. */
+    return (uint64_t)(-(v + 1)) + UINT64_C(1);
+}
+
+int64_t nm_abs_i64(int64_t v)
+{
+    if (v == INT64_MIN) return INT64_MAX;
+    return v < 0 ? -v : v;
+}
 
 /**
  * Absolute value for 64-bit float, clearing the sign bit directly.

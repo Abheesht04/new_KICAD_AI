@@ -1204,7 +1204,7 @@ static bool ir_sink_indent(IRSink *sink, unsigned depth, unsigned indent_width)
     if (indent_width == 0 || depth == 0) return true;
     if (depth > SIZE_MAX / indent_width) return false;
     size_t count = (size_t)depth * (size_t)indent_width;
-    static const char spaces[32] = "                                ";
+    static const char spaces[] = "                                ";
     while (count) {
         size_t chunk = count < sizeof(spaces) - 1u ? count : sizeof(spaces) - 1u;
         if (!ir_sink_bytes(sink, spaces, chunk)) return false;
