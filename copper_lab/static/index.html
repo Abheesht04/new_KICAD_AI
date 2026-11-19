@@ -20,7 +20,7 @@
     </header>
 
     <section class="status-strip" aria-label="Tool status">
-      <div class="status-cell" id="ollamaStatus"><span class="status-dot"></span><span class="status-name">OLLAMA</span><b>Checking…</b></div>
+      <div class="status-cell ok" id="designStatus"><span class="status-dot"></span><span class="status-name">DESIGN SOURCE</span><b>Manus</b></div>
       <div class="status-cell" id="copperStatus"><span class="status-dot"></span><span class="status-name">COPPER CORE</span><b>Checking…</b></div>
       <div class="status-cell" id="kicadStatus"><span class="status-dot"></span><span class="status-name">KICAD CLI</span><b>Checking…</b></div>
       <div class="status-note" id="statusNote">Checking local services</div>
@@ -32,18 +32,19 @@
           <div><div class="eyebrow">01 / DESIGN INPUT</div><h1>New engineering run</h1></div>
           <span class="tag">DRAFT</span>
         </div>
-        <p class="muted intro">Describe the circuit or hardware. Qwen produces structured design intent using local KiCad library metadata; Copper compiles native KiCad files and validates them.</p>
-        <label class="field-label" for="modelSelect">LOCAL MODEL</label>
-        <select id="modelSelect" class="select-control"><option value="qwen3:8b">qwen3:8b</option></select>
-        <label class="field-label request-label" for="promptInput">ENGINEERING REQUIREMENTS</label>
-        <textarea id="promptInput" spellcheck="false" placeholder="Example: Create a simple 5 V status indicator PCB with a red LED, a current-limiting resistor, and a two-pin power input. Use through-hole parts and a compact two-layer board. List any assumptions that need my review."></textarea>
-        <div class="prompt-meta"><span>Be explicit about supply, components, dimensions and interfaces. For unusual parts, name exact KiCad symbol and footprint IDs.</span><span id="charCount">0 / 12,000</span></div>
-        <button id="generateButton" class="primary-button"><span class="button-icon">✳</span><span>Generate & validate</span><span class="button-arrow">↗</span></button>
-        <button id="exampleButton" class="text-button">Load a simple example request <span>→</span></button>
+        <p class="muted intro">Manus writes the design intent: a <code>copper.design-intent</code> JSON, in its workspace <code>D:\copper-manus</code> (see MANUS.md). Paste it here; Copper compiles native KiCad files and validates them.</p>
+        <label class="field-label" for="promptInput">REQUEST (OPTIONAL: WHAT THE DESIGN IS FOR)</label>
+        <textarea id="promptInput" spellcheck="false" style="min-height:70px" placeholder="Example: 5 V red LED indicator with a two-pin power input."></textarea>
+        <div class="prompt-meta"><span>Recorded with the run through Copper's prompt capture.</span><span id="charCount">0 / 12,000</span></div>
+        <label class="field-label request-label" for="intentInput">DESIGN INTENT JSON (FROM MANUS)</label>
+        <textarea id="intentInput" spellcheck="false" placeholder='{"schema": "copper.design-intent", "schema_version": 1, "project": {...}, "components": [...]}'></textarea>
+        <div class="prompt-meta"><span>Real KiCad pin and pad numbers only; every net needs at least two pins; give each part a position.</span><span id="intentCount">0 B</span></div>
+        <button id="generateButton" class="primary-button"><span class="button-icon">✳</span><span>Compile & validate</span><span class="button-arrow">↗</span></button>
+        <button id="exampleButton" class="text-button">Load the LED example intent <span>→</span></button>
         <div class="divider"></div>
         <div class="workflow-title">RUN PIPELINE</div>
         <ol class="pipeline-list">
-          <li><span>1</span><div><b>Qwen design intent</b><small>Structured JSON from verified library metadata</small></div></li>
+          <li><span>1</span><div><b>Manus design intent</b><small>Structured JSON using real KiCad pin and pad numbers</small></div></li>
           <li><span>2</span><div><b>Native KiCad compilation</b><small>Schematic, PCB, ERC, netlist and DRC</small></div></li>
           <li><span>3</span><div><b>Copper verification</b><small>Component resolution, import, topology and DFM</small></div></li>
         </ol>
@@ -98,7 +99,7 @@
         <div class="history-bottom">
           <div class="eyebrow">LOCAL EXECUTION</div>
           <p>Runs and generated artifacts are stored on this PC under <code>copper_lab/runs/</code>.</p>
-          <p class="muted">Ollama stays on localhost. Copper Lab does not expose a shell or Ollama endpoint to your network.</p>
+          <p class="muted">Copper Lab listens on this PC only and runs no language model. Manus works in its own local workspace.</p>
         </div>
       </aside>
     </main>

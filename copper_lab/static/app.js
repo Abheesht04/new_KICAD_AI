@@ -21,20 +21,12 @@ async function refreshStatus() {
   $('statusNote').textContent = 'Refreshing local tools…';
   try {
     const r = await fetch('/api/status', {cache:'no-store'}); const s = await r.json();
-    setStatusCell('ollamaStatus', s.ollama.available, s.ollama.available ? `${s.ollama.models.length} model(s)` : 'Offline');
+    setStatusCell('designStatus', true, 'Manus');
     setStatusCell('copperStatus', s.copper.available, s.copper.available ? 'Release found' : 'Not found');
     setStatusCell('kicadStatus', s.kicad.available, s.kicad.available ? 'CLI ready' : 'Not found');
-    $('statusNote').textContent = s.ollama.available ? `OLLAMA ${s.ollama.endpoint}` : 'Start Ollama to enable generation';
-    const select = $('modelSelect'); const current = select.value || s.default_model;
-    const models = s.ollama.models || [];
-    select.innerHTML = '';
-    const options = [...new Set([s.default_model, ...models].filter(Boolean))];
-    if (!options.length) options.push('qwen3:8b');
-    options.forEach(name => { const o = document.createElement('option'); o.value=name; o.textContent=name; select.appendChild(o); });
-    select.value = options.includes(current) ? current : (options.includes(s.default_model) ? s.default_model : options[0]);
-    if (!s.ollama.available) select.title = s.ollama.error || 'Ollama is unavailable';
+    $('statusNote').textContent = (s.copper.available && s.kicad.available) ? 'Ready: paste a design intent from Manus' : 'Copper or KiCad CLI is missing';
   } catch (e) {
-    setStatusCell('ollamaStatus', false, 'Offline'); setStatusCell('copperStatus', false, 'Unknown'); setStatusCell('kicadStatus', false, 'Unknown');
+    setStatusCell('copperStatus', false, 'Unknown'); setStatusCell('kicadStatus', false, 'Unknown');
     $('statusNote').textContent = 'Could not reach Copper Lab API';
   }
 }
@@ -49,7 +41,7 @@ function renderHistory(runs) {
   $('historyList').innerHTML = runs.map(run => {
     const active = activeRun === run.run_id ? ' active' : '';
     const label = (run.run_id || '').split('_').slice(0,2).join(' · ');
-    return `<button class="history-item${active}" data-run="${esc(run.run_id)}"><strong>${esc(run.model || 'Copper run')}</strong><small>${esc(label)}${run.elapsed_seconds ? ` · ${run.elapsed_seconds}s` : ''}</small><span class="history-state">${esc(prettyStatus(run.status))}</span></button>`;
+    return `<button class="history-item${active}" data-run="${esc(run.run_id)}"><strong>${esc(run.author ? 'Design by ' + run.author : 'Copper run')}</strong><small>${esc(label)}${run.elapsed_seconds ? ` · ${run.elapsed_seconds}s` : ''}</small><span class="history-state">${esc(prettyStatus(run.status))}</span></button>`;
   }).join('');
   document.querySelectorAll('[data-run]').forEach(btn => btn.addEventListener('click', () => loadRun(btn.dataset.run)));
 }
@@ -125,25 +117,32 @@ async function openArtifact(name) {
   } catch(e) { showToast(e.message); }
 }
 async function generate() {
-  const prompt=$('promptInput').value.trim(); if (!prompt) { showToast('Enter an engineering request first'); $('promptInput').focus(); return; }
-  const button=$('generateButton'); button.disabled=true; button.querySelector('span:nth-child(2)').textContent='Generating · validating…';
-  $('statusNote').textContent='Qwen is preparing structured design intent. Copper resolves installed KiCad assets, compiles the native project, then runs validation.';
-  $('emptyState').classList.remove('hidden'); $('previewContent').classList.add('hidden'); $('emptyState').innerHTML='<div class="empty-glyph">◌</div><h3>Generating the project</h3><p>Qwen is generating design-intent JSON. Copper is compiling the native KiCad schematic and PCB before validation.</p>';
+  const prompt=$('promptInput').value.trim();
+  const intentText=$('intentInput').value.trim();
+  if (!intentText) { showToast('Paste the design intent JSON from Manus first'); $('intentInput').focus(); return; }
+  let intent;
+  try { intent = JSON.parse(intentText); } catch (e) { showToast('The design intent is not valid JSON: ' + e.message); $('intentInput').focus(); return; }
+  const button=$('generateButton'); button.disabled=true; button.querySelector('span:nth-child(2)').textContent='Compiling · validating…';
+  $('statusNote').textContent='Copper is compiling the design intent into a native KiCad project, then running validation.';
+  $('emptyState').classList.remove('hidden'); $('previewContent').classList.add('hidden'); $('emptyState').innerHTML='<div class="empty-glyph">◌</div><h3>Compiling the project</h3><p>Copper is compiling the native KiCad schematic and PCB from the design intent before validation.</p>';
   try {
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,model:$('modelSelect').value})});
-    const result=await r.json(); if (!r.ok) throw new Error(result.error || 'Generation failed');
+    const r=await fetch('/api/compile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,intent})});
+    const result=await r.json(); if (!r.ok) throw new Error(result.error || 'Compilation failed');
     renderRun(result);
     if (result.error) showToast(result.error); else showToast('Run finished. Review the generated files and checks.');
     $('statusNote').textContent=`Last run ${result.elapsed_seconds ?? '—'}s · ${prettyStatus(result.status)}`;
-  } catch(e) { $('statusNote').textContent='Generation request failed'; showToast(e.message); $('emptyState').innerHTML=`<div class="empty-glyph">!</div><h3>Run could not finish</h3><p>${esc(e.message)}</p>`; }
-  finally { button.disabled=false; button.querySelector('span:nth-child(2)').textContent='Generate & validate'; refreshRuns(); }
+  } catch(e) { $('statusNote').textContent='Compile request failed'; showToast(e.message); $('emptyState').innerHTML=`<div class="empty-glyph">!</div><h3>Run could not finish</h3><p>${esc(e.message)}</p>`; }
+  finally { button.disabled=false; button.querySelector('span:nth-child(2)').textContent='Compile & validate'; refreshRuns(); }
 }
 $('generateButton').addEventListener('click', generate);
 $('refreshStatus').addEventListener('click', () => {refreshStatus(); showToast('Tool status refreshed');});
 $('promptInput').addEventListener('input', () => $('charCount').textContent=`${$('promptInput').value.length.toLocaleString()} / 12,000`);
+$('intentInput').addEventListener('input', () => $('intentCount').textContent=`${new Blob([$('intentInput').value]).size.toLocaleString()} B`);
 $('exampleButton').addEventListener('click', () => {
-  $('promptInput').value='Create a small 5 V red LED indicator PCB with a two-pin power input, one 560R current-limiting resistor and one red LED. Use these exact KiCad libraries: J1 symbol Connector_Generic:Conn_01x02 and footprint Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical; R1 symbol Device:R and footprint Resistor_SMD:R_0603_1608Metric; D1 symbol Device:LED and footprint LED_SMD:LED_0603_1608Metric. Use the real pin numbers and pad numbers from the local library metadata. Nets: VIN, LED_ANODE and GND. Use a 35 mm by 25 mm, 2-layer board. Keep the LED forward-voltage assumption explicit and do not claim the PCB is routed.';
-  $('charCount').textContent=`${$('promptInput').value.length} / 12,000`; $('promptInput').focus();
+  $('promptInput').value='5 V red LED indicator: two-pin power input, 1k current-limiting resistor, red 0603 LED.';
+  $('intentInput').value='{\n  "schema": "copper.design-intent",\n  "schema_version": 1,\n  "project": {"name": "LedIndicator", "board": {"width_mm": 40, "height_mm": 25, "layers": 2}},\n  "components": [\n    {"reference": "J1", "value": "5V_IN", "symbol_id": "Connector_Generic:Conn_01x02",\n     "footprint_id": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",\n     "pins": [{"symbol_pin": "1", "pad": "1", "net": "VIN"}, {"symbol_pin": "2", "pad": "2", "net": "GND"}],\n     "position": {"x_mm": 8, "y_mm": 12.5, "rotation_deg": 0}},\n    {"reference": "R1", "value": "1k", "symbol_id": "Device:R", "footprint_id": "Resistor_SMD:R_0603_1608Metric",\n     "pins": [{"symbol_pin": "1", "pad": "1", "net": "VIN"}, {"symbol_pin": "2", "pad": "2", "net": "LED_A"}],\n     "position": {"x_mm": 20, "y_mm": 12.5, "rotation_deg": 0}},\n    {"reference": "D1", "value": "RED", "symbol_id": "Device:LED", "footprint_id": "LED_SMD:LED_0603_1608Metric",\n     "pins": [{"symbol_pin": "1", "pad": "1", "net": "GND"}, {"symbol_pin": "2", "pad": "2", "net": "LED_A"}],\n     "position": {"x_mm": 31, "y_mm": 12.5, "rotation_deg": 0}}\n  ]\n}';
+  $('charCount').textContent=`${$('promptInput').value.length} / 12,000`;
+  $('intentCount').textContent=`${new Blob([$('intentInput').value]).size.toLocaleString()} B`; $('intentInput').focus();
 });
 document.querySelectorAll('[data-open-source]').forEach(btn => btn.addEventListener('click', () => {
   const f=findFile(btn.dataset.openSource==='sch'?/\.kicad_sch$/i:/\.kicad_pcb$/i); if (f) openArtifact(f.name); else showToast('Native project file is not available in this run');

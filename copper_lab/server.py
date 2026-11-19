@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Copper Lab: small localhost wrapper around Copper CLI, KiCad CLI and Ollama.
+"""Copper Lab: small localhost wrapper around the Copper CLI, the design compiler and KiCad CLI.
 
-Only fixed, allow-listed commands are executed. This is intentionally a local tool,
-not a network-facing engineering service.
+Designs come from a Manus agent (or a person) as copper.design-intent JSON; Copper Lab runs no language model.
+Only fixed, allow-listed commands are executed. This is intentionally a local tool, not a network-facing service:
+it binds to loopback, and POSTs must be application/json so other web pages cannot drive it through a browser.
 """
 from __future__ import annotations
 
@@ -16,15 +17,13 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from design_pipeline import execute_design_generation
+from design_pipeline import collect_asset_context, execute_design_generation, library_roots, reject_explicitly_unavailable_assets
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT_DIR = APP_DIR.parent
@@ -32,8 +31,6 @@ SOURCE_DIR = (ROOT_DIR / "src" / "v2_src" if (ROOT_DIR / "src" / "v2_src").is_di
 RUNS_DIR = APP_DIR / "runs"
 STATIC_DIR = APP_DIR / "static"
 FIXTURE_DIR = SOURCE_DIR / "tests" / "fixtures" / "sample_resistor_lol"
-DEFAULT_MODEL = os.environ.get("COPPER_OLLAMA_MODEL", "qwen3:8b")
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MAX_PROMPT_CHARS = 12000
 MAX_ARTIFACT_CHARS = 2_000_000
 MAX_REQUEST_BYTES = 1_000_000
@@ -78,17 +75,6 @@ def kicad_cli() -> str | None:
     ], "kicad-cli")
 
 
-def http_json(url: str, payload: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
-    data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as res:
-        raw = res.read(32 * 1024 * 1024)
-    value = json.loads(raw.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError("Expected a JSON object from local service")
-    return value
-
-
 def check_tool_version(exe: str | None, args: list[str]) -> dict[str, Any]:
     if not exe:
         return {"available": False, "version": None}
@@ -104,40 +90,14 @@ def check_tool_version(exe: str | None, args: list[str]) -> dict[str, Any]:
 def get_status() -> dict[str, Any]:
     copper = copper_exe()
     kicad = kicad_cli()
-    try:
-        tags = http_json(f"{OLLAMA_URL}/api/tags", timeout=4)
-        model_rows = tags.get("models", [])
-        models = [m.get("name") for m in model_rows if isinstance(m, dict) and m.get("name")]
-        ollama = {"available": True, "models": models, "endpoint": OLLAMA_URL}
-    except Exception as exc:
-        ollama = {"available": False, "models": [], "endpoint": OLLAMA_URL, "error": str(exc)}
     return {
         "copper": {"available": bool(copper), "path": copper,
                     **(check_tool_version(copper, ["--help"]) if copper else {})},
         "kicad": {"available": bool(kicad), "path": kicad,
                   **(check_tool_version(kicad, ["version"]) if kicad else {})},
-        "ollama": ollama,
-        "default_model": DEFAULT_MODEL,
+        "design_author": "manus",
         "timestamp": utc_stamp(),
     }
-
-
-def parse_model_json(content: str) -> dict[str, Any]:
-    text = content.strip()
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
-        text = re.sub(r"\s*```$", "", text)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        start, end = text.find("{"), text.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("Qwen did not return a JSON object")
-        data = json.loads(text[start:end + 1])
-    if not isinstance(data, dict):
-        raise ValueError("Qwen response must be a JSON object")
-    return data
 
 
 def balanced_sexpr(text: str, expected_root: str) -> tuple[bool, str]:
@@ -228,20 +188,18 @@ def run_manifest_files(run_dir: Path) -> list[dict[str, Any]]:
     return files
 
 
-def execute_generation(prompt: str, model: str) -> dict[str, Any]:
-    """Run Qwen structured-intent generation through the deterministic compiler."""
-    if not prompt.strip():
-        raise ValueError("Enter an engineering request first")
+def execute_generation(prompt: str, intent: dict[str, Any]) -> dict[str, Any]:
+    """Compile and check a design intent written by Manus (or a person). `prompt` is the request it answers."""
     if len(prompt) > MAX_PROMPT_CHARS:
-        raise ValueError(f"Prompt is limited to {MAX_PROMPT_CHARS} characters")
-    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", model):
-        raise ValueError("Invalid Ollama model name")
+        raise ValueError(f"Request text is limited to {MAX_PROMPT_CHARS} characters")
+    if not isinstance(intent, dict):
+        raise ValueError("Paste a copper.design-intent JSON object (written by Manus)")
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     run_id = dt.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(parents=False, exist_ok=False)
     try:
-        return execute_design_generation(prompt, model, run_dir, copper_exe(), kicad_cli())
+        return execute_design_generation(prompt, intent, run_dir, copper_exe(), kicad_cli())
     except Exception as exc:
         error_text = str(exc)
         (run_dir / "generation_error.txt").write_text(error_text + "\n", encoding="utf-8")
@@ -257,11 +215,11 @@ def execute_generation(prompt: str, model: str) -> dict[str, Any]:
                            "output": (run_dir / "copper_prompt_capture.log").read_text(encoding="utf-8", errors="replace")})
         manifest = {
             "run_id": run_id, "created_at": utc_stamp(), "status": "generation_failed",
-            "model": model, "prompt": prompt, "error": error_text,
+            "author": "manus", "prompt": prompt, "error": error_text,
             "checks": checks, "files": files,
             "elapsed_seconds": None,
             "manufacturing_gate": "NOT APPROVED — generation or compilation failed",
-            "pipeline": "qwen_json_intent -> copper_design_compile.py -> kicad_cli -> copper_cli_import",
+            "pipeline": "design_intent (Manus) -> copper_design_compile.py -> kicad_cli -> copper_cli_import",
         }
         write_json(run_dir / "run_manifest.json", manifest)
         return manifest
@@ -295,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
                 if p.is_dir() and manifest.is_file():
                     try:
                         item = json.loads(manifest.read_text(encoding="utf-8"))
-                        runs.append({k: item.get(k) for k in ("run_id", "created_at", "status", "model", "elapsed_seconds")})
+                        runs.append({k: item.get(k) for k in ("run_id", "created_at", "status", "author", "elapsed_seconds")})
                     except Exception:
                         pass
             self._json(200, {"runs": runs[:30]})
@@ -346,28 +304,68 @@ class Handler(BaseHTTPRequestHandler):
         ctype = "text/html; charset=utf-8" if target.suffix == ".html" else ("text/javascript; charset=utf-8" if target.suffix == ".js" else "text/css; charset=utf-8")
         self._send(200, target.read_bytes(), ctype)
 
-    def do_POST(self) -> None:  # noqa: N802
-        parsed = urlparse(self.path)
-        if parsed.path != "/api/generate":
-            self._json(404, {"error": "Not found"}); return
+    def _read_json_body(self) -> dict[str, Any] | None:
+        """The JSON body of a POST, or None after answering with an error. Content-Type must be application/json:
+        a page on another site cannot send that type without a CORS preflight, which this server does not grant."""
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            self._json(415, {"error": "POST needs Content-Type: application/json"})
+            return None
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > MAX_REQUEST_BYTES:
-                self._json(413, {"error": "Request body missing or too large"}); return
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            prompt = payload.get("prompt", "")
-            model = payload.get("model", DEFAULT_MODEL)
-            if not isinstance(prompt, str) or not isinstance(model, str):
-                raise ValueError("prompt and model must be strings")
-            if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", model):
-                raise ValueError("Invalid Ollama model name")
-        except Exception as exc:
-            self._json(400, {"error": str(exc)}); return
+        except ValueError:
+            length = -1
+        if length <= 0 or length > MAX_REQUEST_BYTES:
+            self._json(413, {"error": "Request body missing or too large"})
+            return None
         try:
-            sys.stdout.write(f"[Copper Lab] POST /api/generate started | model={model}\n")
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception as exc:
+            self._json(400, {"error": f"Body is not JSON: {exc}"})
+            return None
+        if not isinstance(payload, dict):
+            self._json(400, {"error": "Body must be a JSON object"})
+            return None
+        return payload
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path not in ("/api/compile", "/api/generate", "/api/context"):
+            self._json(404, {"error": "Not found"})
+            return
+        payload = self._read_json_body()
+        if payload is None:
+            return
+        if parsed.path == "/api/context":
+            text = payload.get("text", "")
+            if not isinstance(text, str) or not text.strip() or len(text) > MAX_PROMPT_CHARS:
+                self._json(400, {"error": "text must name the parts, e.g. "
+                                          "'symbol Device:R footprint Resistor_SMD:R_0603_1608Metric'"})
+                return
+            try:
+                symbols, footprints = library_roots()
+                context = collect_asset_context(text, symbols, footprints)
+                reject_explicitly_unavailable_assets(text, context)
+                self._json(200, context)
+            except Exception as exc:
+                self._json(422, {"error": str(exc)})
+            return
+        prompt = payload.get("prompt", "") or ""
+        intent = payload.get("intent")
+        if isinstance(intent, str):
+            try:
+                intent = json.loads(intent)
+            except json.JSONDecodeError as exc:
+                self._json(400, {"error": f"The design intent is not valid JSON: {exc}"})
+                return
+        if not isinstance(prompt, str) or not isinstance(intent, dict):
+            self._json(400, {"error": 'Send {"intent": <copper.design-intent JSON from Manus>, '
+                                      '"prompt": <optional request text>}'})
+            return
+        try:
+            sys.stdout.write(f"[Copper Lab] POST {parsed.path} started | design intent from Manus\n")
             sys.stdout.flush()
-            result = execute_generation(prompt, model)
-            self._json(200, result)
+            self._json(200, execute_generation(prompt, intent))
         except Exception as exc:
             self._json(500, {"error": str(exc)})
 
@@ -389,7 +387,7 @@ def main() -> None:
     print(f"Copper executable: {copper_exe() or 'NOT FOUND (set COPPER_EXE)'}")
     print(f"KiCad CLI: {kicad_cli() or 'NOT FOUND (set KICAD_CLI)'}")
     print(f"Design compiler: {SOURCE_DIR / 'tools' / 'copper_design_compile.py'}")
-    print(f"Ollama: {OLLAMA_URL} | default model: {DEFAULT_MODEL} | context: {os.environ.get('COPPER_OLLAMA_CONTEXT', '4096')}")
+    print("Designs: copper.design-intent JSON written by Manus (paste it in the page or POST /api/compile)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

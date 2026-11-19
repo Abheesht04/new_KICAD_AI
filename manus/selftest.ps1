@@ -1,6 +1,6 @@
 <#
 Self-test of the Manus setup: does what MANUS.md tells the agent to do, in a throwaway workspace, and checks each
-COPPER_RESULT. It does not need Manus or Ollama (the design intent is the committed LED example).
+COPPER_RESULT. It does not need Manus itself (the design intent is the committed LED example).
 
     .\manus\selftest.ps1 [-KiCadCli <path>] [-KiCadShare <dir>]
 
@@ -76,16 +76,13 @@ if ($ready) {
     if ($t.exit -eq 0 -and $t.text -match 'Components: 3') { Step 'topology' 'PASS' ($t.text -split "`n" | Where-Object { $_ -match 'Components:' } | Select-Object -First 1).Trim() } else { Step 'topology' 'FAIL' $t.text }
 }
 
-# Copper Lab's own test script (Python compiler and web-pipeline tests; Ollama mocked there).
+# Copper Lab's own test script (Python compiler and web-pipeline tests).
 $lab = Join-Path $repo 'scripts\test_copper_lab_pipeline.ps1'
 $ErrorActionPreference = 'Continue'
 $labOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $lab 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -eq 0) { Step 'copper lab tests' 'PASS' (($labOut | Select-String -Pattern '^Ran \d+ tests' | ForEach-Object { $_.Line }) -join '; ') }
 else { Step 'copper lab tests' 'FAIL' (($labOut | Select-Object -Last 15) -join "`n") }
 
-# Live model step: needs Ollama with qwen3:8b (Copper Lab's own generator; Manus replaces it with its own reasoning).
-try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:11434/api/tags | Out-Null; Step 'ollama (Copper Lab live generation)' 'PASS' 'reachable' }
-catch { Step 'ollama (Copper Lab live generation)' 'BLOCKED' 'Ollama is not running on 127.0.0.1:11434' }
 
 $failed = @($results | Where-Object { $_.status -eq 'FAIL' }).Count
 $blocked = @($results | Where-Object { $_.status -eq 'BLOCKED' }).Count

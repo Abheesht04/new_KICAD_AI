@@ -14,7 +14,7 @@ everything on your PC.
 
 ```
 You ──task──> Manus agent (in Manus Studio, "Work locally" on D:\copper-manus)
-                │ writes design-intent JSON, the way Copper Lab's Qwen step does
+                │ writes design-intent JSON (Manus is the only design author; Copper runs no model)
                 ▼
           copper.ps1 ──> Copper design compiler ──> KiCad project ──> KiCad netlist, ERC, DRC ──> Copper import
                     └──> Copper board-inspect, DFM (JLCPCB limits), topology
@@ -56,4 +56,5 @@ Start each task with: **"Read MANUS.md in this folder first and follow it."** Th
 - **Read all three results.** Compile success, clean ERC/DRC and DFM are separate results. The agent is told to
   report each one and never to call a board manufacturing-ready.
 - **KiCad version.** With a KiCad other than 9.x, ERC and DRC results are a development check, and `doctor` says so.
-- **No Ollama needed.** Copper Lab's own generator asks Qwen through Ollama; with Manus, Manus writes the intent itself.
+- **Manus is the only design author.** Copper and Copper Lab run no language model; a design intent Manus writes can
+  also be pasted into Copper Lab (`run_copper_lab.ps1`, http://127.0.0.1:8780 with `-Port 8780`) to compile it there.

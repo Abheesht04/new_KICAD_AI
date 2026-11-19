@@ -325,7 +325,7 @@ def build_ephemeral_catalogue(components: list[dict[str, Any]]) -> str:
         kind = kind_map.get(prefix)
         if not kind:
             raise CompileError(f"cannot map reference prefix {prefix!r} to a Copper PartKind; use R/C/L/D/Q/M/U/J/S references in compiler v1")
-        part_id = 'qwen_' + comp['reference'].lower()
+        part_id = 'intent_' + comp['reference'].lower()
         package = comp['footprint_id'].split(':', 1)[1]
         lines.extend([
             '  (part',
@@ -364,10 +364,10 @@ def resolve_components_with_copper(components: list[dict[str, Any]],
     results: dict[str, dict[str, Any]] = {}
     with tempfile.TemporaryDirectory(prefix='copper-intent-resolution-') as td:
         temp = Path(td)
-        catalogue = temp / 'qwen_components.parts'
+        catalogue = temp / 'intent_components.parts'
         catalogue.write_text(catalogue_text if catalogue_text is not None else build_ephemeral_catalogue(components), encoding='utf-8')
         for comp in components:
-            part_id = 'qwen_' + comp['reference'].lower()
+            part_id = 'intent_' + comp['reference'].lower()
             result_path = temp / f'{comp["reference"]}.resolution.json'
             command = [str(cli.resolve()), 'design', 'resolve-part', str(catalogue),
                        '--part-id', part_id, '--source', 'user',
@@ -676,7 +676,7 @@ def compile_design(intent_path: Path, output_parent: Path, args: argparse.Namesp
         (project_dir / '.copper').mkdir()
         (project_dir / '.copper' / 'intent.json').write_bytes(raw_bytes)
         if resolver_catalogue_text is not None:
-            (project_dir / '.copper' / 'qwen_component_catalogue.parts').write_text(resolver_catalogue_text, encoding='utf-8')
+            (project_dir / '.copper' / 'intent_component_catalogue.parts').write_text(resolver_catalogue_text, encoding='utf-8')
         resolution_dir = project_dir / '.copper' / 'component-resolution'
         if resolution_results:
             resolution_dir.mkdir(parents=True, exist_ok=True)

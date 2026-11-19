@@ -1,6 +1,8 @@
+import http.client
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,6 +13,8 @@ V2 = ROOT / "src" / "v2_src" if (ROOT / "src" / "v2_src").is_dir() else ROOT / "
 sys.path.insert(0, str(APP))
 import server  # noqa: E402
 import design_pipeline  # noqa: E402
+
+FIXTURE_INTENT = json.loads((V2 / "tests" / "fixture_design_intent.json").read_text(encoding="utf-8"))
 
 
 class WebPipelineIntegrationTests(unittest.TestCase):
@@ -37,11 +41,11 @@ class WebPipelineIntegrationTests(unittest.TestCase):
                 with patch.object(server, "copper_exe", return_value="C:/Copper/copper.exe"), \
                      patch.object(server, "kicad_cli", return_value="C:/KiCad/kicad-cli.exe"), \
                      patch.object(server, "execute_design_generation", return_value=expected) as execute:
-                    result = server.execute_generation("Create a 5V LED indicator", "qwen3:8b")
+                    result = server.execute_generation("Create a 5V LED indicator", FIXTURE_INTENT)
                 self.assertEqual(result, expected)
                 args = execute.call_args.args
                 self.assertEqual(args[0], "Create a 5V LED indicator")
-                self.assertEqual(args[1], "qwen3:8b")
+                self.assertEqual(args[1], FIXTURE_INTENT)
                 self.assertEqual(args[3], "C:/Copper/copper.exe")
                 self.assertEqual(args[4], "C:/KiCad/kicad-cli.exe")
                 self.assertTrue(args[2].is_dir())
@@ -56,11 +60,12 @@ class WebPipelineIntegrationTests(unittest.TestCase):
                 with patch.object(server, "copper_exe", return_value="copper.exe"), \
                      patch.object(server, "kicad_cli", return_value="kicad-cli.exe"), \
                      patch.object(server, "execute_design_generation", side_effect=RuntimeError("test compiler failure")):
-                    result = server.execute_generation("test", "llama3.2:latest")
+                    result = server.execute_generation("test", FIXTURE_INTENT)
                 self.assertEqual(result["status"], "generation_failed")
                 self.assertIn("test compiler failure", result["error"])
                 manifest = json.loads((Path(td) / result["run_id"] / "run_manifest.json").read_text())
                 self.assertEqual(manifest["status"], "generation_failed")
+                self.assertEqual(manifest["author"], "manus")
             finally:
                 server.RUNS_DIR = old_runs
 
@@ -75,7 +80,7 @@ class WebPipelineIntegrationTests(unittest.TestCase):
         self.assertTrue(context["candidate_pairs"])
 
 
-    def test_structured_pipeline_orchestration_with_mocked_ollama_and_kicad(self):
+    def test_structured_pipeline_orchestration_with_supplied_intent_and_mocked_kicad(self):
         fixture_json = V2 / "tests" / "fixture_design_intent.json"
         intent = json.loads(fixture_json.read_text(encoding="utf-8"))
         symbols = V2 / "tests" / "fixtures" / "catalogue_resolution" / "kicad" / "symbols"
@@ -101,6 +106,9 @@ class WebPipelineIntegrationTests(unittest.TestCase):
                     {"command": ["sch", "erc"], "returncode": 0, "stdout": "erc ok", "stderr": ""},
                     {"command": ["pcb", "drc"], "returncode": 0, "stdout": "drc ok", "stderr": ""},
                 ]), encoding="utf-8")
+                (validation / "erc.json").write_text(json.dumps({"kicad_version": "9.0.6", "sheets": [{"violations": []}]}), encoding="utf-8")
+                (validation / "drc.json").write_text(json.dumps({"kicad_version": "9.0.6", "violations": [], "unconnected_items": [
+                    {"type": "unconnected_items", "severity": "error"}], "schematic_parity": []}), encoding="utf-8")
                 (copper_dir / "design.json").write_text('{"schema":"copper.engineering-design.v1"}', encoding="utf-8")
                 (project / "copper_import.stdout.log").write_text("Copper design import: OK", encoding="utf-8")
                 (project / "copper_import.stderr.log").write_text("", encoding="utf-8")
@@ -109,17 +117,26 @@ class WebPipelineIntegrationTests(unittest.TestCase):
                 out = Path(command[command.index("--output") + 1]); out.mkdir(parents=True, exist_ok=True)
                 (out / "schematic.svg").write_text("<svg/>", encoding="utf-8")
             if "pcb" in command and "svg" in command:
-                out = Path(command[command.index("--output") + 1]); out.mkdir(parents=True, exist_ok=True)
-                (out / "board.svg").write_text("<svg/>", encoding="utf-8")
+                out = Path(command[command.index("--output") + 1])   # --mode-single: a file name
+                self.assertEqual(out.suffix, ".svg")
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text("<svg/>", encoding="utf-8")
             return {"returncode": 0, "stdout": "preview ok", "stderr": "", "elapsed_seconds": 0.01}
 
         with tempfile.TemporaryDirectory() as td:
             run_dir = Path(td) / "run"; run_dir.mkdir()
             with patch.object(design_pipeline, "library_roots", return_value=(symbols, footprints)), \
-                 patch.object(design_pipeline, "post_ollama", return_value={"message": {"content": json.dumps(intent)}, "eval_count": 100}), \
                  patch.object(design_pipeline, "run_process", side_effect=fake_process):
-                manifest = design_pipeline.execute_design_generation("Build the fixture circuit", "llama3.2:latest", run_dir, "copper.exe", "kicad-cli.exe")
-            self.assertEqual(manifest["status"], "completed")
+                manifest = design_pipeline.execute_design_generation("Build the fixture circuit", intent, run_dir, "copper.exe", "kicad-cli.exe")
+            # ERC is clean in the fixture report; DRC lists one unconnected item, so it is a finding, not a pass,
+            # even though kicad-cli exited 0.
+            by_name = {c["name"]: c for c in manifest["checks"]}
+            self.assertEqual(by_name["kicad_erc"]["status"], "passed")
+            self.assertEqual(by_name["kicad_drc"]["status"], "findings")
+            self.assertIn("unconnected_items x1", by_name["kicad_drc"]["output"])
+            self.assertEqual(manifest["status"], "completed_with_findings")
+            self.assertEqual(manifest["author"], "manus")
+            self.assertEqual(json.loads((run_dir / "intent" / "design_intent.json").read_text(encoding="utf-8")), intent)
             self.assertTrue((run_dir / "CopperCompilerFixture.kicad_sch").is_file())
             self.assertTrue((run_dir / "CopperCompilerFixture.kicad_pcb").is_file())
             self.assertTrue((run_dir / "schematic_preview.svg").is_file())
@@ -137,10 +154,57 @@ class WebPipelineIntegrationTests(unittest.TestCase):
                 "Build a 5V to 3.3V regulator board using AMS1117-3.3", context
             )
 
-    def test_old_raw_sexpr_generation_path_is_not_used(self):
+    def test_no_language_model_is_called(self):
+        # Manus is the only design author: Copper Lab has no Qwen/Ollama path left.
+        for name in ("server.py", "design_pipeline.py", "static/app.js", "static/index.html"):
+            source = (APP / name).read_text(encoding="utf-8").lower()
+            self.assertNotIn("ollama", source, name)
+            self.assertNotIn("qwen", source, name)
         source = (APP / "server.py").read_text(encoding="utf-8")
-        self.assertNotIn("def call_qwen(", source)
-        self.assertIn("execute_design_generation(prompt, model, run_dir, copper_exe(), kicad_cli())", source)
+        self.assertIn("execute_design_generation(prompt, intent, run_dir, copper_exe(), kicad_cli())", source)
+
+    def test_supplied_intent_shape_is_checked_before_anything_runs(self):
+        with tempfile.TemporaryDirectory() as td:
+            for bad, message in (([], "JSON object"), ({"schema": "other", "schema_version": 1, "components": [1]}, "copper.design-intent"),
+                                 ({"schema": "copper.design-intent", "schema_version": 1, "components": []}, "no components")):
+                with self.assertRaisesRegex(ValueError, message):
+                    design_pipeline.execute_design_generation("x", bad, Path(td) / "run", "copper.exe", "kicad-cli.exe")
+                self.assertFalse((Path(td) / "run").exists())
+
+    def test_http_api_is_manus_only_and_json_only(self):
+        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        port = httpd.server_address[1]
+
+        def call(method, path, body=None, ctype="application/json"):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+            headers = {"Content-Type": ctype} if ctype else {}
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            data = resp.read()
+            conn.close()
+            return resp.status, (json.loads(data) if data else None)
+
+        try:
+            status, body = call("GET", "/api/status")
+            self.assertEqual(status, 200)
+            self.assertNotIn("ollama", body)
+            self.assertEqual(body["design_author"], "manus")
+            payload = json.dumps({"intent": FIXTURE_INTENT}).encode()
+            for ctype in ("text/plain", "application/x-www-form-urlencoded", None):
+                status, body = call("POST", "/api/compile", payload, ctype)
+                self.assertEqual(status, 415, ctype)
+            status, body = call("POST", "/api/compile", json.dumps({"intent": "{not json"}).encode())
+            self.assertEqual(status, 400)
+            self.assertIn("not valid JSON", body["error"])
+            status, body = call("POST", "/api/compile", json.dumps({"prompt": "no intent"}).encode())
+            self.assertEqual(status, 400)
+            status, body = call("POST", "/api/nowhere", payload)
+            self.assertEqual(status, 404)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
 
 
 if __name__ == "__main__":

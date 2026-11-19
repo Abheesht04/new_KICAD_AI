@@ -1,12 +1,9 @@
 [CmdletBinding()]
 param(
-    [int]$Port = 8765,
+    [int]$Port = 8780,   # 8765 is the Copper Workbench (copper-core serve-http)
     [string]$Python = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
     [string]$CopperExe = '',
-    [string]$KiCadCli = 'C:\Program Files\KiCad\9.0\bin\kicad-cli.exe',
-    [string]$OllamaHost = 'http://127.0.0.1:11434',
-    [string]$Model = 'qwen3:8b',
-    [int]$Context = 4096
+    [string]$KiCadCli = 'C:\Program Files\KiCad\9.0\bin\kicad-cli.exe'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -36,9 +33,6 @@ $exePath = if ([System.IO.Path]::IsPathRooted($CopperExe)) { $CopperExe } else {
 $kicadPath = if ([System.IO.Path]::IsPathRooted($KiCadCli)) { $KiCadCli } else { Join-Path $root $KiCadCli }
 if (Test-Path -LiteralPath $exePath) { $env:COPPER_EXE = (Resolve-Path -LiteralPath $exePath).Path }
 if (Test-Path -LiteralPath $kicadPath) { $env:KICAD_CLI = (Resolve-Path -LiteralPath $kicadPath).Path }
-$env:OLLAMA_HOST = $OllamaHost
-$env:COPPER_OLLAMA_MODEL = $Model
-$env:COPPER_OLLAMA_CONTEXT = [string]$Context
 
 Write-Host ''
 Write-Host '  COPPER LAB' -ForegroundColor Green
@@ -46,7 +40,7 @@ Write-Host '  Local engineering workspace' -ForegroundColor DarkGray
 Write-Host ''
 Write-Host ('  Copper: ' + $(if ($env:COPPER_EXE) { $env:COPPER_EXE } else { 'not found — set COPPER_EXE' }))
 Write-Host ('  KiCad:  ' + $(if ($env:KICAD_CLI) { $env:KICAD_CLI } else { 'not found — set KICAD_CLI' }))
-Write-Host ('  Ollama: ' + $OllamaHost + ' (' + $Model + ', context ' + $Context + ')')
+Write-Host '  Designs: copper.design-intent JSON written by Manus (workspace D:\copper-manus, see manus\README.md)'
 Write-Host ''
 Write-Host "  Open http://127.0.0.1:$Port in your browser" -ForegroundColor Cyan
 Write-Host '  Keep this PowerShell window open. Press Ctrl+C to stop.' -ForegroundColor DarkGray

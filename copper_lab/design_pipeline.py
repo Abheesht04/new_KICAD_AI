@@ -1,8 +1,8 @@
 """Copper Lab structured-intent design pipeline.
 
-Qwen emits copper.design-intent.v1 JSON. The deterministic compiler then
-resolves library assets, writes native KiCad files, runs KiCad CLI, and imports
-through the existing Copper Release executable.
+A Manus agent (or a person) writes copper.design-intent.v1 JSON; Copper Lab runs no language model of its own.
+The deterministic compiler then resolves library assets, writes native KiCad files, runs KiCad CLI, and imports
+through the Copper executable. Every result is evidence for review, never an approval.
 """
 from __future__ import annotations
 
@@ -14,8 +14,6 @@ import re
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
@@ -27,8 +25,6 @@ TOOLS_DIR = V2_DIR / "tools"
 COMPILER = TOOLS_DIR / "copper_design_compile.py"
 ASSET_CONTEXT_TOOL = TOOLS_DIR / "kicad_asset_context.py"
 SCHEMA_PATH = V2_DIR / "schemas" / "copper.design-intent.v1.schema.json"
-SYSTEM_PROMPT_PATH = ROOT_DIR / "prompts" / "COPPER_DESIGN_INTENT_SYSTEM.md"
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 
 # Standard KiCad IDs used only as candidate context when a free-form request
 # does not name exact library IDs. Runtime asset inspection filters missing IDs.
@@ -122,7 +118,7 @@ def collect_asset_context(prompt: str, symbols_root: Path, footprints_root: Path
 
         combined: dict[str, Any] = {
             "schema": "copper.kicad-library-context", "schema_version": 1,
-            "source": "locally installed KiCad 9 library files",
+            "source": "locally installed KiCad library files",
             "symbols": [], "footprints": [], "notices": [], "candidate_pairs": [],
         }
         seen_symbols: set[str] = set()
@@ -145,8 +141,8 @@ def collect_asset_context(prompt: str, symbols_root: Path, footprints_root: Path
         if not combined["symbols"] or not combined["footprints"]:
             raise RuntimeError("No default KiCad library candidates could be inspected. " + "; ".join(errors))
         combined["notices"].append(
-            "No library IDs were specified in the task. The model must choose only from candidate_pairs, "
-            "and must use the exact pin/pad metadata supplied."
+            "No library IDs were specified in the task. Choose only from candidate_pairs, "
+            "and use the exact pin/pad metadata supplied."
         )
         if errors:
             combined["unavailable_candidates"] = errors
@@ -159,7 +155,7 @@ def collect_asset_context(prompt: str, symbols_root: Path, footprints_root: Path
 
 
 def reject_explicitly_unavailable_assets(prompt: str, asset_context: dict[str, Any]) -> None:
-    """Do not let the model silently omit or substitute a specifically requested unsupported library part."""
+    """A specifically requested part that Copper cannot use is an error, never a silent substitution."""
     prompt_folded = prompt.casefold()
     for message in asset_context.get("unavailable_candidates", []):
         # Candidate diagnostics start with `SymbolID / FootprintID:`.
@@ -180,27 +176,29 @@ def reject_explicitly_unavailable_assets(prompt: str, asset_context: dict[str, A
             )
 
 
-def post_ollama(payload: dict[str, Any], timeout: int = 900) -> dict[str, Any]:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
-        f"{OLLAMA_URL}/api/chat", data=body,
-        headers={"Content-Type": "application/json"}, method="POST"
-    )
+def kicad_report_findings(report_path: Path, kind: str) -> tuple[int, dict[str, int], str]:
+    """(total, count by severity, summary) of a kicad-cli ERC or DRC JSON report. kicad-cli exits 0 even when it
+    reports violations, so the report, not the exit code, decides whether a check is clean."""
+    if not report_path.is_file():
+        return -1, {}, f"{kind} report missing: {report_path.name}"
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(32 * 1024 * 1024)
-    except urllib.error.HTTPError as exc:
-        body_text = exc.read().decode("utf-8", "replace")
-        raise RuntimeError(f"Ollama HTTP {exc.code}: {body_text}") from exc
-    except Exception as exc:
-        raise RuntimeError(f"Ollama request failed: {exc}") from exc
-    try:
-        result = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"Ollama returned invalid JSON envelope: {exc}") from exc
-    if not isinstance(result, dict):
-        raise RuntimeError("Ollama response envelope is not an object")
-    return result
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return -1, {}, f"{kind} report unreadable: {exc}"
+    if kind == "erc":
+        items = [v for sheet in report.get("sheets", []) for v in sheet.get("violations", [])]
+    else:
+        items = [*report.get("violations", []), *report.get("unconnected_items", []), *report.get("schematic_parity", [])]
+    by_severity: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    for item in items:
+        sev = str(item.get("severity", "unknown"))
+        by_severity[sev] = by_severity.get(sev, 0) + 1
+        typ = str(item.get("type", "unknown"))
+        by_type[typ] = by_type.get(typ, 0) + 1
+    summary = ", ".join(f"{k} x{v}" for k, v in sorted(by_type.items(), key=lambda kv: -kv[1])) or "no findings"
+    version = report.get("kicad_version")
+    return len(items), by_severity, f"KiCad {version}: {len(items)} finding(s) {by_severity}: {summary}"
 
 
 def run_process(command: list[str], cwd: Path | None = None, timeout: int = 900) -> dict[str, Any]:
@@ -220,17 +218,29 @@ def run_process(command: list[str], cwd: Path | None = None, timeout: int = 900)
                 "timeout": True}
 
 
-def execute_design_generation(prompt: str, model: str, run_dir: Path,
-                               copper: str | None, kicad: str | None) -> dict[str, Any]:
-    if not prompt.strip():
-        raise ValueError("Enter an engineering request first")
+def validate_supplied_intent(intent: Any) -> dict[str, Any]:
+    """Shape check of a supplied design intent; the compiler does the full validation and reports its errors."""
+    if not isinstance(intent, dict):
+        raise ValueError("The design intent must be a JSON object (copper.design-intent v1)")
+    if intent.get("schema") != "copper.design-intent" or intent.get("schema_version") != 1:
+        raise ValueError('The design intent needs "schema": "copper.design-intent" and "schema_version": 1')
+    if not isinstance(intent.get("components"), list) or not intent["components"]:
+        raise ValueError("The design intent has no components")
+    return intent
+
+
+def execute_design_generation(prompt: str, intent: dict[str, Any], run_dir: Path,
+                               copper: str | None, kicad: str | None,
+                               author: str = "manus") -> dict[str, Any]:
+    """Compile and check a supplied design intent. `prompt` (optional) is the request it answers."""
     if len(prompt) > 12000:
-        raise ValueError("Prompt exceeds 12,000 characters")
-    for path in (COMPILER, SCHEMA_PATH, SYSTEM_PROMPT_PATH):
+        raise ValueError("Request text exceeds 12,000 characters")
+    intent = validate_supplied_intent(intent)
+    for path in (COMPILER, SCHEMA_PATH):
         if not path.is_file():
             raise RuntimeError(f"Required structured compiler file missing: {path}")
     if not copper:
-        raise RuntimeError("Copper executable not found. Expected build\\Release\\copper.exe or build\\copper.exe, or set COPPER_EXE")
+        raise RuntimeError(r"Copper executable not found. Expected build\Release\copper.exe or build\copper.exe, or set COPPER_EXE")
     if not kicad:
         raise RuntimeError("KiCad CLI not found. Set KICAD_CLI or install KiCad 9")
 
@@ -238,84 +248,31 @@ def execute_design_generation(prompt: str, model: str, run_dir: Path,
     started = time.time()
     checks: list[dict[str, Any]] = []
     request_dir = run_dir / "request"
-    qwen_dir = run_dir / "qwen"
+    intent_dir = run_dir / "intent"
     projects_dir = run_dir / "projects"
-    request_dir.mkdir(exist_ok=True); qwen_dir.mkdir(exist_ok=True); projects_dir.mkdir(exist_ok=True)
-    (run_dir / "task_prompt.txt").write_text(prompt, encoding="utf-8")
+    request_dir.mkdir(exist_ok=True); intent_dir.mkdir(exist_ok=True); projects_dir.mkdir(exist_ok=True)
 
-    request_path = request_dir / "design_request.draft.json"
-    request_cmd = [copper, "user", "design", "prompt", prompt, "--out", str(request_path)]
-    request_result = run_process(request_cmd, cwd=run_dir, timeout=30)
-    (run_dir / "copper_prompt_capture.log").write_text(request_result["stdout"] + request_result["stderr"], encoding="utf-8")
-    checks.append({"name": "copper_prompt_capture", "status": "passed" if request_result["returncode"] == 0 else "failed", "output": request_result["stdout"] + request_result["stderr"]})
-    if request_result["returncode"] != 0:
-        raise RuntimeError("Copper request capture failed: " + request_result["stderr"])
+    if prompt.strip():
+        (run_dir / "task_prompt.txt").write_text(prompt, encoding="utf-8")
+        request_path = request_dir / "design_request.draft.json"
+        request_result = run_process([copper, "user", "design", "prompt", prompt, "--out", str(request_path)],
+                                     cwd=run_dir, timeout=30)
+        (run_dir / "copper_prompt_capture.log").write_text(request_result["stdout"] + request_result["stderr"], encoding="utf-8")
+        checks.append({"name": "copper_prompt_capture", "status": "passed" if request_result["returncode"] == 0 else "failed",
+                       "output": request_result["stdout"] + request_result["stderr"]})
+        if request_result["returncode"] != 0:
+            raise RuntimeError("Copper request capture failed: " + request_result["stderr"])
+        _, request_source_encoding = read_copper_request_draft(request_path)
+        write_json(request_dir / "copper_request_encoding.json", {
+            "source_encoding": request_source_encoding, "normalized_encoding": "utf-8",
+            "normalization": "Copper CLI request draft decoded and rewritten as canonical UTF-8",
+        })
 
     symbols_root, footprints_root = library_roots()
-    asset_context = collect_asset_context(prompt, symbols_root, footprints_root)
-    write_json(qwen_dir / "local_kicad_library_context.json", asset_context)
-    reject_explicitly_unavailable_assets(prompt, asset_context)
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
-    request_object, request_source_encoding = read_copper_request_draft(request_path)
-    request_json = json.dumps(request_object, ensure_ascii=False, indent=2)
-    write_json(qwen_dir / "copper_request_encoding.json", {
-        "source_encoding": request_source_encoding,
-        "normalized_encoding": "utf-8",
-        "normalization": "Copper CLI request draft decoded and rewritten as canonical UTF-8",
-    })
-    user_message = (
-        "Engineering request:\n" + prompt +
-        "\n\nCopper request draft JSON:\n" + request_json +
-        "\n\nAuthoritative local KiCad library context (use only these IDs and exact pin/pad metadata):\n" +
-        json.dumps(asset_context, ensure_ascii=False, separators=(",", ":")) +
-        "\n\nReturn exactly one JSON object conforming to the supplied JSON Schema. "
-        "Do not return KiCad S-expressions, source code, Markdown, or unlisted library IDs."
-    )
-    context_tokens = int(os.environ.get("COPPER_OLLAMA_CONTEXT", "4096"))
-    payload = {
-        "model": model, "stream": False, "keep_alive": "5m", "format": schema,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "options": {"temperature": 0.1, "num_ctx": context_tokens, "num_predict": 2048, "top_p": 0.9},
-    }
-    write_json(qwen_dir / "ollama_request.json", payload)
-    llm_started = time.time()
-    try:
-        response = post_ollama(payload, timeout=900)
-    except Exception as exc:
-        (qwen_dir / "ollama_error.txt").write_text(str(exc) + "\n", encoding="utf-8")
-        raise
-    write_json(qwen_dir / "ollama_response.json", response)
-    message = response.get("message") if isinstance(response.get("message"), dict) else {}
-    content = message.get("content", "")
-    if not isinstance(content, str) or not content.strip():
-        raise RuntimeError("Ollama returned an empty message.content")
-    (qwen_dir / "qwen_response.raw.txt").write_text(content, encoding="utf-8")
-    content = re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip()
-    if content.startswith("```"):
-        content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.I)
-        content = re.sub(r"\s*```$", "", content)
-    try:
-        intent = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Qwen response is not JSON: {exc}") from exc
-    if not isinstance(intent, dict):
-        raise RuntimeError("Qwen design intent must be a JSON object")
-    intent_path = qwen_dir / "qwen_design_intent.json"
+    intent_path = intent_dir / "design_intent.json"
     write_json(intent_path, intent)
-    llm_meta = {
-        "model": model, "context": context_tokens,
-        "prompt_eval_count": response.get("prompt_eval_count"),
-        "eval_count": response.get("eval_count"),
-        "total_duration_ns": response.get("total_duration"),
-        "load_duration_ns": response.get("load_duration"),
-        "elapsed_seconds": round(time.time() - llm_started, 3),
-    }
-    write_json(qwen_dir / "generation_metrics.json", llm_meta)
-    checks.append({"name": "ollama_structured_design_intent", "status": "passed", "output": f"{model} returned copper.design-intent JSON in {llm_meta['elapsed_seconds']}s; output tokens={llm_meta.get('eval_count')}"})
+    checks.append({"name": "design_intent_received", "status": "passed",
+                   "output": f"copper.design-intent v1 from {author}: {len(intent['components'])} component(s)"})
 
     compiler_command = [
         sys.executable, str(COMPILER), "--intent", str(intent_path), "--out", str(projects_dir),
@@ -348,7 +305,7 @@ def execute_design_generation(prompt: str, model: str, run_dir: Path,
         sch_svg_dir.mkdir(exist_ok=True)
         preview_commands = [
             [kicad, "sch", "export", "svg", "--output", str(sch_svg_dir), "--exclude-drawing-sheet", str(sch_files[0])],
-            [kicad, "pcb", "export", "svg", "--mode-single", "--output", str(validation_dir),
+            [kicad, "pcb", "export", "svg", "--mode-single", "--output", str(validation_dir / "board.svg"),
              "--layers", "F.Cu,F.SilkS,Edge.Cuts", "--fit-page-to-board", "--exclude-drawing-sheet", str(pcb_files[0])],
         ]
         for index, command in enumerate(preview_commands, start=1):
@@ -390,8 +347,17 @@ def execute_design_generation(prompt: str, model: str, run_dir: Path,
             rc = item.get("returncode")
             is_netlist = "netlist" in command
             status = "passed" if rc == 0 else ("failed" if is_netlist else "findings")
-            checks.append({"name": label, "status": status,
-                           "output": ((item.get("stdout") or "") + "\n" + (item.get("stderr") or ""))[-6000:]})
+            output = ((item.get("stdout") or "") + "\n" + (item.get("stderr") or ""))[-6000:]
+            kind = "erc" if "erc" in command else ("drc" if "drc" in command else None)
+            if kind:
+                label = f"kicad_{kind}"
+                total, by_severity, summary = kicad_report_findings(validation_dir / f"{kind}.json", kind)
+                if total < 0:
+                    status = "failed"
+                elif total:
+                    status = "findings"   # never "passed" while KiCad lists violations or unconnected items
+                output = summary + "\n" + output
+            checks.append({"name": label, "status": status, "output": output})
     copper_log = project_dir / "copper_import.stdout.log"
     copper_error_log = project_dir / "copper_import.stderr.log"
     copper_output = read_text(copper_log) + read_text(copper_error_log)
@@ -408,12 +374,12 @@ def execute_design_generation(prompt: str, model: str, run_dir: Path,
     findings = [c for c in checks if c.get("status") == "findings"]
     metadata = {
         "run_id": run_dir.name, "created_at": utc_stamp(), "status": "completed_with_findings" if (failures or findings) else "completed",
-        "model": model, "prompt": prompt, "llm": llm_meta, "checks": checks,
+        "author": author, "prompt": prompt, "checks": checks,
         "files": files, "project_name": project_name,
         "project_directory": f"projects/{project_name}",
         "elapsed_seconds": round(time.time() - started, 3),
         "manufacturing_gate": "NOT APPROVED — generated draft; inspect ERC/DRC/DFM and review engineering assumptions",
-        "pipeline": "qwen_json_intent -> copper_design_compile.py -> kicad_cli -> copper_cli_import",
+        "pipeline": "design_intent (Manus) -> copper_design_compile.py -> kicad_cli -> copper_cli_import",
     }
     write_json(run_dir / "run_manifest.json", metadata)
     return metadata
