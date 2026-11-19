@@ -87,6 +87,8 @@ class WebPipelineIntegrationTests(unittest.TestCase):
         footprints = V2 / "tests" / "fixtures" / "catalogue_resolution" / "kicad" / "footprints"
 
         def fake_process(command, cwd=None, timeout=900):
+            if "check-intent" in command:
+                return {"returncode": 0, "stdout": "Design intent: GROUNDED (2 component(s), 4 pin(s), 2 net(s))", "stderr": "", "elapsed_seconds": 0.01}
             if "user" in command and "prompt" in command:
                 out_path = Path(command[command.index("--out") + 1])
                 out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,6 +144,24 @@ class WebPipelineIntegrationTests(unittest.TestCase):
             self.assertTrue((run_dir / "schematic_preview.svg").is_file())
             self.assertTrue((run_dir / "board_preview.svg").is_file())
             self.assertTrue(any(f["name"] == "validation/cli_results.json" for f in manifest["files"]))
+
+    def test_grounding_gate_rejection_stops_before_the_compiler(self):
+        symbols = V2 / "tests" / "fixtures" / "catalogue_resolution" / "kicad" / "symbols"
+        footprints = V2 / "tests" / "fixtures" / "catalogue_resolution" / "kicad" / "footprints"
+        calls = []
+
+        def fake_process(command, cwd=None, timeout=900):
+            calls.append(command)
+            if "check-intent" in command:
+                return {"returncode": 2, "stdout": "Design intent: REJECTED\n  [PIN_NAME_MISMATCH] D1 1: ...", "stderr": "", "elapsed_seconds": 0.01}
+            return {"returncode": 0, "stdout": "", "stderr": "", "elapsed_seconds": 0.01}
+
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(design_pipeline, "library_roots", return_value=(symbols, footprints)), \
+                 patch.object(design_pipeline, "run_process", side_effect=fake_process):
+                with self.assertRaisesRegex(RuntimeError, "Grounding gate rejected"):
+                    design_pipeline.execute_design_generation("", FIXTURE_INTENT, Path(td) / "run", "copper.exe", "kicad-cli.exe")
+        self.assertFalse(any("copper_design_compile.py" in " ".join(map(str, c)) for c in calls), "the compiler must not run")
 
     def test_explicit_unavailable_library_part_is_not_silently_substituted(self):
         context = {

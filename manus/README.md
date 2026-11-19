@@ -58,3 +58,19 @@ Start each task with: **"Read MANUS.md in this folder first and follow it."** Th
 - **KiCad version.** With a KiCad other than 9.x, ERC and DRC results are a development check, and `doctor` says so.
 - **Manus is the only design author.** Copper and Copper Lab run no language model; a design intent Manus writes can
   also be pasted into Copper Lab (`run_copper_lab.ps1`, http://127.0.0.1:8780 with `-Port 8780`) to compile it there.
+
+## Manus API key (optional)
+
+Manus Studio signs in with your Manus account and does **not** need an API key. A key is only needed if Copper itself
+should call the Manus API (`https://api.manus.ai`, header `x-manus-api-key`), for example to send a design task from
+Copper Lab.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\manus\set_manus_api_key.ps1            # asks for the key; nothing is shown
+powershell -ExecutionPolicy Bypass -File .\manus\set_manus_api_key.ps1 -Status    # is a key stored?
+powershell -ExecutionPolicy Bypass -File .\manus\set_manus_api_key.ps1 -Remove    # delete it
+```
+
+- **Where it is kept:** `%APPDATA%\Copper\manus_api_key.dpapi`, encrypted with Windows DPAPI for your Windows account
+  only, and outside the repository.
+- **Never put the key** in a chat, a commit, `copper.config.json` or an environment variable shared with other tools.

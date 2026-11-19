@@ -210,6 +210,15 @@ def execute_generation(prompt: str, intent: dict[str, Any]) -> dict[str, Any]:
                 files.append({"name": rel, "size": path.stat().st_size,
                               "kind": path.suffix.lower().lstrip(".") or "file"})
         checks = []
+        gate_report = run_dir / "intent" / "intent_check.json"
+        if gate_report.is_file():
+            try:
+                gate = json.loads(gate_report.read_text(encoding="utf-8"))
+                lines = [f"[{f.get('code')}] {f.get('reference') or ''} {f.get('item') or ''}: {f.get('message')}" for f in gate.get("findings", [])]
+                checks.append({"name": "grounding_gate", "status": "passed" if gate.get("verdict") == "GROUNDED" else "failed",
+                               "output": f"Design intent: {gate.get('verdict')}\n" + "\n".join(lines)})
+            except (OSError, json.JSONDecodeError):
+                pass
         if (run_dir / "copper_prompt_capture.log").is_file():
             checks.append({"name": "copper_prompt_capture", "status": "passed",
                            "output": (run_dir / "copper_prompt_capture.log").read_text(encoding="utf-8", errors="replace")})

@@ -18,11 +18,13 @@
       "pins": [
         {
           "symbol_pin": "1",
+          "pin_name": "Pin_1",
           "pad": "1",
           "net": "VIN"
         },
         {
           "symbol_pin": "2",
+          "pin_name": "Pin_2",
           "pad": "2",
           "net": "GND"
         }
@@ -41,11 +43,13 @@
       "pins": [
         {
           "symbol_pin": "1",
+          "pin_name": "~",
           "pad": "1",
           "net": "VIN"
         },
         {
           "symbol_pin": "2",
+          "pin_name": "~",
           "pad": "2",
           "net": "LED_A"
         }
@@ -64,11 +68,13 @@
       "pins": [
         {
           "symbol_pin": "1",
+          "pin_name": "K",
           "pad": "1",
           "net": "GND"
         },
         {
           "symbol_pin": "2",
+          "pin_name": "A",
           "pad": "2",
           "net": "LED_A"
         }

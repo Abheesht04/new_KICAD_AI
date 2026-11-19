@@ -274,6 +274,17 @@ def execute_design_generation(prompt: str, intent: dict[str, Any], run_dir: Path
     checks.append({"name": "design_intent_received", "status": "passed",
                    "output": f"copper.design-intent v1 from {author}: {len(intent['components'])} component(s)"})
 
+    # Grounding gate (C, src/v2_src/intent_check.c): every part, pin, pin name, pad and net is checked against the
+    # installed KiCad libraries before anything is compiled. A model-invented detail stops the run here.
+    gate_report = intent_dir / "intent_check.json"
+    gate = run_process([copper, "design", "check-intent", str(intent_path), "--symbol-root", str(symbols_root),
+                        "--footprint-root", str(footprints_root), "--out", str(gate_report)], cwd=run_dir, timeout=120)
+    gate_output = (gate["stdout"] + gate["stderr"]).strip()
+    checks.append({"name": "grounding_gate", "status": "passed" if gate["returncode"] == 0 else "failed",
+                   "output": gate_output[-6000:]})
+    if gate["returncode"] != 0:
+        raise RuntimeError("Grounding gate rejected the design intent; nothing was compiled.\n" + gate_output)
+
     compiler_command = [
         sys.executable, str(COMPILER), "--intent", str(intent_path), "--out", str(projects_dir),
         "--symbols-root", str(symbols_root), "--footprints-root", str(footprints_root),

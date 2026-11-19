@@ -53,13 +53,37 @@ if ($ready) {
     $proj = Join-Path $ws 'designs\led\LedIndicator'
     if ($k.exit -eq 0 -and (Test-Path (Join-Path $proj 'LedIndicator.kicad_pcb'))) { Step 'compile' 'PASS' ($k.result.outcome) } else { Step 'compile' 'FAIL' $k.text }
 
+    $g = Copper @('check', '-Intent', $intent)
+    if ($g.exit -eq 0 -and $g.result.outcome -eq 'GROUNDED') { Step 'gate accepts the grounded example' 'PASS' 'GROUNDED' } else { Step 'gate accepts the grounded example' 'FAIL' $g.text }
+
+    # Hallucination 1: the LED's polarity swapped in the model's mind (pin numbers valid, pin names wrong).
+    $sw = Get-Content -Raw $intent | ConvertFrom-Json
+    $d1 = $sw.components | Where-Object { $_.reference -eq 'D1' }
+    $d1.pins[0].pin_name = 'A'; $d1.pins[1].pin_name = 'K'
+    $swPath = Join-Path $ws 'designs\swapped\intent.json'; New-Item -ItemType Directory -Force (Split-Path $swPath) | Out-Null
+    [IO.File]::WriteAllText($swPath, ($sw | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+    $gs = Copper @('check', '-Intent', $swPath)
+    if ($gs.exit -eq 2 -and $gs.text -match 'PIN_NAME_MISMATCH') { Step 'gate rejects swapped LED polarity' 'PASS' 'PIN_NAME_MISMATCH' } else { Step 'gate rejects swapped LED polarity' 'FAIL' $gs.text }
+    $cs = Copper @('compile', '-Intent', $swPath, '-Out', (Join-Path $ws 'designs\swapped'))
+    $nothing = -not (Get-ChildItem -Recurse -Filter '*.kicad_pcb' -Path (Join-Path $ws 'designs\swapped') -ErrorAction SilentlyContinue)
+    if ($cs.exit -eq 2 -and $cs.result.outcome -eq 'REJECTED_UNGROUNDED' -and $nothing) { Step 'compile refuses an ungrounded intent' 'PASS' 'nothing compiled' } else { Step 'compile refuses an ungrounded intent' 'FAIL' $cs.text }
+
+    # Hallucination 2: an invented part and an invented field.
+    $iv = Get-Content -Raw $intent | ConvertFrom-Json
+    ($iv.components | Where-Object { $_.reference -eq 'D1' }).symbol_id = 'Device:LED_UltraBright'
+    $iv.components[0] | Add-Member -NotePropertyName mpn -NotePropertyValue 'XYZ-123'
+    $ivPath = Join-Path $ws 'designs\invented\intent.json'; New-Item -ItemType Directory -Force (Split-Path $ivPath) | Out-Null
+    [IO.File]::WriteAllText($ivPath, ($iv | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+    $gi = Copper @('check', '-Intent', $ivPath)
+    if ($gi.exit -eq 2 -and $gi.text -match 'SYMBOL_NOT_FOUND' -and $gi.text -match 'UNKNOWN_FIELD') { Step 'gate rejects invented part and field' 'PASS' 'SYMBOL_NOT_FOUND, UNKNOWN_FIELD' } else { Step 'gate rejects invented part and field' 'FAIL' $gi.text }
+
     $bad = Join-Path $ws 'designs\bad\intent.json'
     New-Item -ItemType Directory -Force (Split-Path $bad) | Out-Null
     $bj = Get-Content -Raw $intent | ConvertFrom-Json          # make D1 pin 2 a single-ended net: must be rejected
     ($bj.components | Where-Object { $_.reference -eq 'D1' }).pins[1].net = 'ONLY_ONE'
     [IO.File]::WriteAllText($bad, ($bj | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
     $kb = Copper @('compile', '-Intent', $bad, '-Out', (Join-Path $ws 'designs\bad'))
-    if ($kb.exit -eq 2 -and $kb.result.outcome -eq 'INVALID_INPUT') { Step 'compile rejects a bad intent' 'PASS' 'exit 2 INVALID_INPUT' } else { Step 'compile rejects a bad intent' 'FAIL' $kb.text }
+    if ($kb.exit -eq 2 -and $kb.result.outcome -eq 'REJECTED_UNGROUNDED' -and $kb.text -match 'SINGLE_ENDED_NET') { Step 'compile rejects a single-ended net' 'PASS' 'gate: SINGLE_ENDED_NET, nothing compiled' } else { Step 'compile rejects a single-ended net' 'FAIL' $kb.text }
 
     $ch = Copper @('checks', '-Project', $proj)
     if ($ch.result -and $ch.result.outcome -in @('FAIL', 'NO_ERRORS_SEE_WARNINGS')) { Step 'checks' 'PASS' ("ERC/DRC read: " + $ch.result.outcome) } else { Step 'checks' 'FAIL' $ch.text }
@@ -74,6 +98,24 @@ if ($ready) {
     $net = Join-Path $proj 'validation\design.kicad_net'
     $t = Copper @('topology', '-Schematic', (Join-Path $proj 'LedIndicator.kicad_sch'), '-Netlist', $net)
     if ($t.exit -eq 0 -and $t.text -match 'Components: 3') { Step 'topology' 'PASS' ($t.text -split "`n" | Where-Object { $_ -match 'Components:' } | Select-Object -First 1).Trim() } else { Step 'topology' 'FAIL' $t.text }
+}
+
+if ($ready) {
+    $rp = Copper @('report', '-Project', $proj)
+    $md = Join-Path $proj 'REPORT.md'
+    if ($rp.exit -eq 0 -and (Test-Path $md) -and ((Get-Content -Raw $md) -match 'NOT ROUTED') -and ((Get-Content -Raw $md) -match 'GROUNDED')) { Step 'report (facts sheet)' 'PASS' 'REPORT.md: GROUNDED, NOT ROUTED, NOT APPROVED' } else { Step 'report (facts sheet)' 'FAIL' $rp.text }
+
+    $hall = Join-Path $ws 'designs\led\answer_hallucinated.txt'
+    [IO.File]::WriteAllText($hall, "Done! The board is fully routed and DRC passed with no errors and it is ready to manufacture. ERC is clean, DFM passed. I used MPN LTST-C191KRKT for the LED, verified against the datasheet.", (New-Object Text.UTF8Encoding($false)))
+    $h = Copper @('claimcheck', '-Text', $hall, '-Project', $proj)
+    $want = 'ROUTED', 'DRC_CLEAN', 'ERC_CLEAN', 'MANUFACTURING_READY', 'PART_DATA', 'VERIFIED'
+    $missing = @($want | Where-Object { $h.text -notmatch "\[$_\]" })
+    if ($h.exit -eq 1 -and -not $missing.Count) { Step 'claimcheck flags a hallucinated answer' 'PASS' ($want -join ', ') } else { Step 'claimcheck flags a hallucinated answer' 'FAIL' ("missing: " + ($missing -join ', ') + "`n" + $h.text) }
+
+    $honest = Join-Path $ws 'designs\led\answer_honest.txt'
+    [IO.File]::WriteAllText($honest, ((Get-Content -Raw $md) + "`nThe board is not routed and is not manufacturing-ready; the ERC and DRC findings above need review. No MPN was chosen."), (New-Object Text.UTF8Encoding($false)))
+    $o = Copper @('claimcheck', '-Text', $honest, '-Project', $proj)
+    if ($o.exit -eq 0) { Step 'claimcheck accepts an honest answer' 'PASS' 'no unsupported claims' } else { Step 'claimcheck accepts an honest answer' 'FAIL' $o.text }
 }
 
 # Copper Lab's own test script (Python compiler and web-pipeline tests).

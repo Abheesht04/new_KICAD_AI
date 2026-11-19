@@ -20,6 +20,7 @@
 #include "optimization_loop_json.h"
 #include "schematic.h"
 #include "netlist_kicad.h"
+#include "intent_check.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -70,6 +71,8 @@ static void print_usage(void) {
     puts("Design commands:");
     puts("  copper design import <project-directory> [--out FILE] [--netlist FILE] [--report FILE] [--manifest FILE]");
     puts("  copper design resolve-part <parts.sx> [--part-id ID | --kind R|C|L|D|Q|M|U|J|S] [--mpn MPN] [--text QUERY] [--out design.json]");
+    puts("  copper design check-intent <intent.json> --symbol-root DIR --footprint-root DIR [--out report.json]");
+    puts("      grounding gate for a model-written design intent: exit 0 GROUNDED, 2 REJECTED (findings listed), 64 usage");
     puts("  copper user design prompt \"<human requirements>\" [--out request.json]");
     puts("  copper user topology show <design.kicad_sch> --netlist <fresh.kicad_net> [--out topology.json]");
     puts("  copper dev topology build <design.kicad_sch> --netlist <fresh.kicad_net> --out topology.json");
@@ -2365,6 +2368,53 @@ static int command_user_design_prompt(int argc, char **argv) {
     return 0;
 }
 
+/* copper design check-intent: every claim in a model-written design intent checked against the installed KiCad
+ * libraries (src/v2_src/intent_check.c). Exit 0 GROUNDED, 2 REJECTED, 1 I/O or memory error, 64 usage. */
+static int command_design_check_intent(int argc, char **argv) {
+    const char *intent_path = argv[3], *symbols = NULL, *footprints = NULL, *out_path = NULL;
+    for (int i = 4; i < argc; i++) {
+        if (i + 1 < argc && strcmp(argv[i], "--symbol-root") == 0) symbols = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--footprint-root") == 0) footprints = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--out") == 0) out_path = argv[++i];
+        else { fprintf(stderr, "check-intent: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!symbols || !footprints) { fprintf(stderr, "check-intent needs --symbol-root and --footprint-root\n"); return 64; }
+    Arena arena;
+    arena_init(&arena, 1u << 20);
+    const unsigned char *data = NULL;
+    size_t size = 0;
+    if (fs_read_file_arena(&arena, intent_path, &data, &size) != FS_OK) {
+        fprintf(stderr, "check-intent: cannot read %s\n", intent_path);
+        arena_destroy(&arena);
+        return 1;
+    }
+    IntentCheckReport report;
+    IntentCheckStatus st = intent_check(&arena, (const char *)data, size, symbols, footprints, &report);
+    if (st == INTENT_CHECK_ERR_ARGUMENT || st == INTENT_CHECK_ERR_MEMORY) {
+        fprintf(stderr, "check-intent: %s\n", intent_check_status_name(st));
+        arena_destroy(&arena);
+        return 1;
+    }
+    size_t len = 0;
+    const char *json = intent_check_report_json(&arena, &report, &len);
+    if (!json) { fprintf(stderr, "check-intent: out of memory\n"); arena_destroy(&arena); return 1; }
+    if (out_path) {
+        FILE *f = fopen(out_path, "wb");
+        if (!f || fwrite(json, 1, len, f) != len) { if (f) fclose(f); fprintf(stderr, "check-intent: cannot write %s\n", out_path); arena_destroy(&arena); return 1; }
+        fclose(f);
+    }
+    printf("Design intent: %s (%zu component(s), %zu pin(s), %zu net(s))\n", intent_check_status_name(st), report.components, report.pins, report.nets);
+    for (size_t i = 0; i < report.count; i++) {
+        const IntentFinding *f = &report.findings[i];
+        printf("  [%s] %s%s%s%s%s\n", f->code, f->reference ? f->reference : "", f->item ? " " : "", f->item ? f->item : "",
+               (f->reference || f->item) ? ": " : "", f->message);
+    }
+    if (report.truncated) printf("  ... more findings were not listed (limit %d)\n", INTENT_CHECK_MAX_FINDINGS);
+    if (st == INTENT_CHECK_REJECTED) printf("Nothing was compiled. Fix the intent from the installed library data (pin numbers and names), then check again.\n");
+    arena_destroy(&arena);
+    return st == INTENT_CHECK_GROUNDED ? 0 : 2;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2 || strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
         print_usage(); return argc < 2 ? 64 : 0;
@@ -2374,6 +2424,8 @@ int main(int argc, char **argv) {
             return command_design_import(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "resolve-part") == 0)
             return command_design_resolve_part(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "check-intent") == 0)
+            return command_design_check_intent(argc, argv);
         print_usage(); return 64;
     }
     if (strcmp(argv[1], "user") == 0) {

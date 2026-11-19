@@ -4,24 +4,53 @@
   "title": "Copper Design Intent v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "schema_version", "project", "components"],
+  "required": [
+    "schema",
+    "schema_version",
+    "project",
+    "components"
+  ],
   "properties": {
-    "schema": {"const": "copper.design-intent"},
-    "schema_version": {"const": 1},
+    "schema": {
+      "const": "copper.design-intent"
+    },
+    "schema_version": {
+      "const": 1
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "board"],
+      "required": [
+        "name",
+        "board"
+      ],
       "properties": {
-        "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"},
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
         "board": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["width_mm", "height_mm", "layers"],
+          "required": [
+            "width_mm",
+            "height_mm",
+            "layers"
+          ],
           "properties": {
-            "width_mm": {"type": "number", "minimum": 20, "maximum": 300},
-            "height_mm": {"type": "number", "minimum": 15, "maximum": 300},
-            "layers": {"const": 2}
+            "width_mm": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 300
+            },
+            "height_mm": {
+              "type": "number",
+              "minimum": 15,
+              "maximum": 300
+            },
+            "layers": {
+              "const": 2
+            }
           }
         }
       }
@@ -33,19 +62,43 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reference", "value", "symbol_id", "footprint_id", "pins"],
+        "required": [
+          "reference",
+          "value",
+          "symbol_id",
+          "footprint_id",
+          "pins"
+        ],
         "properties": {
-          "reference": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*$"},
-          "value": {"type": "string", "minLength": 1},
-          "symbol_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]+:[A-Za-z0-9_.+-]+$"},
-          "footprint_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]+:[A-Za-z0-9_.+-]+$"},
+          "reference": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*$"
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          },
+          "symbol_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+:[A-Za-z0-9_.+-]+$"
+          },
+          "footprint_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+:[A-Za-z0-9_.+-]+$"
+          },
           "position": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "x_mm": {"type": "number"},
-              "y_mm": {"type": "number"},
-              "rotation_deg": {"type": "number"}
+              "x_mm": {
+                "type": "number"
+              },
+              "y_mm": {
+                "type": "number"
+              },
+              "rotation_deg": {
+                "type": "number"
+              }
             }
           },
           "pins": {
@@ -54,11 +107,32 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["symbol_pin", "pad", "net"],
+              "required": [
+                "symbol_pin",
+                "pad",
+                "net"
+              ],
               "properties": {
-                "symbol_pin": {"type": "string", "minLength": 1},
-                "pad": {"type": "string", "minLength": 1},
-                "net": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_+./:-]{1,64}$"}
+                "symbol_pin": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pad": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "net": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[A-Za-z0-9_+./:-]{1,64}$"
+                },
+                "pin_name": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "description": "The pin's name exactly as the installed KiCad symbol gives it (\"~\" or \"\" for unnamed). Required by the grounding gate (copper design check-intent): a name that differs from the library is rejected."
+                }
               }
             }
           }
