@@ -1,0 +1,98 @@
+Start testing: Nov 18 00:46 India Standard Time
+----------------------------------------------------------
+1/6 Testing: copper_core_tests
+1/6 Test: copper_core_tests
+Command: "D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/Release/copper_core_tests.exe"
+Directory: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build
+"copper_core_tests" start time: Nov 18 00:46 India Standard Time
+Output:
+----------------------------------------------------------
+Copper core tests: PASS
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"copper_core_tests" end time: Nov 18 00:46 India Standard Time
+"copper_core_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/6 Testing: copper_design_tests
+2/6 Test: copper_design_tests
+Command: "D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/Release/copper_design_tests.exe"
+Directory: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build
+"copper_design_tests" start time: Nov 18 00:46 India Standard Time
+Output:
+----------------------------------------------------------
+Copper design tests: PASS
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"copper_design_tests" end time: Nov 18 00:46 India Standard Time
+"copper_design_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/6 Testing: copper_catalogue_asset_tests
+3/6 Test: copper_catalogue_asset_tests
+Command: "D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/Release/copper_catalogue_asset_tests.exe"
+Directory: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build
+"copper_catalogue_asset_tests" start time: Nov 18 00:46 India Standard Time
+Output:
+----------------------------------------------------------
+Catalogue asset resolution tests passed.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"copper_catalogue_asset_tests" end time: Nov 18 00:46 India Standard Time
+"copper_catalogue_asset_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/6 Testing: copper_topology_tests
+4/6 Test: copper_topology_tests
+Command: "D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/Release/copper_topology_tests.exe"
+Directory: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build
+"copper_topology_tests" start time: Nov 18 00:46 India Standard Time
+Output:
+----------------------------------------------------------
+Topology tests passed
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"copper_topology_tests" end time: Nov 18 00:46 India Standard Time
+"copper_topology_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/6 Testing: copper_engineering_tests
+5/6 Test: copper_engineering_tests
+Command: "D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/Release/copper_engineering_tests.exe"
+Directory: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build
+"copper_engineering_tests" start time: Nov 18 00:46 India Standard Time
+Output:
+----------------------------------------------------------
+engineering loop tests: PASS
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"copper_engineering_tests" end time: Nov 18 00:46 India Standard Time
+"copper_engineering_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/6 Testing: copper_optimization_tests
+6/6 Test: copper_optimization_tests
+Command: "D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/Release/copper_optimization_tests.exe"
+Directory: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build
+"copper_optimization_tests" start time: Nov 18 00:46 India Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.94 sec
+----------------------------------------------------------
+Test Failed.
+"copper_optimization_tests" end time: Nov 18 00:46 India Standard Time
+"copper_optimization_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 18 00:46 India Standard Time

@@ -1,0 +1,10 @@
+^D:\ENGINE\COPPER_LAB_INTEGRATED\COPPER_LAB_INTEGRATED\BUILD\CMAKEFILES\9B1E00F75BF67B1AEF772E44C65F34CB\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated -BD:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CopperStudio.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

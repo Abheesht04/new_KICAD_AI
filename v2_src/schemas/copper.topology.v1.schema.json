@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copper.local/schemas/topology.v1.schema.json",
+  "title": "Copper topology",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "status",
+    "summary",
+    "components",
+    "nets",
+    "issues"
+  ],
+  "properties": {
+    "schema": {
+      "const": "copper.topology"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "components",
+        "terminals",
+        "nets",
+        "connections",
+        "issues",
+        "unconnected_terminals"
+      ],
+      "properties": {
+        "components": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "terminals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "connections": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unconnected_terminals": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "reference",
+          "pins"
+        ],
+        "properties": {
+          "uuid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lib_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "footprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "number",
+                "net",
+                "state"
+              ],
+              "properties": {
+                "number": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "electrical_type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "net": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "connected",
+                    "unconnected_or_nc"
+                  ]
+                },
+                "footprint_pad": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "part_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "nets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "connection_count"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "class": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connection_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "net": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

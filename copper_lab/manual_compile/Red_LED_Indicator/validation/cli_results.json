@@ -1,0 +1,45 @@
+[
+  {
+    "command": [
+      "sch",
+      "export",
+      "netlist",
+      "--format",
+      "kicadsexpr",
+      "--output",
+      "D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\validation\\design.kicad_net",
+      "D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\Red_LED_Indicator.kicad_sch"
+    ],
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sch",
+      "erc",
+      "--format",
+      "json",
+      "--output",
+      "D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\validation\\erc.json",
+      "D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\Red_LED_Indicator.kicad_sch"
+    ],
+    "returncode": 0,
+    "stdout": "Found 0 violations\nSaved ERC Report to D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\validation\\erc.json\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "pcb",
+      "drc",
+      "--format",
+      "json",
+      "--output",
+      "D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\validation\\drc.json",
+      "D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\Red_LED_Indicator.kicad_pcb"
+    ],
+    "returncode": 0,
+    "stdout": "Found 0 violations\nFound 3 unconnected items\nSaved DRC Report to D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\manual_compile\\Red_LED_Indicator\\validation\\drc.json\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\x64\Release\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper_catalogue_asset_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper_core_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper_design_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper_engineering_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper_optimization_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\Release\copper_topology_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\build\x64\Release\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

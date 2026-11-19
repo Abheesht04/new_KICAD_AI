@@ -1,0 +1,85 @@
+{
+  "run_id": "20261117_220312_3823f3",
+  "created_at": "2026-11-17T16:37:48+00:00",
+  "status": "generation_failed",
+  "model": "qwen3:8b",
+  "prompt": "Create a small 5 V red LED indicator PCB with a two-pin power input, one 560R current-limiting resistor and one red LED. Use these exact KiCad libraries: J1 symbol Connector_Generic:Conn_01x02 and footprint Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical; R1 symbol Device:R and footprint Resistor_SMD:R_0603_1608Metric; D1 symbol Device:LED and footprint LED_SMD:LED_0603_1608Metric. Use the real pin numbers and pad numbers from the local library metadata. Nets: VIN, LED_ANODE and GND. Use a 35 mm by 25 mm, 2-layer board. Keep the LED forward-voltage assumption explicit and do not claim the PCB is routed.",
+  "error": "Copper Design Compiler failed (exit 2). See compiler logs.",
+  "checks": [
+    {
+      "name": "copper_prompt_capture",
+      "status": "passed",
+      "output": "Design prompt captured: D:\\Engine\\Copper_Lab_Integrated\\Copper_Lab_Integrated\\copper_lab\\runs\\20261117_220312_3823f3\\request\\design_request.draft.json\nBytes: 628\nStatus: needs_structuring (no AI interpretation or engineering design has been run)\n"
+    }
+  ],
+  "files": [
+    {
+      "name": "compiler.stderr.log",
+      "size": 689,
+      "kind": "log"
+    },
+    {
+      "name": "compiler.stdout.log",
+      "size": 0,
+      "kind": "log"
+    },
+    {
+      "name": "copper_prompt_capture.log",
+      "size": 249,
+      "kind": "log"
+    },
+    {
+      "name": "generation_error.txt",
+      "size": 60,
+      "kind": "txt"
+    },
+    {
+      "name": "qwen/copper_request_encoding.json",
+      "size": 160,
+      "kind": "json"
+    },
+    {
+      "name": "qwen/generation_metrics.json",
+      "size": 208,
+      "kind": "json"
+    },
+    {
+      "name": "qwen/local_kicad_library_context.json",
+      "size": 3155,
+      "kind": "json"
+    },
+    {
+      "name": "qwen/ollama_request.json",
+      "size": 11203,
+      "kind": "json"
+    },
+    {
+      "name": "qwen/ollama_response.json",
+      "size": 6196,
+      "kind": "json"
+    },
+    {
+      "name": "qwen/qwen_design_intent.json",
+      "size": 1759,
+      "kind": "json"
+    },
+    {
+      "name": "qwen/qwen_response.raw.txt",
+      "size": 1759,
+      "kind": "txt"
+    },
+    {
+      "name": "request/design_request.draft.json",
+      "size": 845,
+      "kind": "json"
+    },
+    {
+      "name": "task_prompt.txt",
+      "size": 621,
+      "kind": "txt"
+    }
+  ],
+  "elapsed_seconds": null,
+  "manufacturing_gate": "NOT APPROVED — generation or compilation failed",
+  "pipeline": "qwen_json_intent -> copper_design_compile.py -> kicad_cli -> copper_cli_import"
+}

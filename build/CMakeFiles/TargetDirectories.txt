@@ -1,0 +1,11 @@
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_core.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_core_tests.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_design_tests.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_catalogue_asset_tests.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_topology_tests.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_engineering_tests.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/copper_optimization_tests.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/RUN_TESTS.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/ALL_BUILD.dir
+D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/ZERO_CHECK.dir

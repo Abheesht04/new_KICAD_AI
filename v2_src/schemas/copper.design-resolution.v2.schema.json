@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copper.local/schemas/copper.design-resolution.v2.schema.json",
+  "title": "Copper part and KiCad asset resolution preview",
+  "description": "Intermediate Copper design document emitted after catalogue candidate selection and KiCad symbol/footprint asset resolution. This is not a completed circuit topology or PCB design.",
+  "type": "object",
+  "required": [
+    "schema", "schema_version", "generation", "project", "units",
+    "request", "catalogue", "components", "candidate_ranking",
+    "asset_roots", "electrical", "schematic", "pcb", "manufacturing", "feedback"
+  ],
+  "properties": {
+    "schema": { "const": "copper.design" },
+    "schema_version": { "const": 2 },
+    "generation": {
+      "type": "object",
+      "required": ["phase", "status", "topology", "schematic", "pcb", "manufacturing"],
+      "properties": {
+        "phase": { "const": "PART_RESOLUTION" },
+        "status": { "type": "string" },
+        "topology": { "const": "NOT_BUILT" },
+        "schematic": { "const": "NOT_GENERATED" },
+        "pcb": { "const": "NOT_GENERATED" },
+        "manufacturing": { "const": "NOT_STARTED" }
+      },
+      "additionalProperties": true
+    },
+    "project": { "type": "object", "properties": { "name": { "type": ["string", "null"] } }, "additionalProperties": true },
+    "units": { "type": "object", "required": ["length", "angle"], "properties": { "length": { "const": "nm" }, "angle": { "const": "mdeg" } }, "additionalProperties": true },
+    "request": { "type": "object", "additionalProperties": true },
+    "catalogue": { "type": "object", "required": ["path", "candidate_count", "selected_part_id"], "properties": { "path": { "type": ["string", "null"] }, "candidate_count": { "type": "integer", "minimum": 0 }, "selected_part_id": { "type": ["string", "null"] } }, "additionalProperties": true },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "resolution", "assets", "capabilities"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "kind": { "type": ["string", "null"] },
+          "manufacturer": { "type": ["string", "null"] },
+          "mpn": { "type": ["string", "null"] },
+          "package": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "datasheet": { "type": ["string", "null"] },
+          "supplier": { "type": ["string", "null"] },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "ratings": { "type": "array" },
+          "pin_map": { "type": "array" },
+          "resolution": {
+            "type": "object",
+            "required": ["score", "priority", "missing_fields_mask", "missing_fields"],
+            "properties": {
+              "score": { "type": "integer" },
+              "priority": { "type": "integer" },
+              "missing_fields_mask": { "type": "integer", "minimum": 0 },
+              "missing_fields": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": true
+          },
+          "assets": {
+            "type": "object",
+            "required": ["symbol", "footprint", "pin_mapping"],
+            "properties": {
+              "symbol": { "type": "object", "required": ["status", "pins"], "properties": { "id": { "type": ["string", "null"] }, "status": { "type": "string" }, "path": { "type": ["string", "null"] }, "suggested_id": { "type": ["string", "null"] }, "footprint_default": { "type": ["string", "null"] }, "footprint_filter": { "type": ["string", "null"] }, "pins": { "type": "array" } }, "additionalProperties": true },
+              "footprint": { "type": "object", "required": ["status", "pads"], "properties": { "id": { "type": ["string", "null"] }, "suggested_id": { "type": ["string", "null"] }, "status": { "type": "string" }, "path": { "type": ["string", "null"] }, "pads": { "type": "array" } }, "additionalProperties": true },
+              "pin_mapping": { "type": "object", "required": ["status", "explicit_valid", "inferred_possible"], "properties": { "status": { "type": "string" }, "explicit_valid": { "type": "boolean" }, "inferred_possible": { "type": "boolean" } }, "additionalProperties": true }
+            },
+            "additionalProperties": true
+          },
+          "capabilities": { "type": "object", "additionalProperties": { "type": "boolean" } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "candidate_ranking": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "asset_roots": { "type": "object", "additionalProperties": true },
+    "electrical": { "type": "object", "additionalProperties": true },
+    "schematic": { "type": "object", "additionalProperties": true },
+    "pcb": { "type": "object", "additionalProperties": true },
+    "manufacturing": { "type": "object", "additionalProperties": true },
+    "feedback": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": true
+}

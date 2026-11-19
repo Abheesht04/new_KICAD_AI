@@ -1,0 +1,142 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\IR.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\arena.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\board.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\board_kicad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\circuit.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_linalg.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\schematic.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\project_kicad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\netlist_kicad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\design_parity.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_design.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_design_json.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\topology.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\topology_json.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\engineering_loop.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\engineering_loop_json.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\optimization_loop.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\optimization_loop_json.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\design_resolver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\kicad_asset_resolver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\design_resolution_json.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_project.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_spice.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_spice_expand.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\copper_spice_fs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\cplx.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\dfm_check.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\excellon.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\fab_rules.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\filesystem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\g2_types.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\jlc_catalogue.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\kicad_assets.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\kicad_library_table.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\mna.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\nmath.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\part_catalogue.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\placer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\report.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\router.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\sexpr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\sha256.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\v2_src\u128.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{E9F25D86-4F97-30A1-B95C-148A355590DA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

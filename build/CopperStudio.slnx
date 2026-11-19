@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Solution>
+	<Configurations>
+		<BuildType Name="Debug"/>
+		<BuildType Name="Release"/>
+		<BuildType Name="MinSizeRel"/>
+		<BuildType Name="RelWithDebInfo"/>
+		<Platform Name="x64"/>
+	</Configurations>
+	<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="4c12d943-e6cb-35b8-bac1-f05f34d09380" DefaultStartup="true">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper.vcxproj"/>
+		<BuildDependency Project="copper_catalogue_asset_tests.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+		<BuildDependency Project="copper_core_tests.vcxproj"/>
+		<BuildDependency Project="copper_design_tests.vcxproj"/>
+		<BuildDependency Project="copper_engineering_tests.vcxproj"/>
+		<BuildDependency Project="copper_optimization_tests.vcxproj"/>
+		<BuildDependency Project="copper_topology_tests.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="RUN_TESTS.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="87ab4f3b-3a89-3477-bab2-c4947967eefa">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="c0140285-146f-39cf-a7ec-9c43a78af5fd"/>
+	<Project Path="copper.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="21e4867c-d713-3e73-b34e-5a6b423fa590">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+	<Project Path="copper_catalogue_asset_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="11d42912-0fdc-3404-ab6d-34c94612fae9">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+	<Project Path="copper_core.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="374980f0-5cce-3c4e-83e8-31b09819a943">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="copper_core_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="ad0c7173-fa64-319d-816b-ba14ef8b4dfa">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+	<Project Path="copper_design_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="8128000c-b389-33f3-8923-e3526499a4d3">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+	<Project Path="copper_engineering_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="39b273e1-940a-3b06-9072-a6ab80987ba7">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+	<Project Path="copper_optimization_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="06407ed2-cdba-31c3-9b55-b85d0dd72c3a">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+	<Project Path="copper_topology_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="82f31e6f-91de-3f40-89c0-d55ed3ce2b02">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="copper_core.vcxproj"/>
+	</Project>
+</Solution>

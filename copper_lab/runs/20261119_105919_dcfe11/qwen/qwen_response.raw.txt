@@ -1,0 +1,76 @@
+{
+
+  "schema": "copper.design-intent",
+  "schema_version": 1,
+  "project": {
+    "name": "ESP32_LED_Battery",
+    "board": {
+      "width_mm": 60,
+      "height_mm": 40,
+      "layers": 2
+    }
+  },
+  "components": [
+    {
+      "reference": "VCC",
+      "value": "5V Power",
+      "symbol_id": "Connector_Generic:Conn_01x02",
+      "footprint_id": "Connector_PinHeader_2154mm:PinHeader_1x02_P2.54mm_Vertical",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "1",
+          "net": "VCC"
+        },
+        {
+          "symbol_pin": "2",
+          "pad": "2",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "reference": "R1",
+      "value": "220Ω",
+      "symbol_id": "Device:R",
+      "footprint_id": "Resistor_SMD:R_0603_1608Metric",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "1",
+          "net": "VCC"
+        },
+        {
+          "symbol_pin": "2",
+          "pad": "2",
+          "net": "LED"
+        }
+      ]
+    },
+    {
+      "reference": "LED1",
+      "value": "LED",
+      "symbol_id": "Device:LED",
+      "footprint_id": "LED_THT:LED_D5.0mm",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "1",
+          "net": "LED"
+        },
+        {
+          "symbol_pin": "2",
+          "pad": "2",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "reference": "C1",
+      "value": "1000µF",
+      "symbol_id": "Device:C",
+      "footprint_id": "Capacitor_SMD:C_0805_2012Metric",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "

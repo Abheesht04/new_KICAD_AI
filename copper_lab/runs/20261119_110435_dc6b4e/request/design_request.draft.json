@@ -1,0 +1,7 @@
+{
+  "schema": "copper.request-draft",
+  "schema_version": 1,
+  "status": "needs_structuring",
+  "raw_prompt": "prompt Create a 5V red LED indicator PCB with a decoupling capacitor.\n\nPROJECT:\nName: LED_Decoupled_003\nBoard size: 45 mm x 30 mm\nLayers: 2\n\nCOMPONENTS:\n\nJ1:\nValue: POWER_INPUT\nSymbol: Connector_Generic:Conn_01x02\nFootprint: Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical\nPosition: X=7, Y=15\n\nR1:\nValue: 560R\nSymbol: Device:R\nFootprint: Resistor_SMD:R_0603_1608Metric\nPosition: X=18, Y=15\n\nD1:\nValue: RED_LED\nSymbol: Device:LED\nFootprint: LED_SMD:LED_0603_1608Metric\nPosition: X=30, Y=15\n\nC1:\nValue: 100nF\nSymbol: Device:C\nFootprint: Capacitor_SMD:C_0805_2012Metric\nPosition: X=18, Y=23\n\nPIN DEFINITIONS:\n\nConnector:\nPins 1, 2; pads 1, 2.\n\nResistor:\nPins 1, 2; pads 1, 2.\n\nLED:\nPin 1 = K (cathode).\nPin 2 = A (anode).\nFootprint pads 1 and 2.\n\nCapacitor:\nPins 1, 2; pads 1, 2.\n\nCONNECTIVITY:\n\nVIN:\n- J1 pin 1 -> pad 1\n- R1 pin 1 -> pad 1\n- C1 pin 1 -> pad 1\n\nLED_ANODE:\n- R1 pin 2 -> pad 2\n- D1 pin 2 -> pad 2\n\nGND:\n- J1 pin 2 -> pad 2\n- D1 pin 1 -> pad 1\n- C1 pin 2 -> pad 2\n\nREQUIREMENTS:\n- Use exact supplied library identifiers.\n- Never invent pins or pads.\n- Preserve LED polarity.\n- Preserve component positions.\n- No additional components.\n- Do not claim physical routing.\n\nReturn only valid copper.design-intent JSON.",
+  "note": "Raw user intent only; no components, nets, or electrical assumptions have been inferred."
+}

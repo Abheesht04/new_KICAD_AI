@@ -1,0 +1,9 @@
+{
+  "model": "qwen3:8b",
+  "context": 4096,
+  "prompt_eval_count": 1861,
+  "eval_count": 1976,
+  "total_duration_ns": 280903309700,
+  "load_duration_ns": 120420853400,
+  "elapsed_seconds": 280.98
+}

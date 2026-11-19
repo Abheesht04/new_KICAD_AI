@@ -1,0 +1,140 @@
+{
+  "schema": "copper.kicad-library-context",
+  "schema_version": 1,
+  "source": "locally installed KiCad library files",
+  "symbols": [
+    {
+      "id": "Connector_Generic:Conn_01x02",
+      "library_file": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\symbols\\Connector_Generic.kicad_sym",
+      "pins": [
+        {
+          "number": "1",
+          "name": "Pin_1",
+          "electrical_type": "passive",
+          "position": [
+            -5.08,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "number": "2",
+          "name": "Pin_2",
+          "electrical_type": "passive",
+          "position": [
+            -5.08,
+            -2.54,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Device:LED",
+      "library_file": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\symbols\\Device.kicad_sym",
+      "pins": [
+        {
+          "number": "1",
+          "name": "K",
+          "electrical_type": "passive",
+          "position": [
+            -3.81,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "number": "2",
+          "name": "A",
+          "electrical_type": "passive",
+          "position": [
+            3.81,
+            0.0,
+            180.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Device:R",
+      "library_file": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\symbols\\Device.kicad_sym",
+      "pins": [
+        {
+          "number": "1",
+          "name": "~",
+          "electrical_type": "passive",
+          "position": [
+            0.0,
+            3.81,
+            270.0
+          ]
+        },
+        {
+          "number": "2",
+          "name": "~",
+          "electrical_type": "passive",
+          "position": [
+            0.0,
+            -3.81,
+            90.0
+          ]
+        }
+      ]
+    }
+  ],
+  "footprints": [
+    {
+      "id": "LED_SMD:LED_0603_1608Metric",
+      "library_directory": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints\\LED_SMD.pretty",
+      "pads": [
+        {
+          "number": "1",
+          "type": "smd",
+          "shape": "roundrect",
+          "position": [
+            -0.7875,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "number": "2",
+          "type": "smd",
+          "shape": "roundrect",
+          "position": [
+            0.7875,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_0603_1608Metric",
+      "library_directory": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints\\Resistor_SMD.pretty",
+      "pads": [
+        {
+          "number": "1",
+          "type": "smd",
+          "shape": "roundrect",
+          "position": [
+            -0.825,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "number": "2",
+          "type": "smd",
+          "shape": "roundrect",
+          "position": [
+            0.825,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    }
+  ],
+  "notices": []
+}

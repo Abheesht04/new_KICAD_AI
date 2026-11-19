@@ -1,0 +1,211 @@
+{
+  "artifact": "Copper iterative optimization source overlay",
+  "base": "user-uploaded v2_src (3).zip",
+  "file_count": 34,
+  "files": [
+    {
+      "path": "v2_src/CMakeLists.txt",
+      "status": "new",
+      "size_bytes": 4967,
+      "sha256": "8f4278a801d6fc00d2bd0925f7baa3891c4d3e863e609b2327857937ae14576a"
+    },
+    {
+      "path": "v2_src/copper_cli.c",
+      "status": "new",
+      "size_bytes": 122638,
+      "sha256": "1faf227eb89489e35f70478026e89e50762d75f39bda31483a16d8ef43a02b87"
+    },
+    {
+      "path": "v2_src/design_resolution_json.c",
+      "status": "new",
+      "size_bytes": 15030,
+      "sha256": "cca76b2778797d41e0dd95f146cf4e076b9a01ed1d3f71cd64f7742ff02c09f6"
+    },
+    {
+      "path": "v2_src/design_resolution_json.h",
+      "status": "new",
+      "size_bytes": 1078,
+      "sha256": "a6345a452f94c4622bf0782a1f9a098e3ee6e484119cb8a5c08244473ff30170"
+    },
+    {
+      "path": "v2_src/design_resolver.c",
+      "status": "new",
+      "size_bytes": 12739,
+      "sha256": "335a949fe0b1b55eb72bc6aa98858e2431442ea3f06554b94f6c37846ed09833"
+    },
+    {
+      "path": "v2_src/design_resolver.h",
+      "status": "new",
+      "size_bytes": 4229,
+      "sha256": "a7b73a1137113f13e9806f8f8e67ab6779269b4119544894cf6ed68a21f16ee6"
+    },
+    {
+      "path": "v2_src/engineering_loop.c",
+      "status": "new",
+      "size_bytes": 39412,
+      "sha256": "78b733b781c362fed60b3745f50ba0e86ab4f3ea79e26f7aba0042ab4c26e942"
+    },
+    {
+      "path": "v2_src/engineering_loop.h",
+      "status": "new",
+      "size_bytes": 4786,
+      "sha256": "df414b2163a3ce27336d6c2908f308750ba580610888c973de8354f03a18973b"
+    },
+    {
+      "path": "v2_src/engineering_loop_json.c",
+      "status": "new",
+      "size_bytes": 20764,
+      "sha256": "fc3604aa641ff86240c9e6e7c60a25fc1a64e31641c5a2a7f584c25cd3d80781"
+    },
+    {
+      "path": "v2_src/engineering_loop_json.h",
+      "status": "new",
+      "size_bytes": 856,
+      "sha256": "838d01dee46080f174280e7c3f9498d2d99332ce0b887001198e2921382dda30"
+    },
+    {
+      "path": "v2_src/kicad_asset_resolver.c",
+      "status": "new",
+      "size_bytes": 27402,
+      "sha256": "4e2c518c55e78d58405e5bfb331cfda39bc8a700ef9d68b679555840970d45f1"
+    },
+    {
+      "path": "v2_src/kicad_asset_resolver.h",
+      "status": "new",
+      "size_bytes": 3259,
+      "sha256": "93ad4a6bb3394f8563ef24144b38c14043cb3f0ebdf7ac1ba45fcb8dba0a1c61"
+    },
+    {
+      "path": "v2_src/kicad_assets.c",
+      "status": "new",
+      "size_bytes": 28221,
+      "sha256": "55698478af8f7684017dba711144110aa5b8e0b84fb7556c0331c8523fe354f8"
+    },
+    {
+      "path": "v2_src/kicad_assets.h",
+      "status": "new",
+      "size_bytes": 4216,
+      "sha256": "f41cb9a774ef9a749224c10f01df85a496dfe0db9272ae409d72da91578b9173"
+    },
+    {
+      "path": "v2_src/optimization_loop.c",
+      "status": "new",
+      "size_bytes": 49754,
+      "sha256": "c64cfe0242e0da58f28917cf56bc5f76d2fdb8459f7f463a42753053e7b245c1"
+    },
+    {
+      "path": "v2_src/optimization_loop.h",
+      "status": "new",
+      "size_bytes": 6528,
+      "sha256": "bdbeb1c663399af089cb756aa9c176c51329dbe78dd318e0e9c6abcd130823a5"
+    },
+    {
+      "path": "v2_src/optimization_loop_json.c",
+      "status": "new",
+      "size_bytes": 14321,
+      "sha256": "1adeb816ccf28900716396ca325c36b1ae7317ac36dd7da0c3ac8c2488693bd8"
+    },
+    {
+      "path": "v2_src/optimization_loop_json.h",
+      "status": "new",
+      "size_bytes": 699,
+      "sha256": "fcb5adae6bf710bee806b14d284b07f6077d50837731bf6ca549e3cd27fda886"
+    },
+    {
+      "path": "v2_src/part_catalogue.c",
+      "status": "new",
+      "size_bytes": 32733,
+      "sha256": "f63a7d9ee62eabcf3a94753ef303a6f27276bb1b1e8ced1614ea9740697ccc42"
+    },
+    {
+      "path": "v2_src/part_catalogue.h",
+      "status": "new",
+      "size_bytes": 5889,
+      "sha256": "383a7482f8882538090e589bf9b398f417def513d0f5938c3a314d55b4d6deaf"
+    },
+    {
+      "path": "v2_src/schemas/copper.engineering-design.v1.schema.json",
+      "status": "new",
+      "size_bytes": 8425,
+      "sha256": "b737394c510627058c79631904ccdd4a2107e2d0fc819fc335645657e183d4ce"
+    },
+    {
+      "path": "v2_src/schemas/copper.optimization-apply.v1.schema.json",
+      "status": "new",
+      "size_bytes": 3205,
+      "sha256": "25331c04a9aaa55229b5377126651bc599cc870199ba49aed097009b9031cf3d"
+    },
+    {
+      "path": "v2_src/schemas/copper.optimization-evaluation.v1.schema.json",
+      "status": "new",
+      "size_bytes": 9557,
+      "sha256": "592199837bbee5a341759dba91f705bcaec074b9cab8530079e4f0a5e6372f30"
+    },
+    {
+      "path": "v2_src/schemas/copper.optimization-run.v1.schema.json",
+      "status": "new",
+      "size_bytes": 7864,
+      "sha256": "55f57ef67af203c6c08491b4b2c37da7ac13caad9bd7c0505d487843c053e701"
+    },
+    {
+      "path": "v2_src/schemas/copper.topology.v1.schema.json",
+      "status": "new",
+      "size_bytes": 4643,
+      "sha256": "600d4d22c898f3a3e7409adcd2910cd80e1356659076f54e01982853a0b1b8fe"
+    },
+    {
+      "path": "v2_src/tests/fixtures/topology_sample.kicad_net",
+      "status": "new",
+      "size_bytes": 443,
+      "sha256": "5f52bf978a2a5d1e796f6f6ea3d3c6c5a5f44563381fa50e98a6638c2b90b951"
+    },
+    {
+      "path": "v2_src/tests/run_kicad_sample_corpus.ps1",
+      "status": "new",
+      "size_bytes": 4315,
+      "sha256": "a88957c7c6ed40fdd93393236b469004e86ff58f820c73707dcc77b8c414e44d"
+    },
+    {
+      "path": "v2_src/tests/test_engineering_loop.c",
+      "status": "new",
+      "size_bytes": 8474,
+      "sha256": "ac3676374ce8cea3c7005b1d88e0c2ceac9d2824137257689d8e17a74bdd47b2"
+    },
+    {
+      "path": "v2_src/tests/test_optimization_loop.c",
+      "status": "new",
+      "size_bytes": 14672,
+      "sha256": "d0d2fb10a53f2797e32991122c002db34f35954a1fcad46ce99fb57e81c68608"
+    },
+    {
+      "path": "v2_src/tests/test_topology.c",
+      "status": "new",
+      "size_bytes": 5636,
+      "sha256": "2e3dceeeaf6fa29239ac03c0effcc3eb7d43d57578be70a38f052a4a2b27a95e"
+    },
+    {
+      "path": "v2_src/topology.c",
+      "status": "new",
+      "size_bytes": 16186,
+      "sha256": "92afd4f8fd1323b782f6bbe3561959f11bf5aa5086a4f7a4045d72fefd53da93"
+    },
+    {
+      "path": "v2_src/topology.h",
+      "status": "new",
+      "size_bytes": 4768,
+      "sha256": "680d744142eff8a2a5f7395caeb086b3d41dd12dfd243005a277f1e486b8113f"
+    },
+    {
+      "path": "v2_src/topology_json.c",
+      "status": "new",
+      "size_bytes": 3943,
+      "sha256": "9d9ccd0afaaeef646a94e26acade528f2d0bb30b37e46b2d0f1cbdcc87ceed1d"
+    },
+    {
+      "path": "v2_src/topology_json.h",
+      "status": "new",
+      "size_bytes": 317,
+      "sha256": "91e2d39e63b20777ee92d2f25c81f875a7cdc1ed7ad53265c6acf604c9cf52ff"
+    }
+  ]
+}

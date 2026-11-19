@@ -1,0 +1,7 @@
+{
+  "schema": "copper.request-draft",
+  "schema_version": 1,
+  "status": "needs_structuring",
+  "raw_prompt": "prompt Create a small 5 V red LED indicator PCB with a two-pin power input, one 560R current-limiting resistor and one red LED. Use these exact KiCad libraries: J1 symbol Connector_Generic:Conn_01x02 and footprint Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical; R1 symbol Device:R and footprint Resistor_SMD:R_0603_1608Metric; D1 symbol Device:LED and footprint LED_SMD:LED_0603_1608Metric. Use the real pin numbers and pad numbers from the local library metadata. Nets: VIN, LED_ANODE and GND. Use a 35 mm by 25 mm, 2-layer board. Keep the LED forward-voltage assumption explicit and do not claim the PCB is routed.",
+  "note": "Raw user intent only; no components, nets, or electrical assumptions have been inferred."
+}

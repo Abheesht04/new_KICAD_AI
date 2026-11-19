@@ -1,0 +1,27 @@
+Copper design import: OK
+Project: Red_LED_Indicator
+Schematic symbols: 3  Library symbols: 3  Wires: 0  Labels: 6
+PCB footprints: 3  Pads: 6  Tracks: 0  Vias: 0  Zones: 0
+Parity: matched=3 missing-footprints=0 extra-footprints=0 pad-net-checks=6 mismatches=6
+Design JSON: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\.copper\design.json
+Diagnostics JSON: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\.copper\reports\import.json
+Manifest: D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\.copper\manifest.json
+COPPER PROJECT IMPORT REPORT
+INFO: 9  WARNING: 0  ERROR: 6  UNVERIFIED: 1
+
+[INFO] PROJECT_OPENED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator) â€” Red_LED_Indicator: KiCad project directory and project settings file were located.
+[INFO] SOURCE_HASHED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_pro): Source file was read and its SHA-256 recorded.
+[INFO] SOURCE_HASHED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_sch): Source file was read and its SHA-256 recorded.
+[INFO] SOURCE_HASHED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_pcb): Source file was read and its SHA-256 recorded.
+[INFO] PROJECT_SETTINGS_PARSED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_pro): KiCad net classes, board rule settings and ERC/DRC rule severities were imported.
+[INFO] SCHEMATIC_PARSED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_sch): Schematic S-expression was parsed into typed symbol, pin, wire, label and junction records; the complete source tree is retained.
+[INFO] PCB_PARSED (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_pcb): PCB S-expression was parsed and its represented typed model passed structural validation.
+[UNVERIFIED] PCB_IMPORT_COVERAGE_INCOMPLETE (D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/copper_lab/manual_compile/Red_LED_Indicator\Red_LED_Indicator.kicad_pcb): The PCB importer reported unmodelled records, geometry, rotations or layers. Structural model validity does not imply complete physical feature coverage.
+[INFO] SOURCE_HASHED (D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\copper_lab\manual_compile\Red_LED_Indicator\validation\design.kicad_net): Source file was read and its SHA-256 recorded.
+[INFO] NETLIST_PARSED (D:\Engine\Copper_Lab_Integrated\Copper_Lab_Integrated\copper_lab\manual_compile\Red_LED_Indicator\validation\design.kicad_net): KiCad S-expression netlist components, nets and pin nodes were imported.
+[ERROR] PCB_PAD_NET_MISMATCH (*.kicad_pcb) â€” J1: PCB pad net differs from the corresponding schematic netlist connection.
+[ERROR] PCB_PAD_NET_MISMATCH (*.kicad_pcb) â€” J1: PCB pad net differs from the corresponding schematic netlist connection.
+[ERROR] PCB_PAD_NET_MISMATCH (*.kicad_pcb) â€” R1: PCB pad net differs from the corresponding schematic netlist connection.
+[ERROR] PCB_PAD_NET_MISMATCH (*.kicad_pcb) â€” R1: PCB pad net differs from the corresponding schematic netlist connection.
+[ERROR] PCB_PAD_NET_MISMATCH (*.kicad_pcb) â€” D1: PCB pad net differs from the corresponding schematic netlist connection.
+[ERROR] PCB_PAD_NET_MISMATCH (*.kicad_pcb) â€” D1: PCB pad net differs from the corresponding schematic netlist connection.

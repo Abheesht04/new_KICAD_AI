@@ -1,0 +1,54 @@
+{
+  "schema": "copper.design-compile-manifest",
+  "schema_version": 1,
+  "project": "Red_LED_Indicator",
+  "intent_sha256": "d50b7ee0c111f5d00a41510dc7b6988f6ee073ea43b4e1100b5b828197d8ddb8",
+  "compiler": "copper_design_compile.py",
+  "compiler_version": "0.1.0",
+  "copper_part_resolver": "passed",
+  "asset_validation": "python_asset_parse_passed",
+  "source_libraries": {
+    "symbols": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\symbols",
+    "footprints": "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints"
+  },
+  "components": [
+    {
+      "reference": "J1",
+      "symbol_id": "Connector_Generic:Conn_01x02",
+      "footprint_id": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "copper_resolution": ".copper/component-resolution/J1.json"
+    },
+    {
+      "reference": "R1",
+      "symbol_id": "Device:R",
+      "footprint_id": "Resistor_SMD:R_0603_1608Metric",
+      "copper_resolution": ".copper/component-resolution/R1.json"
+    },
+    {
+      "reference": "D1",
+      "symbol_id": "Device:LED",
+      "footprint_id": "LED_SMD:LED_0603_1608Metric",
+      "copper_resolution": ".copper/component-resolution/D1.json"
+    }
+  ],
+  "nets": [
+    {
+      "name": "GND",
+      "id": 1
+    },
+    {
+      "name": "LED_ANODE",
+      "id": 2
+    },
+    {
+      "name": "VIN",
+      "id": 3
+    }
+  ],
+  "routing_status": "not_routed",
+  "notes": [
+    "Native KiCad files were assembled from installed library assets.",
+    "No PCB tracks or vias were generated; connectivity is represented by pad net assignments.",
+    "Run KiCad ERC/DRC and Copper import before treating the design as valid."
+  ]
+}

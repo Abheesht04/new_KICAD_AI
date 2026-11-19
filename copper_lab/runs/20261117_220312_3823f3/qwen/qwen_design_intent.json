@@ -1,0 +1,83 @@
+{
+  "schema": "copper.design-intent",
+  "schema_version": 1,
+  "project": {
+    "name": "Red_LED_Indicator",
+    "board": {
+      "width_mm": 35,
+      "height_mm": 25,
+      "layers": 2
+    }
+  },
+  "components": [
+    {
+      "reference": "J1",
+      "value": "Connector_01x02",
+      "symbol_id": "Connector_Generic:Conn_01x02",
+      "footprint_id": "Connector_PinHeader_2054mm:PinHeader_1x02_P2054mm_Vertical",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "1",
+          "net": "VIN"
+        },
+        {
+          "symbol_pin": "2",
+          "pad": "2",
+          "net": "GND"
+        }
+      ],
+      "position": {
+        "x_mm": 5,
+        "y_mm": 12.5,
+        "rotation_deg": 0
+      }
+    },
+    {
+      "reference": "R1",
+      "value": "Resistor_560R",
+      "symbol_id": "Device:R",
+      "footprint_id": "Resistor_SMD:R_0603_1608Metric",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "1",
+          "net": "VIN"
+        },
+        {
+          "symbol_pin": "2",
+          "pad": "2",
+          "net": "LED_ANODE"
+        }
+      ],
+      "position": {
+        "x_mm": 15,
+        "y_mm": 12.5,
+        "rotation_deg": 0
+      }
+    },
+    {
+      "reference": "D1",
+      "value": "LED_Red",
+      "symbol_id": "Device:LED",
+      "footprint_id": "LED_SMD:LED_0603_1608Metric",
+      "pins": [
+        {
+          "symbol_pin": "1",
+          "pad": "1",
+          "net": "GND"
+        },
+        {
+          "symbol_pin": "2",
+          "pad": "2",
+          "net": "LED_ANODE"
+        }
+      ],
+      "position": {
+        "x_mm": 25,
+        "y_mm": 12.5,
+        "rotation_deg": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-18T01:18:14+0530",
+    "kicad_version": "9.0.6",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/50830842-20b6-5b77-bc21-3f8610f915a1",
+            "violations": []
+        }
+    ],
+    "source": "Red_LED_Indicator.kicad_sch"
+}

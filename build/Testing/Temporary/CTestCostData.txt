@@ -1,0 +1,8 @@
+copper_core_tests 1 0.0766958
+copper_design_tests 1 0.111867
+copper_catalogue_asset_tests 1 0.0829415
+copper_topology_tests 1 0.0513551
+copper_engineering_tests 1 0.0544011
+copper_optimization_tests 0 0
+---
+copper_optimization_tests

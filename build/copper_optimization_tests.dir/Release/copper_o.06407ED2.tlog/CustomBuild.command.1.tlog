@@ -1,0 +1,10 @@
+^D:\ENGINE\COPPER_LAB_INTEGRATED\COPPER_LAB_INTEGRATED\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated -BD:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build --check-stamp-file D:/Engine/Copper_Lab_Integrated/Copper_Lab_Integrated/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
