@@ -1,1 +1,0 @@
-Copper Design Compiler failed (exit 2). See compiler logs.

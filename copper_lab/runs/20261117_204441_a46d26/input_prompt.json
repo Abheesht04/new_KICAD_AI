@@ -1,5 +1,0 @@
-{
-  "prompt": "Create a small 5 V status-indicator PCB. Use a two-pin power input, one red LED and one current-limiting resistor in series. Use through-hole components, a two-layer board, and a compact rectangular outline. Keep the resistor value and LED current assumptions explicit for review. Do not invent an MCU or add unrelated circuitry.",
-  "model": "qwen3:8b",
-  "created_at": "2026-11-17T15:14:41+00:00"
-}

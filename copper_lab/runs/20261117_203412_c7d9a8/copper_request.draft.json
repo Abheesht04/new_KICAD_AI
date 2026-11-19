@@ -1,7 +1,0 @@
-{
-  "schema": "copper.request-draft",
-  "schema_version": 1,
-  "status": "needs_structuring",
-  "raw_prompt": "prompt Create a 5 V to 3.3 V linear regulator breakout PCB using an AMS1117-3.3 in a SOT-223 package, 10 uF input and output ceramic capacitors (0805), a green power indicator LED with a 1 kOhm resistor, and standard 2.54 mm 3-pin header pins (VIN, GND, 3V3). Use a 2-layer board with a bottom ground pour. List all component footprint and thermal assumptions for review.",
-  "note": "Raw user intent only; no components, nets, or electrical assumptions have been inferred."
-}

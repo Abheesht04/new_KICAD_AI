@@ -1,9 +1,0 @@
-{
-  "model": "llama3.2:latest",
-  "context": 4096,
-  "prompt_eval_count": 2646,
-  "eval_count": 332,
-  "total_duration_ns": 53845957400,
-  "load_duration_ns": 48470291600,
-  "elapsed_seconds": 53.934
-}

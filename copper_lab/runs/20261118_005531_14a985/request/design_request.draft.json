@@ -1,7 +1,0 @@
-{
-  "schema": "copper.request-draft",
-  "schema_version": 1,
-  "status": "needs_structuring",
-  "raw_prompt": "prompt Create a simple two-resistor parallel network PCB.\n\nComponents:\n- R1: 1 kO resistor.\n- R2: 2 kO resistor.\n\nUse these exact KiCad library identifiers for both:\n- Symbol: Device:R\n- Footprint: Resistor_SMD:R_0603_1608Metric\n\nConnectivity:\n- R1 pin 1 and R2 pin 1 connect to VIN.\n- R1 pin 2 and R2 pin 2 connect to GND.\n\nBoard:\n- 35 mm × 25 mm.\n- Two copper layers.\n- Place both components with adequate spacing.\n- Use actual library pin and footprint pad mappings.\n\nDo not add any other components.\nDo not invent alternative library identifiers.\nReturn valid copper.design-intent.v1 JSON.\n\nThis is a component resolution and connectivity test. PCB routing is not required.",
-  "note": "Raw user intent only; no components, nets, or electrical assumptions have been inferred."
-}
