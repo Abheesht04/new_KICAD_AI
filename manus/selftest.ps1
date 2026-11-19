@@ -118,6 +118,27 @@ if ($ready) {
     if ($o.exit -eq 0) { Step 'claimcheck accepts an honest answer' 'PASS' 'no unsupported claims' } else { Step 'claimcheck accepts an honest answer' 'FAIL' $o.text }
 }
 
+# copper-prompt.ps1 against a local mock of the Manus API (no account, no credits): waiting -> nudge, a swapped
+# LED polarity -> gate findings sent back -> corrected intent -> compile -> report. The real key must never be sent.
+if ($ready) {
+    $py = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
+    $mlog = Join-Path $ws 'mock_manus_log.json'
+    $psi = New-Object Diagnostics.ProcessStartInfo $py, ('"' + (Join-Path $repo 'manus\tests\mock_manus_api.py') + '" "' + (Join-Path $ws 'examples\led_indicator.intent.json') + '" "' + $mlog + '"')
+    $psi.RedirectStandardOutput = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $mock = [Diagnostics.Process]::Start($psi)
+    $port = ($mock.StandardOutput.ReadLine() -split ' ')[-1]
+    $env:COPPER_MANUS_API_BASE = "http://127.0.0.1:$port"
+    $ErrorActionPreference = 'Continue'
+    try { $mp = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ws 'copper-prompt.ps1') -Prompt 'Make a 5 V red LED indicator board with a 2-pin power header' -Name mocktest 2>&1 | ForEach-Object { "$_" } }
+    finally { $mock.Kill(); Remove-Item Env:COPPER_MANUS_API_BASE }
+    $mtext = $mp -join "`n"
+    $requests = Get-Content -Raw $mlog | ConvertFrom-Json
+    $allMock = -not @($requests | Where-Object { -not $_.key_is_mock }).Count
+    if ($mtext -match 'PIN_NAME_MISMATCH' -and $mtext -match 'attempt 2' -and $mtext -match 'GROUNDED \(3 component' -and $mtext -match 'NOT ROUTED' -and $allMock) {
+        Step 'copper-prompt with mock Manus (repair loop)' 'PASS' 'waiting nudged; swapped polarity rejected then corrected; compiled; real key never sent'
+    } else { Step 'copper-prompt with mock Manus (repair loop)' 'FAIL' (($mp | Select-Object -Last 25) -join "`n") }
+}
+
 # Copper Lab's own test script (Python compiler and web-pipeline tests).
 $lab = Join-Path $repo 'scripts\test_copper_lab_pipeline.ps1'
 $ErrorActionPreference = 'Continue'
