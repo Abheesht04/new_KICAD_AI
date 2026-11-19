@@ -7,6 +7,7 @@
 #include "netlist_kicad.h"
 #include "report.h"
 #include "design_resolver.h"
+#include "design_parity.h"
 #include "part_catalogue.h"
 
 #include <assert.h>
@@ -309,6 +310,78 @@ static void test_diagnostic_report_json_and_text(void) {
     arena_destroy(&arena);
 }
 
+static void test_root_sheet_net_name_parity(void) {
+    SchematicSymbol symbol;
+    SchematicIR schematic;
+    BoardFootprint footprint;
+    BoardPad pad;
+    BoardNet pcb_net;
+    Board board;
+    KicadNetlistNode node;
+    KicadNetlistNet net;
+    KicadNetlist netlist;
+    DesignParitySummary summary;
+    CopperDiagnosticReport report;
+    Arena arena;
+
+    memset(&symbol, 0, sizeof(symbol));
+    memset(&schematic, 0, sizeof(schematic));
+    memset(&footprint, 0, sizeof(footprint));
+    memset(&pad, 0, sizeof(pad));
+    memset(&pcb_net, 0, sizeof(pcb_net));
+    memset(&board, 0, sizeof(board));
+    memset(&node, 0, sizeof(node));
+    memset(&net, 0, sizeof(net));
+    memset(&netlist, 0, sizeof(netlist));
+
+    symbol.uuid = "symbol-uuid";
+    symbol.reference = "R1";
+    symbol.footprint = "Resistor_SMD:R_0603_1608Metric";
+    symbol.on_board = true;
+    schematic.symbols = &symbol;
+    schematic.symbol_count = 1;
+
+    footprint.reference = "R1";
+    footprint.lib_id = symbol.footprint;
+    footprint.path = "/symbol-uuid";
+    footprint.pad_count = 1;
+    board.footprints = &footprint;
+    board.footprint_count = 1;
+
+    pad.footprint = 0;
+    pad.number = "1";
+    pad.net = 1;
+    board.pads = &pad;
+    board.pad_count = 1;
+    pcb_net.id = 1;
+    pcb_net.name = "VIN";
+    board.nets = &pcb_net;
+    board.net_count = 1;
+
+    node.reference = "R1";
+    node.pin = "1";
+    node.net_index = 0;
+    net.name = "/VIN";
+    net.first_node = 0;
+    net.node_count = 1;
+    netlist.nodes = &node;
+    netlist.node_count = 1;
+    netlist.nets = &net;
+    netlist.net_count = 1;
+
+    arena_init(&arena, 4096);
+    diagnostic_report_init(&report, &arena, 8);
+    assert(design_parity_check(&schematic, &board, &netlist, &report, &summary));
+    assert(summary.checked_pad_nets == 1);
+    assert(summary.pad_net_mismatches == 0);
+
+    /* Do not erase the hierarchy: /Power/VIN is not the root net VIN. */
+    net.name = "/Power/VIN";
+    assert(!design_parity_check(&schematic, &board, &netlist, &report, &summary));
+    assert(summary.pad_net_mismatches == 1);
+    arena_destroy(&arena);
+}
+
 int main(void) {
     test_sample_project_import_and_json();
     test_forgiving_catalogue_and_resolution();
@@ -318,6 +391,7 @@ int main(void) {
     test_kicad_netlist_parse();
     test_netlist_json_serialization();
     test_diagnostic_report_json_and_text();
+    test_root_sheet_net_name_parity();
     puts("Copper design tests: PASS");
     return 0;
 }

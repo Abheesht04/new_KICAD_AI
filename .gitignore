@@ -20,3 +20,7 @@ imgui.ini
 
 # LLM eval output (scripts/run_llm_eval.*)
 /eval_out/
+
+# Copper Lab run outputs (generated designs, logs)
+/copper_lab/runs/
+/copper_lab/manual_compile*/

@@ -1,0 +1,10 @@
+Design a basic 5 V DC LED indicator for a low-voltage bench supply.
+
+Use the following exact KiCad library items for this first experiment:
+- J1: symbol Connector_Generic:Conn_01x02; footprint Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical; pins 1=VIN and 2=GND.
+- R1: symbol Device:R; footprint Resistor_SMD:R_0603_1608Metric; value 560R; pin 1=VIN and pin 2=LED_ANODE.
+- D1: symbol Device:LED; footprint LED_SMD:LED_0603_1608Metric; use the symbol's actual pin names/numbers; LED_ANODE must go to the anode and GND must go to the cathode.
+
+The intended current is approximately 5 to 8 mA for a typical red LED. Do not add a regulator or protection circuit. Board outline should be approximately 35 mm by 25 mm, two copper layers.
+
+Return only the copper.design-intent.v1 JSON object. The compiler will verify library IDs, symbol pins and footprint pads on the local machine. If an exact library item is unavailable, do not substitute a guessed ID.

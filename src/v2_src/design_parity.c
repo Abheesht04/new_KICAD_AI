@@ -51,6 +51,19 @@ static const KicadNetlistNet *node_net(const KicadNetlist *nl,
     return &nl->nets[node->net_index];
 }
 
+/* KiCad's exported netlist qualifies root-sheet local labels with a single
+ * leading slash (for example "/GND"), while the PCB net table stores the
+ * same net as "GND". Compare those equivalent root-sheet spellings without
+ * stripping slashes from hierarchical names such as "/Power/GND". */
+static bool pcb_net_name_matches_netlist(const char *pcb_name,
+                                         const char *netlist_name) {
+    if (!pcb_name || !netlist_name) return false;
+    if (strcmp(pcb_name, netlist_name) == 0) return true;
+    if (netlist_name[0] != '/' || netlist_name[1] == '\0') return false;
+    if (strchr(netlist_name + 1, '/') != NULL) return false;
+    return strcmp(pcb_name, netlist_name + 1) == 0;
+}
+
 bool design_parity_check(const SchematicIR *sch, const Board *board,
                          const KicadNetlist *netlist,
                          CopperDiagnosticReport *report,
@@ -130,7 +143,8 @@ bool design_parity_check(const SchematicIR *sch, const Board *board,
             const BoardNet *pcb_net = board_net_by_id(board, pad->net);
             const KicadNetlistNet *logical_net = node_net(netlist, node);
             if (!pcb_net || !logical_net || !logical_net->name ||
-                !pcb_net->name || strcmp(logical_net->name, pcb_net->name) != 0) {
+                !pcb_net->name ||
+                !pcb_net_name_matches_netlist(pcb_net->name, logical_net->name)) {
                 ++summary->pad_net_mismatches;
                 add_diag(report, DIAG_ERROR, "PCB_PAD_NET_MISMATCH", "*.kicad_pcb",
                          fp->reference, "PCB pad net differs from the corresponding schematic netlist connection.");

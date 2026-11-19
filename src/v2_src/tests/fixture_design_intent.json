@@ -1,0 +1,28 @@
+{
+  "schema": "copper.design-intent",
+  "schema_version": 1,
+  "project": {
+    "name": "CopperCompilerFixture",
+    "board": {"width_mm": 50, "height_mm": 35, "layers": 2}
+  },
+  "components": [
+    {
+      "reference": "R1", "value": "1k",
+      "symbol_id": "Device:R",
+      "footprint_id": "Resistor_SMD:R_0603_1608Metric",
+      "pins": [
+        {"symbol_pin": "1", "pad": "1", "net": "VIN"},
+        {"symbol_pin": "2", "pad": "2", "net": "GND"}
+      ]
+    },
+    {
+      "reference": "R2", "value": "2k",
+      "symbol_id": "Device:R",
+      "footprint_id": "Resistor_SMD:R_0603_1608Metric",
+      "pins": [
+        {"symbol_pin": "1", "pad": "1", "net": "VIN"},
+        {"symbol_pin": "2", "pad": "2", "net": "GND"}
+      ]
+    }
+  ]
+}
