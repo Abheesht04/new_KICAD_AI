@@ -37,7 +37,96 @@ DEFAULT_CANDIDATES = [
     ("Device:R", "Resistor_SMD:R_0603_1608Metric"),
     ("Device:LED", "LED_SMD:LED_0603_1608Metric"),
     ("Device:C", "Capacitor_SMD:C_0805_2012Metric"),
+    # Added 2026-11-20 so ordinary power/switching requests can be built from verified parts. IDs checked to exist
+    # in the KiCad 10.0.5 library tree; Phoenix terminal blocks are not offered (their names contain commas, which
+    # the grounding gate's ID rules do not accept).
+    ("Device:C", "Capacitor_SMD:C_0603_1608Metric"),
+    ("Device:R", "Resistor_SMD:R_0805_2012Metric"),
+    ("Device:D", "Diode_SMD:D_SOD-123"),
+    ("Device:D_Schottky", "Diode_SMD:D_SMA"),
+    ("Transistor_FET:Q_NMOS_GSD", "Package_TO_SOT_SMD:SOT-23"),
+    ("Connector:Screw_Terminal_01x02", "TerminalBlock:TerminalBlock_MaiXu_MX126-5.0-02P_1x02_P5.00mm"),
+    ("Connector:Screw_Terminal_01x03", "TerminalBlock:TerminalBlock_MaiXu_MX126-5.0-03P_1x03_P5.00mm"),
+    ("Connector:Screw_Terminal_01x04", "TerminalBlock:TerminalBlock_MaiXu_MX126-5.0-04P_1x04_P5.00mm"),
 ]
+
+_PART_TOKEN = re.compile(r"(?<![A-Za-z0-9_:.-])([A-Za-z][A-Za-z0-9_.+-]{3,40})(?![A-Za-z0-9_])")
+
+
+def named_library_parts(prompt: str, symbols_root: Path) -> list[dict[str, Any]]:
+    """Parts the request names in plain words (for example "AO3400A") that exist as symbols in the installed
+    libraries: their library ID, the symbol they are derived from (KiCad `extends`) and their default footprint.
+    Only tokens with both a letter and a digit are looked up, so ordinary words are ignored. Facts from the
+    library files only; nothing is inferred."""
+    tokens = {t.rstrip(".") for t in _PART_TOKEN.findall(prompt)
+              if re.search(r"[A-Za-z]", t) and re.search(r"[0-9]", t)}
+    found: list[dict[str, Any]] = []
+    if not tokens or not symbols_root.is_dir():
+        return found
+    for lib in sorted(symbols_root.glob("*.kicad_sym")):
+        try:
+            text = lib.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for token in sorted(tokens):
+            m = re.search(r'\n\t\(symbol "' + re.escape(token) + r'"', text)
+            if not m:
+                continue
+            end = text.find('\n\t(symbol "', m.end())
+            block = text[m.start(): end if end > 0 else len(text)]
+            ext = re.search(r'\(extends "([^"]+)"\)', block)
+            fp = re.search(r'\(property "Footprint" "([^"]*)"', block)
+            found.append({"name": token, "symbol_id": f"{lib.stem}:{token}",
+                          "derived_from": f"{lib.stem}:{ext.group(1)}" if ext else None,
+                          "default_footprint": fp.group(1) if fp and fp.group(1) else None})
+    return found
+
+
+def add_named_parts(prompt: str, context: dict[str, Any], symbols_root: Path, footprints_root: Path) -> dict[str, Any]:
+    """Extend a library context with the parts the request names in plain words. A derived symbol (which the
+    compiler and the grounding gate reject) is offered as its base symbol plus the default footprint, with a note
+    saying so; the base keeps the derived part's pin numbers and names, because KiCad derives one from the other."""
+    named = named_library_parts(prompt, symbols_root)
+    if not named:
+        return context
+    spec = importlib.util.spec_from_file_location("kicad_asset_context", ASSET_CONTEXT_TOOL)
+    if not spec or not spec.loader:
+        return context
+    sys.path.insert(0, str(TOOLS_DIR))
+    try:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        have_symbols = {s["id"] for s in context.get("symbols", [])}
+        have_footprints = {f["id"] for f in context.get("footprints", [])}
+        notes = context.setdefault("named_parts", [])
+        for part in named:
+            use = part["derived_from"] or part["symbol_id"]
+            fp = part["default_footprint"]
+            try:
+                one = cached_build_context(module, f"symbol {use}" + (f" footprint {fp}" if fp else ""), symbols_root, footprints_root)
+            except Exception as exc:   # an unusable base or footprint is reported, not substituted
+                notes.append({"name": part["name"], "library_symbol": part["symbol_id"], "usable": False, "reason": str(exc)})
+                continue
+            for item in one["symbols"]:
+                if item["id"] not in have_symbols:
+                    context.setdefault("symbols", []).append(item); have_symbols.add(item["id"])
+            for item in one["footprints"]:
+                if item["id"] not in have_footprints:
+                    context.setdefault("footprints", []).append(item); have_footprints.add(item["id"])
+            if fp:
+                context.setdefault("candidate_pairs", []).append({"symbol_id": use, "footprint_id": fp})
+            note = {"name": part["name"], "library_symbol": part["symbol_id"], "use_symbol": use,
+                    "use_footprint": fp, "usable": True}
+            if part["derived_from"]:
+                note["note"] = (f"{part['symbol_id']} is derived from {use} in the KiCad library (same pins); "
+                                f"use {use} with value \"{part['name']}\".")
+            notes.append(note)
+    finally:
+        try:
+            sys.path.remove(str(TOOLS_DIR))
+        except ValueError:
+            pass
+    return context
 
 
 def utc_stamp() -> str:
@@ -100,6 +189,43 @@ def library_roots() -> tuple[Path, Path]:
     return symbols.resolve(), footprints.resolve()
 
 
+def _cache_dir() -> Path:
+    base = os.environ.get("COPPER_PARTS_CACHE") or os.path.join(os.environ.get("LOCALAPPDATA", str(Path.home())), "Copper", "parts_cache")
+    return Path(base)
+
+
+def cached_build_context(module: Any, text: str, symbols_root: Path, footprints_root: Path) -> dict[str, Any]:
+    """module.build_context with a disk cache. Parsing the KiCad libraries in Python takes tens of seconds per
+    library file; the result depends only on the request text and the library files it names, so it is cached
+    under a key of the text, the roots and each named file's path, size and modification time (a library update
+    changes the key). Errors are never cached."""
+    import hashlib
+    parts = [text, str(symbols_root), str(footprints_root)]
+    for lib_id in sorted(set(module.SYMBOL_RE.findall(text))):
+        f = symbols_root / (lib_id.split(":", 1)[0] + ".kicad_sym")
+        parts.append(f"{f}|{f.stat().st_size}|{f.stat().st_mtime_ns}" if f.is_file() else f"{f}|missing")
+    for fp_id in sorted(set(module.FOOTPRINT_RE.findall(text))):
+        lib, _, name = fp_id.partition(":")
+        f = footprints_root / f"{lib}.pretty" / f"{name}.kicad_mod"
+        parts.append(f"{f}|{f.stat().st_size}|{f.stat().st_mtime_ns}" if f.is_file() else f"{f}|missing")
+    key = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+    cache = _cache_dir() / f"{key}.json"
+    if cache.is_file():
+        try:
+            return json.loads(cache.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    result = module.build_context(text, symbols_root, footprints_root)
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cache.with_suffix(".tmp")
+        tmp.write_text(json.dumps(result), encoding="utf-8")
+        tmp.replace(cache)
+    except OSError:
+        pass
+    return result
+
+
 def collect_asset_context(prompt: str, symbols_root: Path, footprints_root: Path) -> dict[str, Any]:
     """Read real symbol pins and footprint pads; never ask the model to invent them."""
     if not ASSET_CONTEXT_TOOL.is_file():
@@ -114,7 +240,7 @@ def collect_asset_context(prompt: str, symbols_root: Path, footprints_root: Path
         symbol_ids = sorted(set(module.SYMBOL_RE.findall(prompt)))
         footprint_ids = sorted(set(module.FOOTPRINT_RE.findall(prompt)))
         if symbol_ids or footprint_ids:
-            return module.build_context(prompt, symbols_root, footprints_root)
+            return cached_build_context(module, prompt, symbols_root, footprints_root)
 
         combined: dict[str, Any] = {
             "schema": "copper.kicad-library-context", "schema_version": 1,
@@ -126,8 +252,8 @@ def collect_asset_context(prompt: str, symbols_root: Path, footprints_root: Path
         errors: list[str] = []
         for symbol_id, footprint_id in DEFAULT_CANDIDATES:
             try:
-                one = module.build_context(
-                    f"symbol {symbol_id} footprint {footprint_id}", symbols_root, footprints_root
+                one = cached_build_context(
+                    module, f"symbol {symbol_id} footprint {footprint_id}", symbols_root, footprints_root
                 )
                 for item in one["symbols"]:
                     if item["id"] not in seen_symbols:

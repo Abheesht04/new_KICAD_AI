@@ -58,12 +58,13 @@ function Manus([string]$method, [string]$path, $body) {
             $bytes = $utf8.GetBytes(($body | ConvertTo-Json -Depth 40 -Compress))
             return Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes -TimeoutSec 60
         } catch {
-            $status = 0; $detail = $_.Exception.Message
-            if ($_.Exception.Response) {
-                $status = [int]$_.Exception.Response.StatusCode
-                try { $detail = (New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd() } catch { }
-            }
+            $status = 0
+            $detail = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+            if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
             if ($status -eq 429 -and $attempt -le 5) { Start-Sleep -Seconds ([Math]::Min(60, 5 * $attempt + (Get-Random -Maximum 3))); continue }
+            if ($status -eq 401) {
+                throw "Manus rejected the API key (HTTP 401): $detail`n  Create a new key at https://manus.im/app#settings/developers (it is shown only once), then store it with: manus\set_manus_api_key.ps1"
+            }
             throw "Manus API $path failed (HTTP $status): $detail"
         }
     }
@@ -132,7 +133,8 @@ function Run-Prompt([string]$text) {
     $ctxFile = Join-Path $runDir 'parts_context.json'
     $py = "import json, sys; sys.path.insert(0, sys.argv[1]); import design_pipeline as d; from pathlib import Path; " +
           "t = Path(sys.argv[2]).read_text(encoding='utf-8'); c = d.collect_asset_context(t, Path(sys.argv[3]), Path(sys.argv[4])); " +
-          "d.reject_explicitly_unavailable_assets(t, c); Path(sys.argv[5]).write_text(json.dumps(c, indent=1), encoding='utf-8')"
+          "d.reject_explicitly_unavailable_assets(t, c); c = d.add_named_parts(t, c, Path(sys.argv[3]), Path(sys.argv[4])); " +
+          "Path(sys.argv[5]).write_text(json.dumps(c, indent=1), encoding='utf-8')"
     & $cfg.python -c $py (Join-Path $cfg.repo 'copper_lab') $promptFile $cfg.symbols_root $cfg.footprints_root $ctxFile 2>&1 | ForEach-Object { Say "   $_" 'DarkGray' }
     if ($LASTEXITCODE -ne 0) { throw 'The parts lookup failed (see above). Name parts as "symbol Lib:Name footprint Lib:Name" or use standard ones.' }
     $ctx = Get-Content -Raw -Encoding UTF8 -LiteralPath $ctxFile | ConvertFrom-Json
@@ -141,8 +143,13 @@ function Run-Prompt([string]$text) {
         footprints = @($ctx.footprints | ForEach-Object { [ordered]@{ id = $_.id; pads = @($_.pads | ForEach-Object { $_.number } | Where-Object { $_ } | Select-Object -Unique) } })
         candidate_pairs = @($ctx.candidate_pairs)
         not_usable = @($ctx.unavailable_candidates)
+        named_parts = @($ctx.named_parts)
     }
     Say ("   {0} symbol(s), {1} footprint(s)" -f @($menu.symbols).Count, @($menu.footprints).Count)
+    foreach ($np in @($ctx.named_parts)) {
+        if ($np.usable) { Say ("   named part {0}: {1}" -f $np.name, $(if ($np.note) { $np.note } else { "$($np.use_symbol) + $($np.use_footprint)" })) 'DarkGray' }
+        else { Say ("   named part {0}: found as {1} but not usable: {2}" -f $np.name, $np.library_symbol, $np.reason) 'Yellow' }
+    }
 
     # 2. Manus writes the design intent (structured output).
     $schema = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $here 'manus_output.schema.json') | ConvertFrom-Json
@@ -151,7 +158,8 @@ You are the design-intent author for Copper, a local PCB engineering tool. Coppe
 Turn the user's request into a copper.design-intent v1 in the structured output. Rules:
 - Use ONLY symbol and footprint IDs from the PARTS LIST below, as symbol/footprint pairs (candidate_pairs when given). Never use not_usable parts.
 - For every pin: symbol_pin = the pin number, pin_name = that pin's name EXACTLY as in the parts list ("" for unnamed), pad = a pad number of the chosen footprint. Map every symbol pin and every footprint pad exactly once.
-- LEDs/diodes: the pin named K is the cathode, A is the anode. Do not assume pin numbers.
+- LEDs/diodes: the pin named K is the cathode, A is the anode. MOSFETs: G gate, S source, D drain. Do not assume pin numbers.
+- named_parts lists parts the user named that exist in their libraries. When a note says a symbol is derived from another, use the base symbol and footprint it names, with the named part as the value.
 - Every named net connects at least two pins; use null only for an intentional no-connect. Never leave a power input pin unconnected.
 - project.name: letters, digits, _ or - only. Board: 2 layers, width 20-300 mm, height 15-300 mm. Every component gets a position at least 2.5 mm inside the board edges, spaced so footprints do not overlap.
 - References like R1, D1, J1, C1. value: a short value such as 1k, 100n, RED, 5V_IN.
