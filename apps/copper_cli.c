@@ -21,6 +21,7 @@
 #include "schematic.h"
 #include "netlist_kicad.h"
 #include "intent_check.h"
+#include "template_gen.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -73,6 +74,9 @@ static void print_usage(void) {
     puts("  copper design resolve-part <parts.sx> [--part-id ID | --kind R|C|L|D|Q|M|U|J|S] [--mpn MPN] [--text QUERY] [--out design.json]");
     puts("  copper design check-intent <intent.json> --symbol-root DIR --footprint-root DIR [--out report.json]");
     puts("      grounding gate for a model-written design intent: exit 0 GROUNDED, 2 REJECTED (findings listed), 64 usage");
+    puts("  copper design generate <requirements.json> --templates FILE --symbol-root DIR --footprint-root DIR --out DIR [--prompt FILE]");
+    puts("      deterministic design from analysed requirements (circuit templates): writes DIR/intent.json and DIR/generation.json;");
+    puts("      exit 0 GENERATED, 2 INVALID_INPUT, 3 NEEDS_INPUT (questions), 4 NOT_IMPLEMENTED, 5 TEMPLATE_ERROR, 1 error, 64 usage");
     puts("  copper user design prompt \"<human requirements>\" [--out request.json]");
     puts("  copper user topology show <design.kicad_sch> --netlist <fresh.kicad_net> [--out topology.json]");
     puts("  copper dev topology build <design.kicad_sch> --netlist <fresh.kicad_net> --out topology.json");
@@ -2415,6 +2419,66 @@ static int command_design_check_intent(int argc, char **argv) {
     return st == INTENT_CHECK_GROUNDED ? 0 : 2;
 }
 
+/* copper design generate: requirements (from the prompt analysis) -> design intent, by template (template_gen.c). */
+static int write_text_file(const char *dir, const char *name, const char *text, size_t len) {
+    char path[FS_PATH_MAX];
+    if (fs_path_join(path, sizeof path, dir, name) != FS_OK) return 0;
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
+    int ok = fwrite(text, 1, len, f) == len;
+    return fclose(f) == 0 && ok;
+}
+
+static int command_design_generate(int argc, char **argv) {
+    const char *req_path = argv[3], *templates = NULL, *symbols = NULL, *footprints = NULL, *out_dir = NULL, *prompt_path = NULL;
+    for (int i = 4; i < argc; i++) {
+        if (i + 1 < argc && strcmp(argv[i], "--templates") == 0) templates = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--symbol-root") == 0) symbols = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--footprint-root") == 0) footprints = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--out") == 0) out_dir = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--prompt") == 0) prompt_path = argv[++i];
+        else { fprintf(stderr, "generate: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!templates || !symbols || !footprints || !out_dir) { fprintf(stderr, "generate needs --templates, --symbol-root, --footprint-root and --out\n"); return 64; }
+    Arena arena;
+    arena_init(&arena, 1u << 20);
+    const unsigned char *req = NULL, *tpl = NULL, *prompt = NULL;
+    size_t req_len = 0, tpl_len = 0, prompt_len = 0;
+    if (fs_read_file_arena(&arena, req_path, &req, &req_len) != FS_OK || fs_read_file_arena(&arena, templates, &tpl, &tpl_len) != FS_OK ||
+        (prompt_path && fs_read_file_arena(&arena, prompt_path, &prompt, &prompt_len) != FS_OK)) {
+        fprintf(stderr, "generate: cannot read the requirements, templates or prompt file\n");
+        arena_destroy(&arena);
+        return 1;
+    }
+    (void)prompt_len;
+    if (fs_create_directories(out_dir) != FS_OK) { fprintf(stderr, "generate: cannot create %s\n", out_dir); arena_destroy(&arena); return 1; }
+    TemplateGenOutput out;
+    TemplateGenStatus st = template_generate(&arena, (const char *)req, req_len, prompt ? (const char *)prompt : NULL, (const char *)tpl, tpl_len,
+                                             symbols, footprints, &out);
+    if (st == TGEN_ERR_ARGUMENT || st == TGEN_ERR_MEMORY || !out.report_json) {
+        fprintf(stderr, "generate: %s\n", template_gen_status_name(st));
+        arena_destroy(&arena);
+        return 1;
+    }
+    if (!write_text_file(out_dir, "generation.json", out.report_json, out.report_len) ||
+        (out.intent_json && !write_text_file(out_dir, "intent.json", out.intent_json, out.intent_len))) {
+        fprintf(stderr, "generate: cannot write into %s\n", out_dir);
+        arena_destroy(&arena);
+        return 1;
+    }
+    printf("Design generation: %s%s\n", template_gen_status_name(st), out.intent_json ? " (intent.json written)" : " (no design written)");
+    printf("Report: generation.json in %s\n", out_dir);
+    arena_destroy(&arena);
+    switch (st) {
+    case TGEN_GENERATED: return 0;
+    case TGEN_INVALID_INPUT: return 2;
+    case TGEN_NEEDS_INPUT: return 3;
+    case TGEN_NOT_IMPLEMENTED: return 4;
+    case TGEN_TEMPLATE_ERROR: return 5;
+    default: return 1;
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 2 || strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
         print_usage(); return argc < 2 ? 64 : 0;
@@ -2426,6 +2490,8 @@ int main(int argc, char **argv) {
             return command_design_resolve_part(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "check-intent") == 0)
             return command_design_check_intent(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "generate") == 0)
+            return command_design_generate(argc, argv);
         print_usage(); return 64;
     }
     if (strcmp(argv[1], "user") == 0) {

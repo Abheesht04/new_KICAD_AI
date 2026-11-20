@@ -1,22 +1,21 @@
 <#
-copper-prompt.ps1: write your own design prompts in the terminal; Manus turns each one into a design intent through
-the Manus API, and Copper checks, compiles and reports it on this PC.
+copper-prompt.ps1: write your own design prompts in the terminal.
 
     powershell -ExecutionPolicy Bypass -File .\copper-prompt.ps1                      # interactive: type prompts
-    powershell -ExecutionPolicy Bypass -File .\copper-prompt.ps1 -Prompt "5 V LED indicator with a 2-pin header"
+    powershell -ExecutionPolicy Bypass -File .\copper-prompt.ps1 -Prompt "low-side MOSFET switch for a 12 V, 2 A load from 3.3 V logic"
     powershell -ExecutionPolicy Bypass -File .\copper-prompt.ps1 -PromptFile my_request.txt [-Profile lite|standard|max]
 
-For each prompt:
-  1. parts list: the real pin numbers, pin names and pads of candidate parts from YOUR installed KiCad libraries
-     (or exactly the parts the prompt names as "symbol Lib:Name footprint Lib:Name");
-  2. Manus (https://api.manus.ai, task.create, interactive_mode false, structured_output_schema) writes a
-     copper.design-intent, plus its assumptions and open questions as separate fields;
-  3. Copper's grounding gate checks every part, pin, pin name, pad and net against the installed libraries. If it
-     REJECTS the intent, the findings go back to the same Manus task (task.sendMessage), at most -MaxRepairs times;
-  4. only a GROUNDED intent is compiled (KiCad project, netlist, ERC, DRC, Copper import);
-  5. REPORT.md (facts from tool output only); Manus's assumptions and questions are shown separately, marked
-     "not checked by Copper", and run through claimcheck.
-Everything is saved under designs\<name>_<time>\. Each prompt uses Manus credits on your account.
+Division of work (owner decision 2026-11-20): Manus is used ONLY to analyse the prompt. It returns copper.requirements
+v1: circuit type, voltages, currents, named parts and options, each with a verbatim quote from your prompt, plus open
+questions. It never chooses parts, pins, nets or values. Everything else is Copper's own code:
+  1. Manus (https://api.manus.ai, task.create, interactive_mode false, structured_output_schema) -> requirements.json
+  2. `copper design generate` (C, src/v2_src/template_gen.c): checks each value against a quote in your prompt
+     (unbacked values are IGNORED and reported), picks the circuit template (design_templates/), resolves every pin
+     from your KiCad libraries and computes values with integer formulas -> intent.json + generation.json
+  3. `copper design check-intent` (C grounding gate) -> GROUNDED or nothing is compiled
+  4. compile (KiCad project, netlist, ERC, DRC, Copper import) and REPORT.md (facts from tool output only)
+Missing information comes back as Copper's questions; a circuit without a template is NOT_IMPLEMENTED. Everything is
+saved under designs\<name>_<time>\. Each prompt uses Manus credits on your account (one analysis task).
 
 Key: the one stored by manus\set_manus_api_key.ps1 (%APPDATA%\Copper\manus_api_key.dpapi). It is sent only to
 https://api.manus.ai; with COPPER_MANUS_API_BASE pointing anywhere else (tests), a dummy key is sent instead.
@@ -27,7 +26,6 @@ param(
     [string]$PromptFile,
     [string]$Name,
     [ValidateSet('lite', 'standard', 'max')] [string]$Profile = 'standard',
-    [ValidateRange(0, 5)] [int]$MaxRepairs = 2,
     [ValidateRange(1, 120)] [int]$TimeoutMinutes = 20
 )
 $ErrorActionPreference = 'Stop'
@@ -81,8 +79,8 @@ function All-Events([string]$taskId) {
     return $events
 }
 
-# Wait until Manus delivers a structured_output_result that was not seen before. Returns the event.
-function Wait-Result([string]$taskId, [hashtable]$seen, [string]$runDir) {
+# Wait for the analysis (a structured_output_result). Questions from Manus are answered with "continue".
+function Wait-Analysis([string]$taskId, [string]$runDir) {
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     $nudges = 0; $lastStatus = ''
     while ((Get-Date) -lt $deadline) {
@@ -91,30 +89,25 @@ function Wait-Result([string]$taskId, [hashtable]$seen, [string]$runDir) {
         $status = ($events | Where-Object { $_.type -eq 'status_update' } | Select-Object -Last 1).status_update
         $agent = if ($status) { $status.agent_status } else { 'running' }
         if ($agent -ne $lastStatus) { Say "  Manus: $agent" 'DarkGray'; $lastStatus = $agent }
-        $fresh = $events | Where-Object { $_.type -eq 'structured_output_result' -and -not $seen.ContainsKey($_.id) } | Select-Object -Last 1
-        if ($fresh -and $agent -ne 'running') {
+        $result = $events | Where-Object { $_.type -eq 'structured_output_result' } | Select-Object -Last 1
+        if ($result -and $agent -ne 'running') {
             $detail = (Manus 'GET' "task.detail?task_id=$taskId" $null).task
-            if (-not $detail.has_running_background_jobs) { $seen[$fresh.id] = $true; return $fresh }
+            if (-not $detail.has_running_background_jobs) { return $result }
         }
-        if ($agent -eq 'error') {
-            $err = ($events | Where-Object { $_.type -eq 'error_message' } | Select-Object -Last 1)
-            throw "Manus reported an error: $(($err | ConvertTo-Json -Depth 10 -Compress))"
-        }
-        if ($agent -eq 'stopped' -and -not $fresh) {
-            throw 'Manus stopped without a structured result; see manus_events.json'
-        }
+        if ($agent -eq 'error') { throw "Manus reported an error: $((($events | Where-Object { $_.type -eq 'error_message' } | Select-Object -Last 1)) | ConvertTo-Json -Depth 10 -Compress)" }
+        if ($agent -eq 'stopped' -and -not $result) { throw 'Manus stopped without returning the analysis; see manus_events.json' }
         if ($agent -eq 'waiting') {
             if ($nudges -ge 2) { throw 'Manus keeps waiting for input; open the task in Manus to answer it.' }
             $nudges++
-            Manus 'POST' 'task.sendMessage' @{ task_id = $taskId; message = @{ content = 'Continue and use your best judgment. Do not ask questions: record anything unresolved in open_questions, and only use parts from the parts list.' } } | Out-Null
+            Manus 'POST' 'task.sendMessage' @{ task_id = $taskId; message = @{ content = 'Continue without asking: put anything unclear in open_questions and leave unstated values null.' } } | Out-Null
         }
         Start-Sleep -Seconds 5
     }
-    throw "No result from Manus within $TimeoutMinutes minutes (task $taskId)."
+    throw "No analysis from Manus within $TimeoutMinutes minutes (task $taskId)."
 }
 
-function Gate([string]$intentPath, [string]$reportPath) {
-    $out = & $cfg.copper @('design', 'check-intent', $intentPath, '--symbol-root', $cfg.symbols_root, '--footprint-root', $cfg.footprints_root, '--out', $reportPath) 2>&1 | ForEach-Object { "$_" }
+function Run-Copper([string]$exe, [string[]]$argv) {
+    $out = & $exe @argv 2>&1 | ForEach-Object { "$_" }
     return [pscustomobject]@{ exit = $LASTEXITCODE; text = ($out -join "`n") }
 }
 
@@ -124,129 +117,99 @@ function Run-Prompt([string]$text) {
     if (-not $slug) { $slug = 'design' }
     $runDir = Join-Path $here ("designs\{0}_{1}" -f $slug, (Get-Date -Format 'yyyyMMdd_HHmmss'))
     New-Item -ItemType Directory -Force -Path $runDir | Out-Null
-    [IO.File]::WriteAllText((Join-Path $runDir 'prompt.txt'), $text, $utf8)
+    $promptPath = Join-Path $runDir 'prompt.txt'
+    [IO.File]::WriteAllText($promptPath, $text, $utf8)
     Say ''; Say "== $slug  ($runDir)" 'Cyan'
 
-    # 1. Parts list from the installed libraries (Copper Lab's tested lookup: named parts, or standard candidates).
-    Say '1. Reading real part data from your KiCad libraries...'
-    $promptFile = Join-Path $runDir 'prompt.txt'
-    $ctxFile = Join-Path $runDir 'parts_context.json'
-    $py = "import json, sys; sys.path.insert(0, sys.argv[1]); import design_pipeline as d; from pathlib import Path; " +
-          "t = Path(sys.argv[2]).read_text(encoding='utf-8'); c = d.collect_asset_context(t, Path(sys.argv[3]), Path(sys.argv[4])); " +
-          "d.reject_explicitly_unavailable_assets(t, c); c = d.add_named_parts(t, c, Path(sys.argv[3]), Path(sys.argv[4])); " +
-          "Path(sys.argv[5]).write_text(json.dumps(c, indent=1), encoding='utf-8')"
-    & $cfg.python -c $py (Join-Path $cfg.repo 'copper_lab') $promptFile $cfg.symbols_root $cfg.footprints_root $ctxFile 2>&1 | ForEach-Object { Say "   $_" 'DarkGray' }
-    if ($LASTEXITCODE -ne 0) { throw 'The parts lookup failed (see above). Name parts as "symbol Lib:Name footprint Lib:Name" or use standard ones.' }
-    $ctx = Get-Content -Raw -Encoding UTF8 -LiteralPath $ctxFile | ConvertFrom-Json
-    $menu = [ordered]@{
-        symbols = @($ctx.symbols | ForEach-Object { [ordered]@{ id = $_.id; pins = @($_.pins | ForEach-Object { [ordered]@{ number = $_.number; name = $_.name; type = $_.electrical_type } }) } })
-        footprints = @($ctx.footprints | ForEach-Object { [ordered]@{ id = $_.id; pads = @($_.pads | ForEach-Object { $_.number } | Where-Object { $_ } | Select-Object -Unique) } })
-        candidate_pairs = @($ctx.candidate_pairs)
-        not_usable = @($ctx.unavailable_candidates)
-        named_parts = @($ctx.named_parts)
-    }
-    Say ("   {0} symbol(s), {1} footprint(s)" -f @($menu.symbols).Count, @($menu.footprints).Count)
-    foreach ($np in @($ctx.named_parts)) {
-        if ($np.usable) { Say ("   named part {0}: {1}" -f $np.name, $(if ($np.note) { $np.note } else { "$($np.use_symbol) + $($np.use_footprint)" })) 'DarkGray' }
-        else { Say ("   named part {0}: found as {1} but not usable: {2}" -f $np.name, $np.library_symbol, $np.reason) 'Yellow' }
-    }
-
-    # 2. Manus writes the design intent (structured output).
-    $schema = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $here 'manus_output.schema.json') | ConvertFrom-Json
+    # 1. Manus: prompt analysis ONLY.
+    $schema = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $here 'manus_requirements.schema.json') | ConvertFrom-Json
     $instructions = @"
-You are the design-intent author for Copper, a local PCB engineering tool. Copper (not you) checks, compiles and validates.
-Turn the user's request into a copper.design-intent v1 in the structured output. Rules:
-- Use ONLY symbol and footprint IDs from the PARTS LIST below, as symbol/footprint pairs (candidate_pairs when given). Never use not_usable parts.
-- For every pin: symbol_pin = the pin number, pin_name = that pin's name EXACTLY as in the parts list ("" for unnamed), pad = a pad number of the chosen footprint. Map every symbol pin and every footprint pad exactly once.
-- LEDs/diodes: the pin named K is the cathode, A is the anode. MOSFETs: G gate, S source, D drain. Do not assume pin numbers.
-- named_parts lists parts the user named that exist in their libraries. When a note says a symbol is derived from another, use the base symbol and footprint it names, with the named part as the value.
-- Every named net connects at least two pins; use null only for an intentional no-connect. Never leave a power input pin unconnected.
-- project.name: letters, digits, _ or - only. Board: 2 layers, width 20-300 mm, height 15-300 mm. Every component gets a position at least 2.5 mm inside the board edges, spaced so footprints do not overlap.
-- References like R1, D1, J1, C1. value: a short value such as 1k, 100n, RED, 5V_IN.
-- Do not invent part numbers, ratings, prices or availability, and do not claim the board is routed, checked or ready. Put every assumption you made (supply voltage, LED current, values chosen) in "assumptions" and anything unresolved in "open_questions".
-If the request cannot be built from the parts list, still return the closest honest minimal intent and explain the gap in open_questions.
+You are the prompt-analysis step of Copper, a local PCB engineering tool. Your ONLY job is to read the user's request
+and fill in the structured output (copper.requirements v1). You do NOT design anything: never choose parts, pins,
+nets, footprints, component values or layouts, and never claim anything was checked, routed or is ready. Copper's own
+code generates the design from your analysis.
+Rules:
+- circuit: "low_side_switch" (a MOSFET/transistor switching a load from a logic signal), "led_indicator" (an LED with a
+  series resistor), otherwise "other" (and say what was asked in summary).
+- Fill a value ONLY if the user stated it. Otherwise leave it null; do not estimate, assume or calculate.
+- For every non-null value add an evidence item: field = the field name, quote = the exact words from the request that
+  state it, copied verbatim (Copper checks that the quote occurs in the request and contains the value).
+- Units: volts, amps, ohms (10 kOhm -> 10000), milliamps for led_current_ma, millimetres for the board.
+- switch_part: a part number the user named for the switch (for example "AO3400A"), exactly as written.
+- open_questions: anything unclear or missing that matters for the design.
+- unsupported_requests: anything asked that the fields cannot express (for example trace width or clearance
+  assumptions, extra connectors, enclosure, firmware).
 
 USER REQUEST:
 $text
-
-PARTS LIST (authoritative, read from the user's installed KiCad libraries):
-$($menu | ConvertTo-Json -Depth 8 -Compress)
 "@
     [IO.File]::WriteAllText((Join-Path $runDir 'manus_prompt.txt'), $instructions, $utf8)
-    Say "2. Sending to Manus ($Profile profile)..."
+    Say "1. Manus analyses the prompt ($Profile profile; analysis only)..."
     $create = Manus 'POST' 'task.create' @{
         message = @{ content = $instructions }
         interactive_mode = $false
         agent_profile = $Profile
-        title = "Copper: $slug"
+        title = "Copper analysis: $slug"
         structured_output_schema = $schema
     }
     $taskId = $create.task_id
     [IO.File]::WriteAllText((Join-Path $runDir 'manus_task.json'), ($create | ConvertTo-Json -Depth 5), $utf8)
     Say "   task $taskId  $($create.task_url)" 'DarkGray'
-
-    # 3. Grounding gate, with repairs on the same task.
-    $seen = @{}
-    $verdict = 'REJECTED'; $result = $null; $intentPath = $null
-    for ($attempt = 1; $attempt -le $MaxRepairs + 1; $attempt++) {
-        $ev = Wait-Result $taskId $seen $runDir
-        $sor = $ev.structured_output_result
-        if (-not $sor.success) { throw "Manus could not produce the structured result: $($sor.error | ConvertTo-Json -Compress)" }
-        $result = if ($sor.value -is [string]) { $sor.value | ConvertFrom-Json } else { $sor.value }
-        $intentPath = Join-Path $runDir "intent_attempt$attempt.json"
-        [IO.File]::WriteAllText($intentPath, ($result.intent | ConvertTo-Json -Depth 30), $utf8)
-        Say "3. Grounding gate, attempt $attempt..."
-        $g = Gate $intentPath (Join-Path $runDir "intent_check_attempt$attempt.json")
-        $g.text -split "`n" | Where-Object { $_ -and $_ -notmatch '^Nothing was compiled' } | ForEach-Object { Say "   $_" $(if ($g.exit -eq 0) { 'Green' } else { 'Yellow' }) }
-        if ($g.exit -eq 0) { $verdict = 'GROUNDED'; break }
-        if ($g.exit -ne 2) { throw "The grounding gate could not run (exit $($g.exit))." }
-        if ($attempt -gt $MaxRepairs) { break }
-        Say '   Sending the findings back to Manus for a correction...' 'Yellow'
-        Manus 'POST' 'task.sendMessage' @{
-            task_id = $taskId
-            message = @{ content = "Copper's grounding gate REJECTED the design intent. Fix every finding below using only the PARTS LIST data, then return the complete corrected structured output:`n$($g.text)" }
-            structured_output_schema = $schema
-        } | Out-Null
-    }
+    $ev = Wait-Analysis $taskId $runDir
+    $sor = $ev.structured_output_result
+    if (-not $sor.success) { throw "Manus could not produce the analysis: $($sor.error | ConvertTo-Json -Compress)" }
+    $analysis = if ($sor.value -is [string]) { $sor.value | ConvertFrom-Json } else { $sor.value }
+    $reqPath = Join-Path $runDir 'requirements.json'
+    [IO.File]::WriteAllText($reqPath, ($analysis | ConvertTo-Json -Depth 20), $utf8)
     $taskDetail = (Manus 'GET' "task.detail?task_id=$taskId" $null).task
-    $notes = @($result.assumptions | ForEach-Object { "- Assumption: $_" }) + @($result.open_questions | ForEach-Object { "- Open question: $_" })
+    Say ("   circuit: {0}  ({1})" -f $analysis.circuit, $analysis.summary)
 
-    if ($verdict -ne 'GROUNDED') {
-        Say ''; Say "RESULT: REJECTED. Manus's design still has ungrounded details after $MaxRepairs repair(s); nothing was compiled." 'Red'
-        Say "  Findings: $runDir\intent_check_attempt$attempt.json" 'Red'
-        if ($notes.Count) { Say "Manus notes (not checked by Copper):"; $notes | ForEach-Object { Say "  $_" } }
+    # 2. Copper generates the design (C template generator; evidence checked against the prompt).
+    Say '2. Copper generates the design from the analysis (deterministic, C)...'
+    $g = Run-Copper $cfg.copper @('design', 'generate', $reqPath, '--templates', $cfg.templates, '--symbol-root', $cfg.symbols_root,
+                                  '--footprint-root', $cfg.footprints_root, '--prompt', $promptPath, '--out', $runDir)
+    $gen = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $runDir 'generation.json') | ConvertFrom-Json
+    Say "   $($gen.status)" $(if ($g.exit -eq 0) { 'Green' } else { 'Yellow' })
+    foreach ($v in @($gen.values)) { Say ("   {0,-22} {1,-12} [{2}] {3}" -f $v.name, $v.value, $v.provenance, $v.note) 'DarkGray' }
+    foreach ($i in @($gen.ignored_requirements)) { Say ("   IGNORED {0}: {1}" -f $i.field, $i.reason) 'Yellow' }
+
+    $manusNotes = @(@($analysis.open_questions) | ForEach-Object { "- Open question (Manus): $_" }) + @(@($analysis.unsupported_requests) | ForEach-Object { "- Not handled by Copper (Manus): $_" })
+    if ($g.exit -ne 0) {
+        Say ''; Say "RESULT: $($gen.status) - nothing was designed." 'Yellow'
+        foreach ($q in @($gen.questions)) { Say "  Copper needs: $q" 'Yellow' }
+        foreach ($c in @($gen.checks | Where-Object { $_.status -ne 'INFO' })) { Say "  [$($c.status)] $($c.message)" 'Yellow' }
+        if ($manusNotes.Count) { Say 'Manus analysis notes:'; $manusNotes | ForEach-Object { Say "  $_" } }
+        Say 'Add the missing information to your prompt and run it again.' 'DarkGray'
         return
     }
 
-    # 4. Compile and check; 5. facts + Manus notes + claim check.
-    $final = Join-Path $runDir 'intent.json'
-    Copy-Item -LiteralPath $intentPath -Destination $final -Force
-    Say '4. Compiling and running KiCad/Copper checks...'
+    # 3. Grounding gate + compile + checks + facts.
+    Say '3. Grounding gate, compile, KiCad/Copper checks...'
     $copperPs1 = Join-Path $here 'copper.ps1'
-    $c = & powershell -NoProfile -ExecutionPolicy Bypass -File $copperPs1 compile -Intent $final -Out $runDir 2>&1 | ForEach-Object { "$_" }
+    $c = & powershell -NoProfile -ExecutionPolicy Bypass -File $copperPs1 compile -Intent (Join-Path $runDir 'intent.json') -Out $runDir 2>&1 | ForEach-Object { "$_" }
     $cr = ($c | Where-Object { $_ -like 'COPPER_RESULT *' } | Select-Object -Last 1)
     Say "   $cr" 'DarkGray'
-    $proj = Join-Path $runDir ([string]$result.intent.project.name)
-    if (-not (Test-Path -LiteralPath (Join-Path $proj ("{0}.kicad_pcb" -f $result.intent.project.name)))) {
-        Say ''; Say 'RESULT: the compiler rejected the intent after the gate (see compile output above).' 'Red'
+    $projName = (Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $runDir 'intent.json') | ConvertFrom-Json).project.name
+    $proj = Join-Path $runDir $projName
+    if (-not (Test-Path -LiteralPath (Join-Path $proj "$projName.kicad_pcb"))) {
+        Say ''; Say 'RESULT: the gate or the compiler stopped the design (see above).' 'Red'
         $c | Select-Object -Last 15 | ForEach-Object { Say "  $_" 'DarkGray' }
         return
     }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $copperPs1 report -Project $proj 2>&1 | Out-Null
     $report = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $proj 'REPORT.md')
-    $answer = $report + "`n## Manus notes (not checked by Copper)`n`n" + $(if ($notes.Count) { $notes -join "`n" } else { '- none' }) + "`n"
+    $genLines = @(@($gen.values) | ForEach-Object { "- {0}: {1} ({2}: {3})" -f $_.name, $_.value, $_.provenance, $_.note }) +
+                @(@($gen.checks) | ForEach-Object { "- [{0}] {1}" -f $_.status, $_.message })
+    $answer = $report + "`n## How Copper generated it (template $($gen.template))`n`n" + ($genLines -join "`n") +
+              "`n`n## Manus prompt analysis notes (not checked by Copper)`n`n" + $(if ($manusNotes.Count) { $manusNotes -join "`n" } else { '- none' }) + "`n"
     [IO.File]::WriteAllText((Join-Path $runDir 'answer.md'), $answer, $utf8)
-    $notesFile = Join-Path $runDir 'manus_notes.txt'
-    [IO.File]::WriteAllText($notesFile, ($notes -join "`n"), $utf8)
-    $cc = & powershell -NoProfile -ExecutionPolicy Bypass -File $copperPs1 claimcheck -Text $notesFile -Project $proj 2>&1 | ForEach-Object { "$_" }
 
     Say ''; Say '================ RESULT ================' 'Cyan'
     $report -split "`n" | Where-Object { $_ -match '^- ' } | ForEach-Object { Say $_ }
-    Say ''; Say "Manus notes (not checked by Copper):"
-    if ($notes.Count) { $notes | ForEach-Object { Say "  $_" } } else { Say '  none' }
-    $flags = @($cc | Where-Object { $_ -match '^\s+\[' })
-    if ($flags.Count) { Say 'Claim check on the Manus notes: statements the facts do not support:' 'Yellow'; $flags | ForEach-Object { Say $_ 'Yellow' } }
-    else { Say 'Claim check on the Manus notes: no unsupported claims found.' 'Green' }
+    Say ''; Say "Generated by Copper from template '$($gen.template)':"
+    foreach ($ck in @($gen.checks)) { Say ("  [{0}] {1}" -f $ck.status, $ck.message) $(if ($ck.status -eq 'INFO') { 'Gray' } else { 'Yellow' }) }
+    Say ''; Say 'Manus prompt analysis notes (not checked by Copper):'
+    if ($manusNotes.Count) { $manusNotes | ForEach-Object { Say "  $_" } } else { Say '  none' }
     Say ''
     Say "Files:   $proj" 'Gray'
     Say "Answer:  $runDir\answer.md" 'Gray'
@@ -258,8 +221,8 @@ if ($PromptFile) { $text = Get-Content -Raw -Encoding UTF8 -LiteralPath $PromptF
 if ($text) { Run-Prompt $text.Trim(); exit 0 }
 
 Say 'Copper prompt console: type a design request and press Enter (empty line to quit).' 'Cyan'
-Say "Each request is sent to Manus ($Profile profile) and uses credits on your Manus account." 'DarkGray'
-Say 'Tip: name exact parts as "symbol Device:LED footprint LED_SMD:LED_0603_1608Metric" to use them; otherwise standard parts are offered.' 'DarkGray'
+Say "Manus only analyses each request ($Profile profile, uses credits); Copper's own code designs, checks and reports." 'DarkGray'
+Say 'Copper can currently generate: low-side MOSFET switch, LED indicator. Other circuits are reported as NOT_IMPLEMENTED.' 'DarkGray'
 while ($true) {
     Write-Host ''
     $line = Read-Host 'Prompt'

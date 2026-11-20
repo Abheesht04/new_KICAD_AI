@@ -12,6 +12,8 @@ never upgrades a result.
 Subcommands:
     doctor                                   what is installed and where; nothing is changed
     context  -Prompt <text> -Out <ctx.json>  real KiCad pin numbers, pin names and pad numbers for the parts a task names
+    generate -Requirements <requirements.json> -PromptFile <prompt.txt> -Out <dir>
+                                             Copper's deterministic generator (C): the design from a prompt analysis
     check    -Intent <intent.json>           grounding gate: every part, pin, pin name, pad and net checked against the
                                              installed KiCad libraries; anything invented is REJECTED (nothing compiled)
     compile  -Intent <intent.json> -Out <dir>  runs the grounding gate first; only a GROUNDED intent is compiled into a
@@ -27,10 +29,10 @@ Subcommands:
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [ValidateSet('doctor', 'context', 'check', 'compile', 'inspect', 'dfm', 'topology', 'checks', 'report', 'claimcheck', 'workbench')]
+    [ValidateSet('doctor', 'context', 'generate', 'check', 'compile', 'inspect', 'dfm', 'topology', 'checks', 'report', 'claimcheck', 'workbench')]
     [string]$Command,
     [string]$Prompt, [string]$Intent, [string]$Out, [string]$Board, [string]$Profile,
-    [string]$Schematic, [string]$Netlist, [string]$Project, [string]$Text
+    [string]$Schematic, [string]$Netlist, [string]$Project, [string]$Text, [string]$Requirements, [string]$PromptFile
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -99,6 +101,16 @@ switch ($Command) {
         finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
         $outcome = if ($code -eq 0) { 'OK' } else { 'ERROR' }
         Result 'context' $code $outcome @{ out = (Full $Out) }
+    }
+    'generate' {
+        Need 'Requirements' $Requirements; Need 'PromptFile' $PromptFile; Need 'Out' $Out
+        $outDir = Full $Out
+        $code = Run $cfg.copper @('design', 'generate', (Full $Requirements), '--templates', $cfg.templates, '--symbol-root', $cfg.symbols_root,
+                                  '--footprint-root', $cfg.footprints_root, '--prompt', (Full $PromptFile), '--out', $outDir)
+        $gen = Join-Path $outDir 'generation.json'
+        if (Test-Path -LiteralPath $gen) { Get-Content -Raw -Encoding UTF8 -LiteralPath $gen | Write-Output }
+        $outcome = switch ($code) { 0 { 'GENERATED' } 2 { 'INVALID_INPUT' } 3 { 'NEEDS_INPUT' } 4 { 'NOT_IMPLEMENTED' } 5 { 'TEMPLATE_ERROR' } default { 'ERROR' } }
+        Result 'generate' $code $outcome @{ intent = $(if ($code -eq 0) { Join-Path $outDir 'intent.json' } else { $null }); report = $gen; next = $(if ($code -eq 0) { 'compile -Intent <out>\intent.json' } else { 'answer the questions in generation.json by improving the prompt; Copper does not guess' }) }
     }
     'check' {
         Need 'Intent' $Intent

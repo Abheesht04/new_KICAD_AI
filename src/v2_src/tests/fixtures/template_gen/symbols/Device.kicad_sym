@@ -1,0 +1,37 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "copper_test_fixture")
+  (symbol "R"
+    (property "Reference" "R" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "R" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (symbol "R_1_1"
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "~" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "~" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27)))))
+    ))
+  (symbol "LED"
+    (property "Reference" "D" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "LED" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (symbol "LED_1_1"
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "K" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "A" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27)))))
+    ))
+  (symbol "D_Schottky"
+    (property "Reference" "D" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "D_Schottky" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (symbol "D_Schottky_1_1"
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "K" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "A" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27)))))
+    ))
+)

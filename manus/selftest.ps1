@@ -118,25 +118,39 @@ if ($ready) {
     if ($o.exit -eq 0) { Step 'claimcheck accepts an honest answer' 'PASS' 'no unsupported claims' } else { Step 'claimcheck accepts an honest answer' 'FAIL' $o.text }
 }
 
-# copper-prompt.ps1 against a local mock of the Manus API (no account, no credits): waiting -> nudge, a swapped
-# LED polarity -> gate findings sent back -> corrected intent -> compile -> report. The real key must never be sent.
+# Analysis-only flow: Manus (a local mock: no account, no credits) returns copper.requirements for the owner's MOSFET
+# prompt, including one value the prompt never states; Copper's C generator designs the board and ignores that value.
 if ($ready) {
     $py = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
     $mlog = Join-Path $ws 'mock_manus_log.json'
-    $psi = New-Object Diagnostics.ProcessStartInfo $py, ('"' + (Join-Path $repo 'manus\tests\mock_manus_api.py') + '" "' + (Join-Path $ws 'examples\led_indicator.intent.json') + '" "' + $mlog + '"')
+    $psi = New-Object Diagnostics.ProcessStartInfo $py, ('"' + (Join-Path $repo 'manus\tests\mock_manus_api.py') + '" "' + (Join-Path $repo 'manus\tests\mosfet_requirements.json') + '" "' + $mlog + '"')
     $psi.RedirectStandardOutput = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
     $mock = [Diagnostics.Process]::Start($psi)
     $port = ($mock.StandardOutput.ReadLine() -split ' ')[-1]
     $env:COPPER_MANUS_API_BASE = "http://127.0.0.1:$port"
     $ErrorActionPreference = 'Continue'
-    try { $mp = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ws 'copper-prompt.ps1') -Prompt 'Make a 5 V red LED indicator board with a 2-pin power header' -Name mocktest 2>&1 | ForEach-Object { "$_" } }
+    $ownerPrompt = 'Design a compact 2-layer low-side MOSFET switch board for driving a 12 V DC load up to 2 A from a 3.3 V microcontroller GPIO. Include a screw terminal block for 12 V power and load, a 3-pin header for logic input, an AO3400A SOT-23 MOSFET, a 100 Ohm gate resistor, a 10 kOhm pull-down resistor, and a flyback diode across the load terminals. State your trace width and clearance assumptions.'
+    try { $mp = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ws 'copper-prompt.ps1') -Prompt $ownerPrompt -Name mosfet 2>&1 | ForEach-Object { "$_" } }
     finally { $mock.Kill(); Remove-Item Env:COPPER_MANUS_API_BASE }
     $mtext = $mp -join "`n"
     $requests = Get-Content -Raw $mlog | ConvertFrom-Json
     $allMock = -not @($requests | Where-Object { -not $_.key_is_mock }).Count
-    if ($mtext -match 'PIN_NAME_MISMATCH' -and $mtext -match 'attempt 2' -and $mtext -match 'GROUNDED \(3 component' -and $mtext -match 'NOT ROUTED' -and $allMock) {
-        Step 'copper-prompt with mock Manus (repair loop)' 'PASS' 'waiting nudged; swapped polarity rejected then corrected; compiled; real key never sent'
-    } else { Step 'copper-prompt with mock Manus (repair loop)' 'FAIL' (($mp | Select-Object -Last 25) -join "`n") }
+    if ($mtext -match 'GENERATED' -and $mtext -match 'IGNORED board_width_mm' -and $mtext -match 'gate_voltage_on\s+3\.267 V' -and $mtext -match 'GROUNDED' -and $mtext -match 'NOT ROUTED' -and $allMock) {
+        Step 'prompt -> Manus analysis -> Copper design (mock)' 'PASS' 'analysis only; C generated the switch; invented value ignored; GROUNDED; real key never sent'
+    } else { Step 'prompt -> Manus analysis -> Copper design (mock)' 'FAIL' (($mp | Select-Object -Last 30) -join "`n") }
+
+    # copper.ps1 generate directly: an LED analysis, and one that omits the supply (Copper asks, never guesses).
+    $ld = Join-Path $ws 'designs\led_gen'; New-Item -ItemType Directory -Force $ld | Out-Null
+    [IO.File]::WriteAllText((Join-Path $ld 'prompt.txt'), 'A 5 V board with a red LED driven at 5 mA.', (New-Object Text.UTF8Encoding($false)))
+    $req = '{"schema":"copper.requirements","schema_version":1,"circuit":"led_indicator","summary":"LED","supply_voltage_v":5,"load_current_a":null,"logic_voltage_v":null,"switch_part":null,"gate_resistor_ohm":null,"pulldown_ohm":null,"flyback_diode":null,"led_color":"red","led_current_ma":5,"led_forward_voltage_v":null,"board_width_mm":null,"board_height_mm":null,"evidence":[{"field":"supply_voltage_v","quote":"A 5 V board"},{"field":"led_current_ma","quote":"at 5 mA"},{"field":"led_color","quote":"a red LED"}],"open_questions":[],"unsupported_requests":[]}'
+    [IO.File]::WriteAllText((Join-Path $ld 'requirements.json'), $req, (New-Object Text.UTF8Encoding($false)))
+    $gl = Copper @('generate', '-Requirements', (Join-Path $ld 'requirements.json'), '-PromptFile', (Join-Path $ld 'prompt.txt'), '-Out', $ld)
+    if ($gl.exit -eq 0 -and $gl.text -match '"value": "620"' -and (Test-Path (Join-Path $ld 'intent.json'))) { Step 'generate: LED indicator' 'PASS' '620 ohm (E24, rounded up), Vf assumed and UNVERIFIED' } else { Step 'generate: LED indicator' 'FAIL' $gl.text }
+    $nd = Join-Path $ws 'designs\led_missing'; New-Item -ItemType Directory -Force $nd | Out-Null
+    [IO.File]::WriteAllText((Join-Path $nd 'prompt.txt'), 'A red LED indicator.', (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText((Join-Path $nd 'requirements.json'), ($req -replace '"supply_voltage_v":5', '"supply_voltage_v":null'), (New-Object Text.UTF8Encoding($false)))
+    $gn = Copper @('generate', '-Requirements', (Join-Path $nd 'requirements.json'), '-PromptFile', (Join-Path $nd 'prompt.txt'), '-Out', $nd)
+    if ($gn.exit -eq 3 -and $gn.result.outcome -eq 'NEEDS_INPUT' -and $gn.text -match 'What is the supply voltage' -and -not (Test-Path (Join-Path $nd 'intent.json'))) { Step 'generate: missing supply -> question' 'PASS' 'NEEDS_INPUT, nothing designed' } else { Step 'generate: missing supply -> question' 'FAIL' $gn.text }
 }
 
 # Copper Lab's own test script (Python compiler and web-pipeline tests).

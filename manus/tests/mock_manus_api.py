@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
-"""A local stand-in for the Manus API v2 (test harness for manus/workspace/copper-prompt.ps1; no Manus account used).
+"""A local stand-in for the Manus API v2 (test harness for manus/workspace/copper-prompt.ps1; no account, no credits).
 
-Implements task.create, task.sendMessage (POST) and task.detail, task.listMessages (GET) with the documented shapes
-(https://open.manus.ai/docs/v2/...). It behaves like an imperfect model so the client's guards are exercised:
+Manus is used only for prompt ANALYSIS. This mock implements task.create, task.sendMessage (POST) and task.detail,
+task.listMessages (GET) with the documented shapes (https://open.manus.ai/docs/v2/...) and behaves like an imperfect
+analyser so the client's guards are exercised:
   - after task.create the task goes to "waiting" (the agent wants to ask something);
-  - the first follow-up ("Continue ...") yields a structured result whose LED polarity is swapped (a hallucination);
-  - a follow-up carrying the grounding-gate findings (PIN_NAME_MISMATCH) yields the correct intent.
-Every request must carry x-manus-api-key "mock-key": the real key must never be sent anywhere but api.manus.ai.
-All requests are logged to the file given as the second argument.
+  - the follow-up ("Continue ...") yields the structured analysis given on the command line, which may contain a value
+    the prompt never states (Copper must ignore it).
+It rejects a request that is not analysis-only (any design data such as a parts list), and any key other than
+"mock-key": the real key must never be sent anywhere but api.manus.ai. Every request is logged.
 
-Usage: mock_manus_api.py GOOD_INTENT.json LOG.json   (prints "listening on port N")
+Usage: mock_manus_api.py REQUIREMENTS.json LOG.json   (prints "listening on port N")
 """
-import copy
 import json
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-GOOD = json.load(open(sys.argv[1], encoding='utf-8'))
+ANALYSIS = json.load(open(sys.argv[1], encoding='utf-8'))
 LOG = sys.argv[2]
-BAD = copy.deepcopy(GOOD)
-for comp in BAD['components']:
-    if comp['symbol_id'] == 'Device:LED':
-        for pin in comp['pins']:
-            pin['pin_name'] = {'K': 'A', 'A': 'K'}.get(pin['pin_name'], pin['pin_name'])
 TASK = 'MockTask0000000000000A'
 state = {'events': [], 'n': 0, 'stage': 'created', 'requests': [], 'credits': 0}
 lock = threading.Lock()
@@ -37,16 +32,6 @@ def event(kind, payload):
     state['events'].append(e)
 
 
-def result(intent, note):
-    event('assistant_message', {'content': note, 'attachments': []})
-    event('status_update', {'agent_status': 'stopped'})
-    event('structured_output_result', {'success': True, 'value': {
-        'intent': intent,
-        'assumptions': ['5 V supply on J1', 'about 3 mA LED current with 1k'],
-        'open_questions': ['Which LED colour and brightness are wanted?']}, 'error': None})
-    state['credits'] += 7
-
-
 class H(BaseHTTPRequestHandler):
     def _send(self, code, obj):
         body = json.dumps(obj).encode()
@@ -55,12 +40,6 @@ class H(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
-
-    def _auth(self):
-        if self.headers.get('x-manus-api-key') != 'mock-key':
-            self._send(401, {'ok': False, 'request_id': 'r', 'error': {'code': 'unauthenticated', 'message': 'unexpected key'}})
-            return False
-        return True
 
     def log_message(self, *a):
         pass
@@ -71,6 +50,12 @@ class H(BaseHTTPRequestHandler):
         with open(LOG, 'w', encoding='utf-8') as f:
             json.dump(state['requests'], f, indent=1)
 
+    def _auth(self):
+        if self.headers.get('x-manus-api-key') != 'mock-key':
+            self._send(401, {'ok': False, 'request_id': 'r', 'error': {'code': 'unauthenticated', 'message': 'invalid api key'}})
+            return False
+        return True
+
     def do_POST(self):
         n = int(self.headers.get('Content-Length', '0'))
         body = json.loads(self.rfile.read(n).decode('utf-8'))
@@ -80,28 +65,25 @@ class H(BaseHTTPRequestHandler):
             if not self._auth():
                 return
             if p == '/v2/task.create':
-                ok = (body.get('interactive_mode') is False and isinstance(body.get('structured_output_schema'), dict)
-                      and 'PARTS LIST' in body['message']['content'])
-                if not ok:
-                    return self._send(400, {'ok': False, 'request_id': 'r', 'error': {'code': 'invalid_argument', 'message': 'missing schema / parts list / interactive_mode'}})
+                content = body['message']['content']
+                schema = body.get('structured_output_schema') or {}
+                analysis_only = ('USER REQUEST' in content and 'PARTS LIST' not in content
+                                 and 'components' not in json.dumps(schema) and 'evidence' in json.dumps(schema))
+                if body.get('interactive_mode') is not False or not analysis_only:
+                    return self._send(400, {'ok': False, 'request_id': 'r', 'error': {'code': 'invalid_argument', 'message': 'not an analysis-only request'}})
                 event('user_message', {'content': '(request)'})
                 event('status_update', {'agent_status': 'running'})
-                event('status_update', {'agent_status': 'waiting', 'status_detail': {'waiting_for_event_type': 'messageAskUser', 'waiting_description': 'Which LED colour?'}})
+                event('status_update', {'agent_status': 'waiting', 'status_detail': {'waiting_for_event_type': 'messageAskUser', 'waiting_description': 'Is the load inductive?'}})
                 state['stage'] = 'waiting'
                 return self._send(200, {'ok': True, 'request_id': 'r', 'task_id': TASK, 'task_title': 'generating title...',
                                         'task_url': f'https://manus.im/app/{TASK}', 'share_visibility': 'private'})
             if p == '/v2/task.sendMessage':
-                text = body['message']['content']
-                event('user_message', {'content': text[:200]})
+                event('user_message', {'content': body['message']['content'][:200]})
                 event('status_update', {'agent_status': 'running'})
-                if state['stage'] == 'waiting' and text.startswith('Continue'):
-                    result(BAD, 'Here is the design.')
-                    state['stage'] = 'first_result'
-                elif 'PIN_NAME_MISMATCH' in text:
-                    result(GOOD, 'Corrected the LED pin names from the parts list.')
-                    state['stage'] = 'corrected'
-                else:
-                    result(BAD, 'Unchanged.')
+                event('assistant_message', {'content': 'Analysis complete.', 'attachments': []})
+                event('status_update', {'agent_status': 'stopped'})
+                event('structured_output_result', {'success': True, 'value': ANALYSIS, 'error': None})
+                state['credits'] += 3
                 return self._send(200, {'ok': True, 'request_id': 'r', 'task_id': TASK})
         self._send(404, {'ok': False, 'error': {'code': 'not_found', 'message': p}})
 

@@ -1,0 +1,18 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "copper_test_fixture")
+  (symbol "Q_NMOS_GSD"
+    (property "Reference" "Q" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "Q_NMOS_GSD" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (symbol "Q_NMOS_GSD_1_1"
+      (pin input line (at 0 0 0) (length 2.54)
+        (name "G" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "S" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 0 0) (length 2.54)
+        (name "D" (effects (font (size 1.27 1.27))))
+        (number "3" (effects (font (size 1.27 1.27)))))
+    ))
+)

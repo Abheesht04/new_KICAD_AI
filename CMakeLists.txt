@@ -434,7 +434,8 @@ set(COPPER_DESIGN_SOURCES
     src/v2_src/copper_spice_fs.c src/v2_src/dfm_check.c src/v2_src/fab_rules.c src/v2_src/jlc_catalogue.c
     src/v2_src/kicad_assets.c src/v2_src/spice_mna.c src/v2_src/part_catalogue.c src/v2_src/placer.c
     src/v2_src/report.c src/v2_src/router.c src/v2_src/sha256.c
-    src/v2_src/json.c src/v2_src/intent_check.c)   # grounding gate for model-written intents
+    src/v2_src/json.c src/v2_src/intent_check.c   # grounding gate for model-written intents
+    src/v2_src/template_gen.c)   # deterministic design generation from analysed requirements
 add_library(copper_design STATIC ${COPPER_DESIGN_SOURCES})
 target_include_directories(copper_design PUBLIC src/v2_src)
 function(copper_design_policy target)
@@ -466,7 +467,8 @@ copper_design_policy(copper)
 if(HWCOMPILER_BUILD_TESTS)
     # The overlay's tests use assert(); NDEBUG is undefined for them so Release builds still check.
     foreach(pair core:test_core design:test_design catalogue_asset:test_catalogue_assets topology:test_topology
-                 engineering:test_engineering_loop optimization:test_optimization_loop intent_check:test_intent_check)
+                 engineering:test_engineering_loop optimization:test_optimization_loop intent_check:test_intent_check
+                 template_gen:test_template_gen)
         string(REPLACE ":" ";" parts "${pair}")
         list(GET parts 0 name)
         list(GET parts 1 source)

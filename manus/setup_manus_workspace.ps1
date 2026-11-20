@@ -45,13 +45,15 @@ $cfg = [ordered]@{
     asset_context   = Join-Path $repo 'src\v2_src\tools\kicad_asset_context.py'
     intent_schema   = Join-Path $repo 'src\v2_src\schemas\copper.design-intent.v1.schema.json'
     fab_profile     = Join-Path $repo 'fab_profiles\jlcpcb_2layer.json'
+    templates       = Join-Path $repo 'design_templates\copper_templates.v1.json'
 }
 
 if ((Test-Path -LiteralPath $Workspace) -and -not $Force) {
     if (Get-ChildItem -LiteralPath $Workspace -Force | Select-Object -First 1) { throw "$Workspace exists and is not empty; use -Force to refresh MANUS.md, copper.ps1, examples and the config (designs\ is kept)" }
 }
 New-Item -ItemType Directory -Force -Path $Workspace, (Join-Path $Workspace 'designs'), (Join-Path $Workspace 'examples') | Out-Null
-Copy-Item -Force -LiteralPath (Join-Path $template 'MANUS.md'), (Join-Path $template 'copper.ps1'), (Join-Path $template 'copper-prompt.ps1'), (Join-Path $template 'manus_output.schema.json') -Destination $Workspace
+Copy-Item -Force -LiteralPath (Join-Path $template 'MANUS.md'), (Join-Path $template 'copper.ps1'), (Join-Path $template 'copper-prompt.ps1'), (Join-Path $template 'manus_requirements.schema.json') -Destination $Workspace
+Remove-Item -LiteralPath (Join-Path $Workspace 'manus_output.schema.json') -ErrorAction SilentlyContinue   # Manus no longer writes designs
 Copy-Item -Force -Path (Join-Path $template 'examples\*') -Destination (Join-Path $Workspace 'examples')
 Copy-Item -Force -LiteralPath $cfg.intent_schema -Destination (Join-Path $Workspace 'copper.design-intent.v1.schema.json')
 [IO.File]::WriteAllText((Join-Path $Workspace 'copper.config.json'), ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))

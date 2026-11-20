@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "circuit", "summary", "supply_voltage_v", "load_current_a", "logic_voltage_v",
+               "switch_part", "gate_resistor_ohm", "pulldown_ohm", "flyback_diode", "led_color", "led_current_ma",
+               "led_forward_voltage_v", "board_width_mm", "board_height_mm", "evidence", "open_questions",
+               "unsupported_requests"],
+  "properties": {
+    "schema": {"type": "string", "enum": ["copper.requirements"]},
+    "schema_version": {"type": "integer", "enum": [1]},
+    "circuit": {"type": "string", "enum": ["low_side_switch", "led_indicator", "other"]},
+    "summary": {"type": "string"},
+    "supply_voltage_v": {"type": ["number", "null"]},
+    "load_current_a": {"type": ["number", "null"]},
+    "logic_voltage_v": {"type": ["number", "null"]},
+    "switch_part": {"type": ["string", "null"]},
+    "gate_resistor_ohm": {"type": ["number", "null"]},
+    "pulldown_ohm": {"type": ["number", "null"]},
+    "flyback_diode": {"type": ["boolean", "null"]},
+    "led_color": {"type": ["string", "null"]},
+    "led_current_ma": {"type": ["number", "null"]},
+    "led_forward_voltage_v": {"type": ["number", "null"]},
+    "board_width_mm": {"type": ["number", "null"]},
+    "board_height_mm": {"type": ["number", "null"]},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "quote"],
+        "properties": {"field": {"type": "string"}, "quote": {"type": "string"}}
+      }
+    },
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "unsupported_requests": {"type": "array", "items": {"type": "string"}}
+  }
+}
