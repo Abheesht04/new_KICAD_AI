@@ -1,0 +1,1 @@
+A 5 V board with a red LED driven at 5 mA.

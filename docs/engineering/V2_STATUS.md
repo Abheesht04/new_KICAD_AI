@@ -63,3 +63,11 @@ Fixes made while integrating `v2-native-kicad-integration` are noted in [KICAD_N
 - **Single-PR merging:** the tracks document asks that each track be one PR adding new files only. Each track is its own commit and branch. Wiring each one into the build (`CMakeLists.txt`, `apps/copper_core.c`) and the shared docs also touched existing files.
 
 **Per-session setup step:** the tracks document asks each session to "summarise the API surface in 15 lines before writing anything". The API was read before each track, but no separate 15-line summary was written down.
+
+## Lab branch status (2026-11-21)
+
+- **Pipeline rules:** the owner adopted `PIPELINE_HARD_RULES.md` (H1–H13, testing loop T1–T8). Every later step is
+  compared with `PIPELINE_BASELINE.md` and `manus/golden/baseline.json`.
+- **Engines for new work:** listed in `CONSOLIDATION_PLAN.md`. No module is deleted (H10).
+- **Sanitizers:** `COPPER_V2_SANITIZE` now also covers `copper_design` (UBSan trap mode on MinGW; ASan not run).
+- **Latest test results:** see `PROMPT_RESULTS.md` (lab branch entry) and `GAP_REGISTER.md` §8.

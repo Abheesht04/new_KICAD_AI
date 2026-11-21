@@ -446,6 +446,13 @@ copper_design_policy(copper_design)
 if(UNIX)
     target_link_libraries(copper_design PUBLIC m)   # solver physics only; geometry modules are linted below
 endif()
+# The same sanitizers as copper_v2 (COPPER_V2_SANITIZE, above), for copper_design and everything that links it
+# (2026-11-21, Step 0b of PIPELINE_HARD_RULES.md: the library had no sanitizer build).
+if(COPPER_V2_SANITIZE AND NOT MSVC)
+    target_compile_options(copper_design PUBLIC ${COPPER_V2_SAN_FLAGS})
+    target_link_options(copper_design PUBLIC ${COPPER_V2_SAN_FLAGS})
+    message(STATUS "copper_design: sanitizers ${COPPER_V2_SAN_FLAGS}")
+endif()
 if(WIN32)
     target_link_libraries(copper_design PUBLIC ole32)   # CoCreateGuid (copper_project.c)
 endif()

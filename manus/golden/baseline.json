@@ -1,0 +1,27 @@
+{
+  "schema": "copper.golden_baseline",
+  "schema_version": 1,
+  "recorded": "2026-11-21",
+  "kicad": "10.0.5 (development check, not KiCad 9 evidence)",
+  "note": "PIPELINE_HARD_RULES.md H9: no count may rise; a changed hash needs a stated reason and the owner's approval. Inputs are manus/golden/<board>/{prompt.txt,requirements.json}; mosfet's requirements were written by the mock Manus and contain one value the prompt does not state (board_width_mm), which Copper must ignore.",
+  "boards": {
+    "led": {
+      "project": "LedIndicator", "routing": "ROUTED", "drc_unconnected": 0,
+      "erc_error": 0, "erc_warning": 6, "drc_error": 0, "drc_warning": 3, "dfm": "UNVERIFIED",
+      "pcb_sha256": "8E63A3D50202531FDB8096A35E4905F2FD7A8C39C10D264B99DF326CC6871E96",
+      "sch_sha256": "353B1183C12499CAAF7E0CF8CCA5DB4747788E443DCDFC423B5375C9B71BBF30"
+    },
+    "mosfet": {
+      "project": "LowSideSwitch", "routing": "ROUTED", "drc_unconnected": 0,
+      "erc_error": 0, "erc_warning": 12, "drc_error": 0, "drc_warning": 6, "dfm": "UNVERIFIED",
+      "pcb_sha256": "DD0E519DF49C4B116B5F035B2273F2EB0EBC6D30FB03166C3EF9C47F5FE72BDD",
+      "sch_sha256": "292D101151E44FE75F23CCBE09CF87BD7C06DFFE63246662FA2B4515974CC2EF"
+    },
+    "esp32": {
+      "project": "Esp32Led", "routing": "ROUTED", "drc_unconnected": 0,
+      "erc_error": 2, "erc_warning": 26, "drc_error": 12, "drc_warning": 13, "dfm": "UNVERIFIED",
+      "pcb_sha256": "9BA034E620D7E33BE270B9672BC3E39B7CC8FD30F38CD9285B6478C84CCC1291",
+      "sch_sha256": "D3271B511420461AF54F75864B0E29547756C449BB899F8FE9EFA28B40ABD44B"
+    }
+  }
+}

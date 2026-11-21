@@ -18,7 +18,7 @@
 | Build | Result |
 |---|---|
 | Clean configure in a new directory, `-DCOPPER_V2_SANITIZE=ON` | exit 0, **247/247 targets, 0 warnings** |
-| UBSan | trap mode on `copper_v2` only. **`copper_design`** (template_gen, autoroute and the feature/update modules) **has no sanitizer option**: recorded as a gap, not changed (H10) |
+| UBSan | trap mode on `copper_v2`. At the baseline, `copper_design` (template_gen, autoroute and the feature/update modules) had no sanitizer build. **Step 0b added it.** On the Step 0b build (`lab-0b-ubsan`) with UBSan on both libraries, ctest gave 78 passed, 6 skipped, 0 failed |
 | ASan | **NOT RUN**: unavailable on MinGW |
 
 ## T2: ctest
@@ -41,7 +41,8 @@ The 6 tests still skipped (exit 77, never reported as passed) are:
 
 ## T5: golden boards
 
-Each board was generated from the same requirements twice; `D:\copper-build-tmp\baseline_t5.ps1` is the harness.
+Each board was generated from the same requirements twice. The harness is `manus/golden_boards.ps1` (since Step 0b), with
+inputs in `manus/golden/<board>/` and these numbers in `manus/golden/baseline.json`.
 
 | Board | Compile | Routing | DRC unconnected | ERC error / warning | DRC error / warning | DFM | Two runs identical |
 |---|---|---|---|---|---|---|---|

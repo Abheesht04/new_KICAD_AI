@@ -1,0 +1,58 @@
+{
+    "schema":  "copper.requirements",
+    "schema_version":  1,
+    "circuit":  "low_side_switch",
+    "summary":  "Low-side N-MOSFET switch driving a 12 V, 2 A DC load from 3.3 V logic.",
+    "supply_voltage_v":  12,
+    "load_current_a":  2,
+    "logic_voltage_v":  3.3,
+    "switch_part":  "AO3400A",
+    "gate_resistor_ohm":  100,
+    "pulldown_ohm":  10000,
+    "flyback_diode":  true,
+    "led_color":  null,
+    "led_current_ma":  null,
+    "led_forward_voltage_v":  null,
+    "board_width_mm":  80,
+    "board_height_mm":  null,
+    "evidence":  [
+                     {
+                         "field":  "supply_voltage_v",
+                         "quote":  "a 12 V DC load"
+                     },
+                     {
+                         "field":  "load_current_a",
+                         "quote":  "up to 2 A"
+                     },
+                     {
+                         "field":  "logic_voltage_v",
+                         "quote":  "from a 3.3 V microcontroller GPIO"
+                     },
+                     {
+                         "field":  "switch_part",
+                         "quote":  "an AO3400A SOT-23 MOSFET"
+                     },
+                     {
+                         "field":  "gate_resistor_ohm",
+                         "quote":  "a 100 Ohm gate resistor"
+                     },
+                     {
+                         "field":  "pulldown_ohm",
+                         "quote":  "a 10 kOhm pull-down resistor"
+                     },
+                     {
+                         "field":  "flyback_diode",
+                         "quote":  "a flyback diode across the load terminals"
+                     },
+                     {
+                         "field":  "board_width_mm",
+                         "quote":  "an 80 mm wide board"
+                     }
+                 ],
+    "open_questions":  [
+                           "Is the load inductive (motor, relay) or resistive?"
+                       ],
+    "unsupported_requests":  [
+                                 "State trace width and clearance assumptions"
+                             ]
+}

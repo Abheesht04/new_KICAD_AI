@@ -32,11 +32,11 @@ Adopted by the owner on 2026-11-21.
 
 | # | Check | Pass when |
 |---|---|---|
-| T1 | Build every build tree with `-Wall -Wextra -Wpedantic -Werror` (UBSan in trap mode where the toolchain has it) | 0 warnings. On MinGW, ASan is reported as NOT RUN, never as passed. |
+| T1 | Build every build tree with `-Wall -Wextra -Wpedantic -Werror`, plus one clean build with `-DCOPPER_V2_SANITIZE=ON` (UBSan in trap mode on `copper_v2` and `copper_design`) | 0 warnings. On MinGW, ASan is reported as NOT RUN, never as passed. |
 | T2 | Full `ctest`, without MinGW first on `PATH` | 100 % pass; every skipped test is listed by name with its reason |
 | T3 | New tests for the step, written first | each new module has `tests/<module>_test.c` and a golden file, labelled Copper-generated or KiCad-exported |
 | T4 | `manus/selftest.ps1` (mock only; spends no credits) | every step passes; the count is not lower than the baseline |
-| T5 | Regenerate the golden boards (LED indicator, low-side MOSFET switch, ESP32 + LED) | ROUTED; KiCad DRC 0 unconnected items; no ERC or DRC error count above the baseline; two runs byte-identical |
+| T5 | `manus/golden_boards.ps1 -Workspace <ws> -Out <new dir>` regenerates the golden boards (LED indicator, low-side MOSFET switch, ESP32 + LED) twice and compares them with `manus/golden/baseline.json` | `GOLDEN_BOARDS PASS`: ROUTED; KiCad DRC 0 unconnected items; no ERC or DRC count above the baseline; two runs byte-identical. `CHANGED` (a different hash) needs a stated reason and the owner's approval |
 | T6 | Rule lint: no float in geometry, DFM or routing; no `malloc`, `printf` or `exit` in new library code | no new hits |
 | T7 | Documents | `GAP_REGISTER.md`, `PROMPT_RESULTS.md` and `V2_STATUS.md` updated |
 | T8 | Report to the owner | PASS, FAIL or UNVERIFIED, with numbers and the KiCad version used |
