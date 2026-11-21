@@ -1,5 +1,5 @@
 ; Switches and connectors. Each source retrieved 2026-11-21 from the manufacturer's site. Transcribed, NOT verified by a
-; person. Negative minimum temperatures are in the descriptions only (G-068).
+; person.
 (copper_parts
   (schema 1)
   (part
@@ -18,7 +18,8 @@
     (ratings
       (rating voltage maximum 12000000 uV (source (url "https://configured-product-images.s3.amazonaws.com/2D/specs/TL3342F160QG.pdf") (document "E-Switch drawing TL3342F160QG") (revision "Rev J, 2/9/21 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating current maximum 50000 uA (source (url "https://configured-product-images.s3.amazonaws.com/2D/specs/TL3342F160QG.pdf") (document "E-Switch drawing TL3342F160QG") (revision "Rev J, 2/9/21 (retrieved 2026-11-21)") (page 1) (status "unverified")))
-      (rating temperature maximum 70000 mC (source (url "https://configured-product-images.s3.amazonaws.com/Datasheets/TL3342.pdf") (document "E-Switch TL3342 series catalogue page") (revision "11.8.2018 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+      (rating temperature maximum 70000 mC (source (url "https://configured-product-images.s3.amazonaws.com/Datasheets/TL3342.pdf") (document "E-Switch TL3342 series catalogue page") (revision "11.8.2018 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -20000 mC (source (url "https://configured-product-images.s3.amazonaws.com/Datasheets/TL3342.pdf") (document "E-Switch TL3342 series catalogue page") (revision "11.8.2018 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "a" "1" "1") (pin "b" "2" "2")))
   (part
     (id "header_1x02_2p54_samtec_tsw_102_07_t_s")
@@ -35,7 +36,8 @@
       (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 2) (status "unverified"))
     (ratings
       (rating current maximum 4300000 uA (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified")))
-      (rating temperature maximum 105000 mC (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+      (rating temperature maximum 105000 mC (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "pin_1" "1" "1") (pin "pin_2" "2" "2")))
   (part
     (id "header_1x03_2p54_samtec_tsw_103_07_t_s")
@@ -52,7 +54,8 @@
       (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 2) (status "unverified"))
     (ratings
       (rating current maximum 4300000 uA (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified")))
-      (rating temperature maximum 105000 mC (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+      (rating temperature maximum 105000 mC (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://suddendocs.samtec.com/catalog_english/tsw_th.pdf") (document "Samtec TSW/HTSW catalogue, page F-226") (revision "catalogue page F-226, no date printed (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "pin_1" "1" "1") (pin "pin_2" "2" "2") (pin "pin_3" "3" "3")))
   (part
     (id "usb_c_receptacle_usb2_gct_usb4105_gf_a")
@@ -70,7 +73,8 @@
     (ratings
       (rating current maximum 5000000 uA (source (url "https://gct.co/files/drawings/usb4105.pdf") (document "GCT drawing USB4105") (revision "Rev B4, 18/12/23 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating voltage maximum 48000000 uV (source (url "https://gct.co/files/drawings/usb4105.pdf") (document "GCT drawing USB4105") (revision "Rev B4, 18/12/23 (retrieved 2026-11-21)") (page 1) (status "unverified")))
-      (rating temperature maximum 85000 mC (source (url "https://gct.co/files/drawings/usb4105.pdf") (document "GCT drawing USB4105") (revision "Rev B4, 18/12/23 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+      (rating temperature maximum 85000 mC (source (url "https://gct.co/files/drawings/usb4105.pdf") (document "GCT drawing USB4105") (revision "Rev B4, 18/12/23 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -40000 mC (source (url "https://gct.co/files/drawings/usb4105.pdf") (document "GCT drawing USB4105") (revision "Rev B4, 18/12/23 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "vbus" "A4" "A4") (pin "vbus" "A9" "A9") (pin "vbus" "B4" "B4") (pin "vbus" "B9" "B9")
           (pin "gnd" "A1" "A1") (pin "gnd" "A12" "A12") (pin "gnd" "B1" "B1") (pin "gnd" "B12" "B12")
           (pin "cc1" "A5" "A5") (pin "cc2" "B5" "B5") (pin "dp" "A6" "A6") (pin "dp" "B6" "B6")

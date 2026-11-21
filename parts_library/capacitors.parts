@@ -1,5 +1,5 @@
 ; Murata GRM chip multilayer ceramic capacitors. Each part cites its own Murata reference sheet, retrieved 2026-11-21.
-; Transcribed, NOT verified by a person. Negative minimum temperatures are in the descriptions only (G-068).
+; Transcribed, NOT verified by a person.
 ; Note for designs: X5R/X7R capacitance falls with DC bias and temperature; these ratings are nominal values, not the
 ; capacitance under bias.
 (copper_parts
@@ -22,6 +22,7 @@
       (rating tolerance maximum 50000 ppm (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R71H104JA93-01.pdf") (document "Murata reference sheet GRM188R71H104JA93-01") (revision "specifications as of Feb.27,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating voltage maximum 50000000 uV (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R71H104JA93-01.pdf") (document "Murata reference sheet GRM188R71H104JA93-01") (revision "specifications as of Feb.27,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating temperature maximum 125000 mC (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R71H104JA93-01.pdf") (document "Murata reference sheet GRM188R71H104JA93-01") (revision "specifications as of Feb.27,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R71H104JA93-01.pdf") (document "Murata reference sheet GRM188R71H104JA93-01") (revision "specifications as of Feb.27,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating height nominal 800 um (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R71H104JA93-01.pdf") (document "Murata reference sheet GRM188R71H104JA93-01") (revision "specifications as of Feb.27,2016 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "terminal_1" "1" "1") (pin "terminal_2" "2" "2")))
   (part
@@ -42,6 +43,7 @@
       (rating tolerance maximum 100000 ppm (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R61E105KA12-01.pdf") (document "Murata reference sheet GRM188R61E105KA12-01") (revision "specifications as of Mar.10,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating voltage maximum 25000000 uV (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R61E105KA12-01.pdf") (document "Murata reference sheet GRM188R61E105KA12-01") (revision "specifications as of Mar.10,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating temperature maximum 85000 mC (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R61E105KA12-01.pdf") (document "Murata reference sheet GRM188R61E105KA12-01") (revision "specifications as of Mar.10,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R61E105KA12-01.pdf") (document "Murata reference sheet GRM188R61E105KA12-01") (revision "specifications as of Mar.10,2016 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating height nominal 800 um (source (url "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R61E105KA12-01.pdf") (document "Murata reference sheet GRM188R61E105KA12-01") (revision "specifications as of Mar.10,2016 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "terminal_1" "1" "1") (pin "terminal_2" "2" "2")))
   (part
@@ -62,6 +64,7 @@
       (rating tolerance maximum 100000 ppm (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM21BR61E106KA73-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM21BR61E106KA73-01A") (revision "specifications as of Jun.25,2026 (retrieved 2026-11-21)") (page 2) (status "unverified")))
       (rating voltage maximum 25000000 uV (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM21BR61E106KA73-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM21BR61E106KA73-01A") (revision "specifications as of Jun.25,2026 (retrieved 2026-11-21)") (page 2) (status "unverified")))
       (rating temperature maximum 85000 mC (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM21BR61E106KA73-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM21BR61E106KA73-01A") (revision "specifications as of Jun.25,2026 (retrieved 2026-11-21)") (page 2) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM21BR61E106KA73-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM21BR61E106KA73-01A") (revision "specifications as of Jun.25,2026 (retrieved 2026-11-21)") (page 2) (status "unverified")))
       (rating height nominal 1250 um (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM21BR61E106KA73-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM21BR61E106KA73-01A") (revision "specifications as of Jun.25,2026 (retrieved 2026-11-21)") (page 2) (status "unverified"))))
     (pins (pin "terminal_1" "1" "1") (pin "terminal_2" "2" "2")))
   (part
@@ -82,5 +85,6 @@
       (rating tolerance maximum 100000 ppm (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM31CR61E226KE15-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM31CR61E226KE15-01A") (revision "specifications as of Nov.21,2017 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating voltage maximum 25000000 uV (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM31CR61E226KE15-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM31CR61E226KE15-01A") (revision "specifications as of Nov.21,2017 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating temperature maximum 85000 mC (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM31CR61E226KE15-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM31CR61E226KE15-01A") (revision "specifications as of Nov.21,2017 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM31CR61E226KE15-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM31CR61E226KE15-01A") (revision "specifications as of Nov.21,2017 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating height nominal 1600 um (source (url "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM31CR61E226KE15-01A-EN_PDF_CERAMICCAPACITORSMD") (document "Murata reference sheet GRM31CR61E226KE15-01A") (revision "specifications as of Nov.21,2017 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "terminal_1" "1" "1") (pin "terminal_2" "2" "2"))))

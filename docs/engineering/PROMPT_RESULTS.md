@@ -324,3 +324,24 @@ difference, not a data error.
 | T7 | G-018 note 2, G-068 (parser rejects negative ratings), G-069 (ESP32 stacked GND pins in KiCad 10) |
 
 **Found:** G-068, a defect in a base module. It is not fixed: it needs the owner's approval.
+
+## Lab branch: G-068 fixed (2026-11-21, owner approved)
+
+**Change:** `src/v2_src/part_catalogue.c` (base module; noted in the commit). The condition is now
+`name != temperature && value <= 0`; before, `value < 0` rejected every negative rating, temperatures included.
+
+**Test first:** `test_signed_temperature_only` failed before the fix (`-55000 mC`: RANGE_ERROR) and passes after it.
+Negative or zero resistance, voltage and current are still INVALID_INPUT.
+
+**Data:** 19 `temperature minimum` ratings added to `parts_library/`, each with the same source page as the
+maximum. The "minimum in the description only" notes were removed.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 86/86 passed (6 skipped) |
+| T4 | self-test 23/23 |
+| T5 | golden boards PASS (identical) |
+| `copper catalogue check` | verdicts unchanged (4 files UNVERIFIED, `ics` FAIL only for G-069) |

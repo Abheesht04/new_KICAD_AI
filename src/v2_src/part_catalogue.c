@@ -385,8 +385,9 @@ static PartCatalogueStatus parse_rating(const IRNode *node,
         return PART_CATALOGUE_ERR_SCHEMA;
     }
 
-    if (result.value < 0 ||
-        (result.name != PART_RATING_TEMPERATURE && result.value == 0)) {
+    /* G-068 (2026-11-21): a temperature may be zero or negative (e.g. a -55 C minimum); every other rating must be
+     * strictly positive. Before, `value < 0` was tested for every rating, so no negative temperature parsed. */
+    if (result.name != PART_RATING_TEMPERATURE && result.value <= 0) {
         set_error(error, PART_CATALOGUE_ERR_RANGE, item_index, "ratings",
                   "ratings must be positive (temperature may be signed)");
         return PART_CATALOGUE_ERR_RANGE;

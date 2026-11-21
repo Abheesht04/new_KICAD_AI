@@ -1,5 +1,5 @@
 ; Discrete semiconductors. Each source retrieved 2026-11-21 from the manufacturer's site. Transcribed, NOT verified by a
-; person. Negative minimum temperatures are in the descriptions only (G-068). Pin maps follow the KiCad symbol: for the
+; person. Pin maps follow the KiCad symbol: for the
 ; LED and diode, pad 1 is the cathode (KiCad convention); that the part's cathode mark lands on pad 1 is checked by a
 ; person against the package drawing, not by Copper.
 (copper_parts
@@ -21,7 +21,8 @@
       (rating current maximum 30000 uA (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
       (rating voltage maximum 5000000 uV (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
       (rating power maximum 75000 uW (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
-      (rating temperature maximum 85000 mC (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified"))))
+      (rating temperature maximum 85000 mC (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
+      (rating temperature minimum -40000 mC (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified"))))
     (pins (pin "cathode" "1" "1") (pin "anode" "2" "2")))
   (part
     (id "diode_schottky_sma_vishay_ss14")
@@ -39,7 +40,8 @@
     (ratings
       (rating voltage maximum 40000000 uV (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating current maximum 1000000 uA (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified")))
-      (rating temperature maximum 150000 mC (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+      (rating temperature maximum 150000 mC (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -65000 mC (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "cathode" "1" "1") (pin "anode" "2" "2")))
   (part
     (id "nmos_sot23_aos_ao3400a")
@@ -58,5 +60,6 @@
       (rating voltage maximum 30000000 uV (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating current maximum 5700000 uA (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating power maximum 1400000 uW (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
-      (rating temperature maximum 150000 mC (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+      (rating temperature maximum 150000 mC (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature minimum -55000 mC (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
     (pins (pin "gate" "1" "1") (pin "source" "2" "2") (pin "drain" "3" "3"))))

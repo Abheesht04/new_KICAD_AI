@@ -200,6 +200,33 @@ static void test_invalid_input(void)
     assert(parts_check_text(&arena, text, strlen(text), SYMS, NULL, &a) == PARTS_CHECK_ERR_ARGUMENT);
 }
 
+/* G-068: a temperature may be zero or negative (a minimum operating temperature of -55 C); every other rating must
+ * stay strictly positive. */
+static void test_signed_temperature_only(void)
+{
+    static const char *const ok_values[] = {"-55000", "0", "125000"};
+    for (size_t i = 0; i < 3; i++) {
+        char text[2048];
+        snprintf(text, sizeof text, CATALOGUE(
+            "(part (id \"r_temp\") (kind R) (manufacturer \"Fixture Mfr\") (mpn \"FX-TEMP\") " DS
+            " (symbol \"Device:R\") (footprint \"Resistor_SMD:R_0603_1608Metric\") " ID_V
+            " (ratings (rating resistance nominal 10000000000 uohm " SRC_V ") (rating power maximum 100000 uW " SRC_V ")"
+            " (rating temperature minimum %s mC " SRC_V ")) " R_PINS ")"), ok_values[i]);
+        PartsCheckReport r = run(text, true);
+        if (r.verdict != PARTS_CHECK_PASS) { fprintf(stderr, "temperature %s: %s\n", ok_values[i], r.invalid_message); dump(&r); }
+        assert(r.verdict == PARTS_CHECK_PASS && r.parts[0].ratings == 3);
+    }
+    static const char *const bad[] = {"resistance nominal -10 uohm", "voltage maximum 0 uV", "current maximum -1 uA"};
+    for (size_t i = 0; i < 3; i++) {
+        char text[2048];
+        snprintf(text, sizeof text, CATALOGUE(
+            "(part (id \"r_bad\") (kind R) (symbol \"Device:R\") (footprint \"Resistor_SMD:R_0603_1608Metric\")"
+            " (ratings (rating %s " SRC_V ")))"), bad[i]);
+        PartsCheckReport r = run(text, true);
+        assert(r.verdict == PARTS_CHECK_INVALID_INPUT && strstr(r.invalid_message, "RANGE"));
+    }
+}
+
 static void test_file_and_json(void)
 {
     PartsCheckReport r;
@@ -227,6 +254,7 @@ int main(void)
     test_duplicate_mpn_and_unknown_field();
     test_fail_outranks_unverified();
     test_invalid_input();
+    test_signed_temperature_only();
     test_file_and_json();
     arena_destroy(&arena);
     puts("parts_check: all tests passed");

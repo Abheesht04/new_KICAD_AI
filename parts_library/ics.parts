@@ -1,5 +1,5 @@
 ; Integrated circuits and modules. Each source retrieved 2026-11-21 from the manufacturer's site. Transcribed, NOT
-; verified by a person. Negative minimum temperatures are in the descriptions only (G-068). Only the pins Copper's blocks
+; verified by a person. Only the pins Copper's blocks
 ; use are mapped; strapping pins and reference circuits belong to the block data files (Phase 2), not here.
 (copper_parts
   (schema 1)
@@ -21,7 +21,8 @@
       (rating current maximum 1000000 uA (source (url "http://www.advanced-monolithic.com/pdf/ds1117.pdf") (document "AMS1117 datasheet (ds1117.pdf)") (revision "no revision or date printed (retrieved 2026-11-21)") (page 1) (status "unverified")))
       (rating dropout maximum 1300000 uV (source (url "http://www.advanced-monolithic.com/pdf/ds1117.pdf") (document "AMS1117 datasheet (ds1117.pdf)") (revision "no revision or date printed (retrieved 2026-11-21)") (page 3) (status "unverified")))
       (rating quiescent_current maximum 11000 uA (source (url "http://www.advanced-monolithic.com/pdf/ds1117.pdf") (document "AMS1117 datasheet (ds1117.pdf)") (revision "no revision or date printed (retrieved 2026-11-21)") (page 3) (status "unverified")))
-      (rating temperature maximum 125000 mC (source (url "http://www.advanced-monolithic.com/pdf/ds1117.pdf") (document "AMS1117 datasheet (ds1117.pdf)") (revision "no revision or date printed (retrieved 2026-11-21)") (page 2) (status "unverified"))))
+      (rating temperature maximum 125000 mC (source (url "http://www.advanced-monolithic.com/pdf/ds1117.pdf") (document "AMS1117 datasheet (ds1117.pdf)") (revision "no revision or date printed (retrieved 2026-11-21)") (page 2) (status "unverified")))
+      (rating temperature minimum -40000 mC (source (url "http://www.advanced-monolithic.com/pdf/ds1117.pdf") (document "AMS1117 datasheet (ds1117.pdf)") (revision "no revision or date printed (retrieved 2026-11-21)") (page 2) (status "unverified"))))
     (pins (pin "gnd" "1" "1") (pin "vout" "2" "2") (pin "vin" "3" "3")))
   (part
     (id "mcu_module_esp32_wroom_32e_n4")
@@ -41,6 +42,7 @@
       (rating voltage maximum 3600000 uV (source (url "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf") (document "ESP32-WROOM-32E & ESP32-WROOM-32UE Datasheet") (revision "Version 2.1 (retrieved 2026-11-21)") (page 28) (status "unverified")))
       (rating current minimum 500000 uA (source (url "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf") (document "ESP32-WROOM-32E & ESP32-WROOM-32UE Datasheet") (revision "Version 2.1 (retrieved 2026-11-21)") (page 28) (status "unverified")))
       (rating temperature maximum 85000 mC (source (url "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf") (document "ESP32-WROOM-32E & ESP32-WROOM-32UE Datasheet") (revision "Version 2.1 (retrieved 2026-11-21)") (page 28) (status "unverified")))
+      (rating temperature minimum -40000 mC (source (url "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf") (document "ESP32-WROOM-32E & ESP32-WROOM-32UE Datasheet") (revision "Version 2.1 (retrieved 2026-11-21)") (page 28) (status "unverified")))
       (rating height nominal 3100 um (source (url "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf") (document "ESP32-WROOM-32E & ESP32-WROOM-32UE Datasheet") (revision "Version 2.1 (retrieved 2026-11-21)") (page 3) (status "unverified"))))
     (pins (pin "gnd" "1" "1") (pin "gnd" "15" "15") (pin "gnd" "38" "38") (pin "gnd" "39" "39")
           (pin "vdd_3v3" "2" "2") (pin "en" "3" "3") (pin "io0" "25" "25") (pin "io4" "26" "26")
@@ -61,6 +63,7 @@
     (ratings
       (rating voltage minimum 1400000 uV (source (url "https://www.ti.com/lit/ds/symlink/tmp102.pdf") (document "TI TMP102 datasheet SBOS397I") (revision "SBOS397I, revised June 2024 (retrieved 2026-11-21)") (page 4) (status "unverified")))
       (rating voltage maximum 3600000 uV (source (url "https://www.ti.com/lit/ds/symlink/tmp102.pdf") (document "TI TMP102 datasheet SBOS397I") (revision "SBOS397I, revised June 2024 (retrieved 2026-11-21)") (page 4) (status "unverified")))
-      (rating temperature maximum 125000 mC (source (url "https://www.ti.com/lit/ds/symlink/tmp102.pdf") (document "TI TMP102 datasheet SBOS397I") (revision "SBOS397I, revised June 2024 (retrieved 2026-11-21)") (page 4) (status "unverified"))))
+      (rating temperature maximum 125000 mC (source (url "https://www.ti.com/lit/ds/symlink/tmp102.pdf") (document "TI TMP102 datasheet SBOS397I") (revision "SBOS397I, revised June 2024 (retrieved 2026-11-21)") (page 4) (status "unverified")))
+      (rating temperature minimum -40000 mC (source (url "https://www.ti.com/lit/ds/symlink/tmp102.pdf") (document "TI TMP102 datasheet SBOS397I") (revision "SBOS397I, revised June 2024 (retrieved 2026-11-21)") (page 4) (status "unverified"))))
     (pins (pin "scl" "1" "1") (pin "gnd" "2" "2") (pin "alert" "3" "3") (pin "add0" "4" "4") (pin "vplus" "5" "5")
           (pin "sda" "6" "6"))))
