@@ -191,6 +191,25 @@ Exit codes:
 - 7: UNSUPPORTED: zones, custom pads, inner-layer pads or a non-rectangular outline;
 - 1: I/O error; 64: bad arguments.
 
+## copper block check
+
+`copper block check BLOCK.json [--parts FILE.parts]... [--out REPORT.json]` checks one `copper.block/1` circuit block
+definition (`src/v2_src/blocks.c`; format in [BLOCK_FORMAT.md](BLOCK_FORMAT.md)). It checks:
+- the structure, units and integer values;
+- that every default, range and formula has a source;
+- that every port and terminal is connected and every internal net joins two or more pins;
+- the formula inputs against the fixed function table;
+- with `--parts` catalogues, that each part exists, its kind matches the prefix, and its terminals match.
+
+Exit codes:
+- 0: VALID;
+- 3: UNVERIFIED, when no `--parts` was given;
+- 2: INVALID;
+- 64: usage error;
+- 70: internal error.
+
+`--out` writes `copper.block-check/1` JSON.
+
 ## copper catalogue check
 
 `copper catalogue check FILE.parts [--symbols-root DIR --footprints-root DIR] [--out REPORT.json]` reports every

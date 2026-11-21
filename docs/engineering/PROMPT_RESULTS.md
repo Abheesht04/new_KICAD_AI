@@ -345,3 +345,34 @@ maximum. The "minimum in the description only" notes were removed.
 | T4 | self-test 23/23 |
 | T5 | golden boards PASS (identical) |
 | `copper catalogue check` | verdicts unchanged (4 files UNVERIFIED, `ics` FAIL only for G-069) |
+
+## Lab branch: Step 2a, block format and checker (2026-11-21, owner approved; JSON format)
+
+**Added:**
+- `src/v2_src/blocks.{c,h}` (copper_design; on the no-float lint list): loads and checks `copper.block/1`;
+- `copper block check` in `apps/copper_cli.c`;
+- `docs/engineering/BLOCK_FORMAT.md` and a CLI.md section;
+- the test `src/v2_src/tests/test_blocks.c` with `tests/fixtures/blocks/led_indicator.block.json` (Copper-written),
+  checked against the real `parts_library` catalogues.
+
+**Espressif research (the owner asked for recommended designs):**
+- **Today's template module is NRND.** The ESP32-WROOM-32 datasheet carries the "NOT RECOMMENDED FOR NEW DESIGNS"
+  watermark.
+- **Recommended modules.** The WROOM-32E (v2.1), S3-WROOM-1 (v1.8), C3-WROOM-02 (v1.7) and S3-MINI-1 (v1.7)
+  datasheets do not.
+- **Design guide.** Espressif's *ESP32 Hardware Design Guidelines* (release master, Nov 12, 2026) was downloaded as
+  the source for the `esp32_core` block (2b).
+- **Recorded as:** G-070.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | **87/87 passed** (81 run, 6 skipped: KiCad 9.x ×5, GPU ×1), UBSan build |
+| T3 | `copper_blocks_tests`: valid fixture VALID with catalogues and UNVERIFIED without; 29 single-change cases each give their finding. Mutation check: with the terminal check disabled, the test fails (the first mutant attempt did not compile and was redone) |
+| T3 (CLI) | exit 0 VALID, 3 UNVERIFIED, 2 INVALID (misspelt terminal: 2 TERMINAL_MISMATCH), 64 usage |
+| T4 | self-test 23/23 |
+| T5 | golden boards PASS, identical to the baseline |
+| T6 | `blocks.c`: no `malloc`, `printf` or `exit`; no float (CMake lint) |
+| T7 | G-066 note, G-070; this entry |

@@ -25,6 +25,7 @@
 #include "autoroute.h"
 #include "json.h"
 #include "parts_check.h"
+#include "blocks.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -109,6 +110,8 @@ static void print_usage(void) {
     puts("  copperv2 assets import-kicad <symbols-dir> <footprints-dir> --root DIR");
     puts("  copperv2 catalogue create <file.parts>");
     puts("  copperv2 catalogue validate <file.parts> [--symbols-root DIR --footprints-root DIR]");
+    puts("  copperv2 block check <block.json> [--parts FILE.parts]... [--out report.json]");
+    puts("      one copper.block/1 definition; exit 0 VALID, 3 UNVERIFIED (no --parts), 2 INVALID");
     puts("  copperv2 catalogue check <file.parts> [--symbols-root DIR --footprints-root DIR] [--out report.json]");
     puts("      every problem of every part; exit 0 PASS, 3 UNVERIFIED, 1 FAIL, 2 INVALID_INPUT");
     puts("  copperv2 catalogue install <file.parts> --scope project|user [--project-root DIR] [--user-root DIR]");
@@ -1075,6 +1078,61 @@ static bool option_value(int argc, char **argv, const char *option,
         if (strcmp(argv[i], option) == 0) { *out = argv[i + 1]; return true; }
     }
     return false;
+}
+
+/* copper block check BLOCK.json [--parts FILE.parts]... [--out REPORT.json]
+ * Checks one copper.block/1 definition (src/v2_src/blocks.c), against the given part catalogues when there are any.
+ * Exit: 0 VALID, 3 UNVERIFIED (no catalogue given), 2 INVALID, 64 usage, 70 internal error. */
+static int command_block_check(int argc, char **argv) {
+    const char *path = argv[3], *out_path = NULL;
+    enum { MAX_CATS = 32 };
+    const char *cat_paths[MAX_CATS];
+    size_t ncat = 0;
+    for (int i = 4; i < argc; i += 2) {
+        if (i + 1 >= argc) { fprintf(stderr, "ERROR: %s needs a value\n", argv[i]); return 64; }
+        if (!strcmp(argv[i], "--parts")) {
+            if (ncat == MAX_CATS) { fprintf(stderr, "ERROR: at most %d --parts files\n", MAX_CATS); return 64; }
+            cat_paths[ncat++] = argv[i + 1];
+        } else if (!strcmp(argv[i], "--out")) out_path = argv[i + 1];
+        else { fprintf(stderr, "ERROR: unknown option %s\n", argv[i]); return 64; }
+    }
+    Arena arena;
+    arena_init(&arena, 1u << 20);
+    PartCatalogue cats[MAX_CATS];
+    const PartCatalogue *refs[MAX_CATS];
+    for (size_t i = 0; i < ncat; ++i) {
+        PartCatalogueError e;
+        if (part_catalogue_parse_file(&arena, cat_paths[i], &cats[i], &e) != PART_CATALOGUE_OK) {
+            printf("%s: catalogue does not parse: %s\n", cat_paths[i], e.message ? e.message : "error");
+            printf("STATUS block check: INVALID (a --parts catalogue is unreadable)\n");
+            arena_destroy(&arena);
+            return 2;
+        }
+        refs[i] = &cats[i];
+    }
+    BlockReport r;
+    BlockStatus st = block_check_file(&arena, path, refs, ncat, &r);
+    if (st == BLOCK_ERR_ARGUMENT || st == BLOCK_ERR_MEMORY) {
+        fprintf(stderr, "ERROR: block check: %s\n", block_status_name(st));
+        arena_destroy(&arena);
+        return 70;
+    }
+    for (size_t i = 0; i < r.finding_count; ++i)
+        printf("  %-20s %-28s %s\n", r.findings[i].code, r.findings[i].path[0] ? r.findings[i].path : "(file)", r.findings[i].message);
+    if (!ncat) puts("  catalogue checks NOT RUN: give the part catalogues with --parts");
+    int code = st == BLOCK_VALID ? 0 : st == BLOCK_UNVERIFIED ? 3 : 2;
+    if (out_path) {
+        size_t len = 0;
+        const char *json = block_report_json(&arena, &r, &len);
+        FILE *f = json ? fopen(out_path, "wb") : NULL;
+        bool ok = f && fwrite(json, 1, len, f) == len;
+        if (f && fclose(f) != 0) ok = false;
+        if (!ok) { fprintf(stderr, "ERROR: cannot write %s\n", out_path); code = 70; }
+    }
+    printf("STATUS block check: %s (%s: %zu parameters, %zu ports, %zu nets, %zu parts, %zu formulas; %zu findings)\n",
+           block_status_name(st), r.name ? r.name : "?", r.parameters, r.ports, r.nets, r.parts, r.formulas, r.finding_count);
+    arena_destroy(&arena);
+    return code;
 }
 
 /* copper catalogue check FILE [--symbols-root DIR --footprints-root DIR] [--out REPORT.json]
@@ -2803,6 +2861,11 @@ int main(int argc, char **argv) {
         if (argc == 7 && strcmp(argv[2], "import-kicad") == 0 &&
             strcmp(argv[5], "--root") == 0)
             return command_import_kicad(argv[3], argv[4], argv[6]);
+        print_usage(); return 64;
+    }
+    if (strcmp(argv[1], "block") == 0) {
+        if (argc >= 4 && strcmp(argv[2], "check") == 0)
+            return command_block_check(argc, argv);
         print_usage(); return 64;
     }
     if (strcmp(argv[1], "catalogue") == 0) {

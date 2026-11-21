@@ -1,0 +1,37 @@
+{
+  "format": "copper.block/1",
+  "name": "led_indicator",
+  "summary": "TEST FIXTURE for test_blocks.c (Copper-written): an LED driven from a pin through a series resistor.",
+  "sources": [
+    {"id": "kingbright_apt1608ec", "document": "Kingbright APT1608EC, spec DSAD0924 / 1203001652",
+     "url": "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf", "revision": "V.18A, 02/19/2022", "page": 2},
+    {"id": "ohms_law", "document": "Ohm's law: R = (V_drive - V_F) / I_F", "standard": "circuit theory"},
+    {"id": "copper_default", "document": "Copper design default: a modest indicator current, not a datasheet value",
+     "standard": "Copper design choice (2026-11-21)"}
+  ],
+  "parameters": [
+    {"name": "drive_voltage", "unit": "uV", "required": true, "min": 1000000, "max": 24000000},
+    {"name": "led_vf", "unit": "uV", "required": false, "default": 2000000, "source": "kingbright_apt1608ec"},
+    {"name": "led_current", "unit": "uA", "required": false, "default": 2000, "source": "copper_default",
+     "min": 100, "max": 30000}
+  ],
+  "ports": [
+    {"name": "drive", "kind": "gpio"},
+    {"name": "gnd", "kind": "ground"}
+  ],
+  "nets": ["led_a"],
+  "parts": [
+    {"role": "resistor", "prefix": "R",
+     "select": {"kind": "R", "package": "0603", "value": {"formula": "r_led"}},
+     "pins": {"terminal_1": "drive", "terminal_2": "led_a"}},
+    {"role": "led", "prefix": "D", "select": {"part_id": "led_0603_red_kingbright_apt1608ec"},
+     "pins": {"anode": "led_a", "cathode": "gnd"}}
+  ],
+  "formulas": [
+    {"name": "r_led", "function": "led_series_resistor", "source": "ohms_law",
+     "inputs": {"v_drive": "drive_voltage", "v_forward": "led_vf", "current": "led_current"}}
+  ],
+  "notes": [
+    {"text": "VF is the datasheet's typical value at 20 mA; the real current depends on the LED.", "source": "kingbright_apt1608ec"}
+  ]
+}

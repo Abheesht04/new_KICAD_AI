@@ -433,7 +433,8 @@ set(COPPER_DESIGN_SOURCES
     src/v2_src/json.c src/v2_src/intent_check.c   # grounding gate for model-written intents
     src/v2_src/template_gen.c   # deterministic design generation from analysed requirements
     src/v2_src/autoroute.c      # deterministic two-layer board router
-    src/v2_src/parts_check.c)   # per-part report on a curated part catalogue (Step 1a)
+    src/v2_src/parts_check.c    # per-part report on a curated part catalogue (Step 1a)
+    src/v2_src/blocks.c)        # copper.block/1 definitions: load and check (Step 2a)
 add_library(copper_design STATIC ${COPPER_DESIGN_SOURCES})
 target_include_directories(copper_design PUBLIC src/v2_src)
 function(copper_design_policy target)
@@ -458,7 +459,7 @@ if(WIN32)
     target_link_libraries(copper_design PUBLIC ole32)   # CoCreateGuid (copper_project.c)
 endif()
 # Geometry and DFM modules of the overlay: no floating point or libm (CLAUDE.md section 2).
-foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c autoroute.c fab_rules.c jlc_catalogue.c parts_check.c)
+foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c autoroute.c fab_rules.c jlc_catalogue.c parts_check.c blocks.c)
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/v2_src/${module}" module_source)
     if(module_source MATCHES "#[ \t]*include[ \t]*<math\\.h>" OR
        module_source MATCHES "(^|[^A-Za-z0-9_])(double|float)([^A-Za-z0-9_]|$)" OR
@@ -473,7 +474,8 @@ if(HWCOMPILER_BUILD_TESTS)
     # The overlay's tests use assert(); NDEBUG is undefined for them so Release builds still check.
     foreach(pair core:test_core design:test_design catalogue_asset:test_catalogue_assets topology:test_topology
                  engineering:test_engineering_loop optimization:test_optimization_loop intent_check:test_intent_check
-                 template_gen:test_template_gen autoroute:test_autoroute parts_check:test_parts_check)
+                 template_gen:test_template_gen autoroute:test_autoroute parts_check:test_parts_check
+                 blocks:test_blocks)
         string(REPLACE ":" ";" parts "${pair}")
         list(GET parts 0 name)
         list(GET parts 1 source)
