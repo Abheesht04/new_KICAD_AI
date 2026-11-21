@@ -19,7 +19,7 @@ Everything is on branch `v2/complete` (tracks A–H, REST, and the C placer merg
 | Port placement to C, more sophisticated, working with the existing C | **Done** | `src/v2_src/placement.c`, `copper-core place`; `layout.optimize` uses it. Same constructive start as Python; it beats the Python annealer on 6 of 7 fixtures and ties the 7th; zero `Board` violations. See [C_FIRST_AUDIT.md](C_FIRST_AUDIT.md) §3. |
 | Server-side REST in C | **Done** | `src/v2_src/rest_server.c`, `copper-core serve-http`, tested over real HTTP ([TOOL_SERVER.md](TOOL_SERVER.md)) |
 | CUDA | **Partly** | track H: the kernel is written and the CPU reference is verified. The GPU was **not run**: there is no CUDA toolkit or GPU here. |
-| Python only to host the model on another machine | **Done** for the client side | the LLM client is C (track G) and talks to any Ollama URL; no Copper Python runs the model |
+| Python only to host the model on another machine | **Done** for the client side | the LLM bridge is C (track G, mock backend only since the Ollama backend was removed on 2026-11-20); Manus does prompt analysis over HTTPS from `copper-prompt.ps1`; no Copper Python runs a model |
 | Learning models (translation, part picking from C-parsed libraries and DFM rules) | **Not done** | No training code was written. The C side they would consume now exists: board, DFM rules, findings and the tool server. KiCad *library* parsing in C is still port step 5 (`tools/kicad_library.py` is legacy Python). |
 | Update the overall `.md` docs | **Done** | the README, CHANGELOG, CLI.md and AUDIT_CHECKLIST, plus one document per track (listed below) |
 
@@ -34,7 +34,7 @@ Everything is on branch `v2/complete` (tracks A–H, REST, and the C placer merg
 | **D** kicad-cli runner | **Done** | `kicad_cli.c/.h` | Tested against a fake CLI (every failure path, a timeout kill, 4 MiB streams, never overwriting) and against the real KiCad 10.0.5 CLI (a development check). ([KICAD_CLI.md](KICAD_CLI.md)) |
 | **E** Findings and report | **Done** | `finding.c/.h`, writer in `json.c` | The golden `tests/golden/report.json` matches byte for byte and does not depend on input order. ([FINDINGS.md](FINDINGS.md)) |
 | **F** Tool server | **Done** | `tool_server.c/.h` | A 25-message scripted transcript and the real process over stdio; structured errors; a JSONL session log. ([TOOL_SERVER.md](TOOL_SERVER.md)) |
-| **G** LLM bridge | **Done (live model not run)** | `llm.h/.c`, `llm_mock.c`, `llm_ollama.c`, `schema_gbnf.c`, `agent_loop.c`, `eval/prompts.jsonl`, `scripts/run_llm_eval.{sh,ps1}` | All tests pass with the mock, and the eval scores 10/10 with the mock. The Ollama client is tested without a server. **The live Ollama test was not run (no Ollama here): UNVERIFIED.** ([LLM_BRIDGE.md](LLM_BRIDGE.md)) |
+| **G** LLM bridge | **Done (live model not run)** | `llm.h/.c`, `llm_mock.c`, `schema_gbnf.c` (`llm_ollama.c` removed 2026-11-20), `agent_loop.c`, `eval/prompts.jsonl`, `scripts/run_llm_eval.{sh,ps1}` | All tests pass with the mock, and the eval scores 10/10 with the mock. The Ollama client is tested without a server. **The live Ollama test was not run (no Ollama here): UNVERIFIED.** ([LLM_BRIDGE.md](LLM_BRIDGE.md)) |
 | **H** CUDA DFM kernel | **Partly** | `dfm_cpu_ref.c`, `dfm_kernel.h`, `cuda/dfm_gpu.cu`, `dfm_gpu.h`, `apps/dfm_bench.c` | The CPU reference equals g2's exact capsule distance on 1000 random boards. The CPU benchmark ran at N = 64, 1024 and 16384. **The GPU path was not built and not run** (no nvcc, no GPU). Its 1000-board GPU-vs-CPU test reports NOT RUN. The `.cu` file was only syntax-checked with g++ against a stub. ([CUDA_DFM.md](CUDA_DFM.md)) |
 
 ## Edits to protected files
@@ -53,7 +53,7 @@ Fixes made while integrating `v2-native-kicad-integration` are noted in [KICAD_N
 
 **Not verified, because the tools are not on this machine:**
 - KiCad 9.x native gates: 5 tests skip as UNVERIFIED (only KiCad 10.0.5 is installed, which counts as a development preview);
-- the live Ollama model;
+- a live model in copper-core (the Ollama backend was removed on 2026-11-20; Manus runs outside it);
 - CUDA on a GPU;
 - ASan.
 

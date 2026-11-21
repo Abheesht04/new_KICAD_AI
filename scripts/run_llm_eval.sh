@@ -2,9 +2,7 @@
 # Copper LLM eval (track G): run eval/prompts.jsonl through copper-core's agent loop and write
 # eval_out/<YYYY-MM-DD>[-N]/results.jsonl and summary.txt (plus per-prompt logs).
 #
-#   scripts/run_llm_eval.sh                          mock backend (deterministic, no model needed)
-#   BACKEND=ollama MODEL=qwen3:8b scripts/run_llm_eval.sh
-#   BACKEND=ollama MODEL=llama3.2:latest URL=http://gpu-box:11434 scripts/run_llm_eval.sh
+#   scripts/run_llm_eval.sh        mock backend (deterministic, no model needed; the only backend)
 #
 # COPPER_CORE overrides the copper-core binary. All the work is in C (copper-core agent-eval); this only picks the
 # output folder, which is never reused.
@@ -24,8 +22,6 @@ N=2
 while [ -e "$OUT" ]; do OUT="$ROOT/eval_out/$DAY-$N"; N=$((N + 1)); done
 mkdir -p "$ROOT/eval_out"
 set -- agent-eval "$ROOT/eval/prompts.jsonl" "$OUT" --backend "$BACKEND" --root "$ROOT"
-[ -n "${MODEL:-}" ] && set -- "$@" --model "$MODEL"
-[ -n "${URL:-}" ] && set -- "$@" --url "$URL"
 rc=0
 "$CORE" "$@" || rc=$?
 cat "$OUT/summary.txt"

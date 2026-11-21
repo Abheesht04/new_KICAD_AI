@@ -3,15 +3,16 @@
 
 /*
  * llm.h - the LLM bridge client (Copper V2 track G). C side of the language split (CHARTER 3.1): the model runs
- * elsewhere (Ollama, possibly on another machine); this is only the client, the agent loop and the eval.
+ * elsewhere; this is only the backend interface, the agent loop and the eval.
  *
  * One backend interface:
  *   LlmStatus (*chat)(LlmBackend*, const LlmMessage* msgs, size_t n, const char* json_schema, Arena*, LlmReply* out);
  * Backends:
- *   mock    (llm_mock.c, the default): scripted replies, or a deterministic rule planner that drives the tools.
- *           Every test and the default eval use it; nothing needs a model.
- *   ollama  (llm_ollama.c): POST {base}/api/chat with "stream": false and "think": false, the reply schema as
- *           "format" (Ollama's structured output) and temperature 0, over plain HTTP/1.1 sockets.
+ *   mock    (llm_mock.c, the only one built in): scripted replies, or a deterministic rule planner that drives the
+ *           tools. Every test and the eval use it; nothing needs a model.
+ * The Ollama backend (llm_ollama.c) was removed on 2026-11-20 at the owner's request: the product's only model is
+ * Manus, which does prompt analysis only and is called over HTTPS by manus/workspace/copper-prompt.ps1, outside
+ * copper-core. A new backend plugs in through LlmBackend.
  * schema_gbnf.c turns the reply schema into a GBNF grammar for llama.cpp-style servers.
  * agent_loop.c runs the conversation against the tool server (track F) with at most 12 turns, logging JSONL.
  * Memory: the caller's Arena. No printf, no exit.
@@ -55,13 +56,13 @@ typedef struct LlmReply {
     const char *model;        /* as reported by the backend */
     uint64_t prompt_tokens, completion_tokens;
     uint64_t elapsed_ms;      /* wall time of the call */
-    int http_status;          /* ollama: the HTTP status; 0 otherwise */
+    int http_status;          /* the HTTP status for a backend that uses HTTP; 0 otherwise */
     const char *error;        /* a static or arena message when status != LLM_OK */
 } LlmReply;
 
 typedef struct LlmBackend LlmBackend;
 struct LlmBackend {
-    const char *name;         /* "mock", "ollama" */
+    const char *name;         /* "mock" */
     LlmStatus (*chat)(LlmBackend *backend, const LlmMessage *msgs, size_t n, const char *json_schema, Arena *arena, LlmReply *out);
     void *state;
 };
@@ -82,31 +83,6 @@ void llm_mock_init_script(LlmBackend *backend, LlmMockState *state, const char *
  * dfm.check, excellon.check or export.fab in turn, then answers from the tool results. It answers in the agent's
  * reply format (agent_reply_schema). */
 void llm_mock_init_rules(LlmBackend *backend, LlmMockState *state);
-
-/* ---------------------------------------------------------------- ollama (llm_ollama.c) */
-
-typedef struct LlmOllamaConfig {
-    const char *base_url;     /* default "http://localhost:11434" */
-    const char *model;        /* e.g. "qwen3:8b" (required) */
-    uint32_t timeout_ms;      /* default 300000 */
-} LlmOllamaConfig;
-
-typedef struct LlmOllamaState { LlmOllamaConfig config; } LlmOllamaState;
-
-void llm_ollama_init(LlmBackend *backend, LlmOllamaState *state, const LlmOllamaConfig *config);
-
-/* The request body for /api/chat (exposed for tests): model, messages, "stream": false, "think": false, "format":
- * the schema (as a JSON value) when given, "options": {"temperature": 0}. */
-LlmStatus llm_ollama_request_body(Arena *arena, const LlmOllamaConfig *config, const LlmMessage *msgs, size_t n,
-                                  const char *json_schema, const char **body, size_t *len);
-/* Parse an /api/chat response body into `out` (exposed for tests). {"error": ...} is LLM_HTTP_ERROR. */
-LlmStatus llm_ollama_parse_reply(Arena *arena, const char *body, size_t len, LlmReply *out);
-
-/* HTTP pieces (exposed for tests). */
-typedef struct LlmUrl { const char *host; int port; const char *path; } LlmUrl;
-LlmStatus llm_parse_url(Arena *arena, const char *url, LlmUrl *out);              /* http:// only */
-/* Split a raw HTTP/1.1 response into status and body (Content-Length, chunked or until close). */
-LlmStatus llm_http_parse(Arena *arena, const char *raw, size_t len, int *status, const char **body, size_t *body_len);
 
 /* ---------------------------------------------------------------- GBNF (schema_gbnf.c) */
 

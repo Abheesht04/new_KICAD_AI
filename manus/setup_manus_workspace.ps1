@@ -46,6 +46,7 @@ $cfg = [ordered]@{
     intent_schema   = Join-Path $repo 'src\v2_src\schemas\copper.design-intent.v1.schema.json'
     fab_profile     = Join-Path $repo 'fab_profiles\jlcpcb_2layer.json'
     templates       = Join-Path $repo 'design_templates\copper_templates.v1.json'
+    routing_rules   = Join-Path $repo 'routing_profiles\copper_2layer_default.json'
 }
 
 if ((Test-Path -LiteralPath $Workspace) -and -not $Force) {
@@ -57,6 +58,12 @@ Remove-Item -LiteralPath (Join-Path $Workspace 'manus_output.schema.json') -Erro
 Copy-Item -Force -Path (Join-Path $template 'examples\*') -Destination (Join-Path $Workspace 'examples')
 Copy-Item -Force -LiteralPath $cfg.intent_schema -Destination (Join-Path $Workspace 'copper.design-intent.v1.schema.json')
 [IO.File]::WriteAllText((Join-Path $Workspace 'copper.config.json'), ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+# The key file copper-prompt.ps1 reads. Never overwritten; readable by this Windows user only.
+$keyFile = Join-Path $Workspace 'manus_api_key.txt'
+if (-not (Test-Path -LiteralPath $keyFile)) {
+    [IO.File]::WriteAllText($keyFile, "# Paste your Manus API key on the line below (replace the placeholder), then save.`r`n# Keep this file private: do not copy it into the repository or share it.`r`nPASTE-YOUR-MANUS-API-KEY-HERE`r`n", (New-Object Text.UTF8Encoding($false)))
+    & icacls $keyFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
+}
 
 Write-Host "Manus workspace ready: $Workspace" -ForegroundColor Green
 $cfg.GetEnumerator() | ForEach-Object { '{0,-16} {1}{2}' -f $_.Key, $_.Value, $(if ($_.Value -and (Test-Path -LiteralPath $_.Value)) { '' } else { '   <-- MISSING' }) }

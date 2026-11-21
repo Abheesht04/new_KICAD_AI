@@ -2,15 +2,11 @@
 # eval_out/<YYYY-MM-DD>[-N]/results.jsonl and summary.txt (plus per-prompt logs).
 #
 #   scripts\run_llm_eval.ps1                                   mock backend (deterministic, no model needed)
-#   scripts\run_llm_eval.ps1 -Backend ollama -Model qwen3:8b
-#   scripts\run_llm_eval.ps1 -Backend ollama -Model llama3.2:latest -Url http://gpu-box:11434
 #
 # $env:COPPER_CORE overrides the copper-core binary. All the work is in C (copper-core agent-eval); this only picks
 # the output folder, which is never reused.
 param(
-    [ValidateSet('mock', 'ollama')] [string] $Backend = 'mock',
-    [string] $Model = '',
-    [string] $Url = ''
+    [ValidateSet('mock')] [string] $Backend = 'mock'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -27,8 +23,6 @@ $n = 2
 while (Test-Path $out) { $out = Join-Path $root "eval_out\$day-$n"; $n++ }
 New-Item -ItemType Directory -Force (Join-Path $root 'eval_out') | Out-Null
 $cmdArgs = @('agent-eval', (Join-Path $root 'eval\prompts.jsonl'), $out, '--backend', $Backend, '--root', $root)
-if ($Model) { $cmdArgs += @('--model', $Model) }
-if ($Url) { $cmdArgs += @('--url', $Url) }
 & $core @cmdArgs
 $rc = $LASTEXITCODE
 Get-Content (Join-Path $out 'summary.txt')

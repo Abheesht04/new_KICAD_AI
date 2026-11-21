@@ -22,6 +22,8 @@
 #include "netlist_kicad.h"
 #include "intent_check.h"
 #include "template_gen.h"
+#include "autoroute.h"
+#include "json.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -75,6 +77,7 @@ static void print_usage(void) {
     puts("  copper design check-intent <intent.json> --symbol-root DIR --footprint-root DIR [--out report.json]");
     puts("      grounding gate for a model-written design intent: exit 0 GROUNDED, 2 REJECTED (findings listed), 64 usage");
     puts("  copper design generate <requirements.json> --templates FILE --symbol-root DIR --footprint-root DIR --out DIR [--prompt FILE]");
+    puts("  copper design route <board.kicad_pcb> --rules FILE --fab-profile FILE --out FILE [--routing routing.json] [--report FILE]");
     puts("      deterministic design from analysed requirements (circuit templates): writes DIR/intent.json and DIR/generation.json;");
     puts("      exit 0 GENERATED, 2 INVALID_INPUT, 3 NEEDS_INPUT (questions), 4 NOT_IMPLEMENTED, 5 TEMPLATE_ERROR, 1 error, 64 usage");
     puts("  copper user design prompt \"<human requirements>\" [--out request.json]");
@@ -2461,7 +2464,8 @@ static int command_design_generate(int argc, char **argv) {
         return 1;
     }
     if (!write_text_file(out_dir, "generation.json", out.report_json, out.report_len) ||
-        (out.intent_json && !write_text_file(out_dir, "intent.json", out.intent_json, out.intent_len))) {
+        (out.intent_json && !write_text_file(out_dir, "intent.json", out.intent_json, out.intent_len)) ||
+        (out.routing_json && !write_text_file(out_dir, "routing.json", out.routing_json, out.routing_len))) {
         fprintf(stderr, "generate: cannot write into %s\n", out_dir);
         arena_destroy(&arena);
         return 1;
@@ -2479,6 +2483,195 @@ static int command_design_generate(int argc, char **argv) {
     }
 }
 
+/* copper design route: route a placed .kicad_pcb on two layers (autoroute.c) and write the tracks into it. */
+static bool rule_mm(const JsonValue *rules, const char *key, G2Nm *out) {
+    const JsonValue *v = json_get(json_get(rules, key), "value");
+    return v && json_to_nm(v, out) == JSON_NUMBER_OK;
+}
+static bool rule_int(const JsonValue *rules, const char *key, int64_t *out) {
+    const JsonValue *v = json_get(json_get(rules, key), "value");
+    return v && json_to_i64(v, out) == JSON_NUMBER_OK;
+}
+/* A fab limit in mm from a copper.fab_profile/1 file; false when absent or null. */
+static bool fab_limit(const JsonValue *fab, const char *key, G2Nm *out) {
+    const JsonValue *v = json_get(json_get(json_get(fab, "limits"), key), "value");
+    return v && v->kind == JSON_NUMBER && json_to_nm(v, out) == JSON_NUMBER_OK;
+}
+static int route_rule_below(const char *what, G2Nm have, const char *limit, G2Nm need) {
+    fprintf(stderr, "route: %s (%lld nm) is below the fab profile's %s (%lld nm): INVALID_INPUT\n", what, (long long)have, limit, (long long)need);
+    return 2;
+}
+
+static int command_design_route(int argc, char **argv) {
+    const char *board_path = argv[3], *rules_path = NULL, *routing_path = NULL, *fab_path = NULL, *out_path = NULL, *report_path = NULL;
+    for (int i = 4; i < argc; i++) {
+        if (i + 1 < argc && strcmp(argv[i], "--rules") == 0) rules_path = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--routing") == 0) routing_path = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--fab-profile") == 0) fab_path = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--out") == 0) out_path = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--report") == 0) report_path = argv[++i];
+        else { fprintf(stderr, "route: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!rules_path || !fab_path || !out_path) { fprintf(stderr, "route needs --rules, --fab-profile and --out\n"); return 64; }
+    Arena arena;
+    arena_init(&arena, 1u << 22);
+    const unsigned char *rules_text = NULL, *fab_text = NULL, *routing_text = NULL, *pcb_text = NULL;
+    size_t rules_len = 0, fab_len = 0, routing_len = 0, pcb_len = 0;
+    if (fs_read_file_arena(&arena, rules_path, &rules_text, &rules_len) != FS_OK || fs_read_file_arena(&arena, fab_path, &fab_text, &fab_len) != FS_OK ||
+        fs_read_file_arena(&arena, board_path, &pcb_text, &pcb_len) != FS_OK ||
+        (routing_path && fs_read_file_arena(&arena, routing_path, &routing_text, &routing_len) != FS_OK)) {
+        fprintf(stderr, "route: cannot read the board, rules, fab profile or routing file\n");
+        arena_destroy(&arena);
+        return 1;
+    }
+    JsonValue *rj = NULL, *fj = NULL, *nj = NULL;
+    JsonError je;
+    memset(&je, 0, sizeof je);
+    if (json_parse(&arena, (const char *)rules_text, rules_len, &rj, &je) != JSON_OK ||
+        json_parse(&arena, (const char *)fab_text, fab_len, &fj, &je) != JSON_OK ||
+        (routing_text && json_parse(&arena, (const char *)routing_text, routing_len, &nj, &je) != JSON_OK)) {
+        fprintf(stderr, "route: a JSON input is invalid (line %zu)\n", je.line);
+        arena_destroy(&arena);
+        return 2;
+    }
+    const JsonValue *rules = json_get(rj, "rules");
+    AutorouteRules r;
+    memset(&r, 0, sizeof r);
+    int64_t via_cost = 0, passes = 0, max_cells = 0;
+    if (!rule_mm(rules, "grid_mm", &r.grid_nm) || !rule_mm(rules, "track_mm", &r.track_nm) || !rule_mm(rules, "clearance_mm", &r.clearance_nm) ||
+        !rule_mm(rules, "edge_clearance_mm", &r.edge_clearance_nm) || !rule_mm(rules, "via_size_mm", &r.via_size_nm) ||
+        !rule_mm(rules, "via_drill_mm", &r.via_drill_nm) || !rule_int(rules, "via_cost", &via_cost) || !rule_int(rules, "passes", &passes) ||
+        !rule_int(rules, "max_cells", &max_cells) || via_cost <= 0 || passes <= 0 || max_cells <= 0) {
+        fprintf(stderr, "route: the rules file lacks a value (grid_mm, track_mm, clearance_mm, edge_clearance_mm, via_size_mm, via_drill_mm, via_cost, passes, max_cells)\n");
+        arena_destroy(&arena);
+        return 2;
+    }
+    r.via_cost = (uint32_t)via_cost;
+    r.passes = (uint32_t)passes;
+    r.max_cells = (size_t)max_cells;
+    /* Per-net widths and keep-outs from the template (routing.json). */
+    const JsonValue *widths = json_get(nj, "net_widths_mm"), *kos = json_get(nj, "keepouts");
+    AutorouteNetWidth *nw = NULL;
+    AutorouteKeepout *ko = NULL;
+    if (widths && widths->kind == JSON_OBJECT && widths->count) {
+        nw = arena_alloc_array(&arena, sizeof *nw, widths->count);
+        for (size_t i = 0; nw && i < widths->count; i++) {
+            nw[i].net = widths->keys[i];
+            if (json_to_nm(widths->items[i], &nw[i].width_nm) != JSON_NUMBER_OK) { fprintf(stderr, "route: width of %s is not a number\n", widths->keys[i]); arena_destroy(&arena); return 2; }
+        }
+        r.widths = nw;
+        r.width_count = nw ? widths->count : 0;
+    }
+    if (kos && kos->kind == JSON_ARRAY && kos->count) {
+        ko = arena_alloc_array(&arena, sizeof *ko, kos->count);
+        for (size_t i = 0; ko && i < kos->count; i++) {
+            const JsonValue *rect = json_get(kos->items[i], "rect_mm"), *layers = json_get(kos->items[i], "layers");
+            G2Nm v[4];
+            if (!rect || rect->kind != JSON_ARRAY || rect->count != 4 || !layers || layers->kind != JSON_ARRAY) { fprintf(stderr, "route: keep-out %zu is malformed\n", i); arena_destroy(&arena); return 2; }
+            for (int k = 0; k < 4; k++) if (json_to_nm(rect->items[k], &v[k]) != JSON_NUMBER_OK) { fprintf(stderr, "route: keep-out %zu is malformed\n", i); arena_destroy(&arena); return 2; }
+            ko[i].box.min.x = v[0] < v[2] ? v[0] : v[2]; ko[i].box.max.x = v[0] < v[2] ? v[2] : v[0];
+            ko[i].box.min.y = v[1] < v[3] ? v[1] : v[3]; ko[i].box.max.y = v[1] < v[3] ? v[3] : v[1];
+            ko[i].front = ko[i].back = false;
+            for (size_t k = 0; k < layers->count; k++) {
+                if (layers->items[k]->kind != JSON_STRING) continue;
+                if (!strcmp(layers->items[k]->text, "F.Cu")) ko[i].front = true;
+                if (!strcmp(layers->items[k]->text, "B.Cu")) ko[i].back = true;
+            }
+        }
+        r.keepouts = ko;
+        r.keepout_count = ko ? kos->count : 0;
+    }
+    /* Every rule must meet the fab profile (fail closed: a missing limit is not a pass for that rule). */
+    G2Nm lim = 0, need = 0;
+    if (!fab_limit(fj, "track_width_min_mm", &lim)) { fprintf(stderr, "route: the fab profile has no track_width_min_mm\n"); arena_destroy(&arena); return 2; }
+    if (r.track_nm < lim) { arena_destroy(&arena); return route_rule_below("track_mm", r.track_nm, "track_width_min_mm", lim); }
+    for (size_t i = 0; i < r.width_count; i++) if (r.widths[i].width_nm < lim) { arena_destroy(&arena); return route_rule_below(r.widths[i].net, r.widths[i].width_nm, "track_width_min_mm", lim); }
+    static const char *const clearance_limits[] = {"track_spacing_min_mm", "clearance_default_min_mm", "pad_to_track_min_mm", "pth_to_track_min_mm",
+                                                   "via_hole_to_track_min_mm", "smd_pad_to_pad_min_mm", NULL};
+    for (const char *const *k = clearance_limits; *k; k++)
+        if (fab_limit(fj, *k, &lim) && r.clearance_nm < lim) { arena_destroy(&arena); return route_rule_below("clearance_mm", r.clearance_nm, *k, lim); }
+    if (fab_limit(fj, "copper_to_edge_min_mm", &lim) && r.edge_clearance_nm < lim) { arena_destroy(&arena); return route_rule_below("edge_clearance_mm", r.edge_clearance_nm, "copper_to_edge_min_mm", lim); }
+    if (fab_limit(fj, "via_diameter_min_mm", &lim) && r.via_size_nm < lim) { arena_destroy(&arena); return route_rule_below("via_size_mm", r.via_size_nm, "via_diameter_min_mm", lim); }
+    if (fab_limit(fj, "via_hole_min_mm", &lim) && r.via_drill_nm < lim) { arena_destroy(&arena); return route_rule_below("via_drill_mm", r.via_drill_nm, "via_hole_min_mm", lim); }
+    if (fab_limit(fj, "drill_min_mm", &lim) && r.via_drill_nm < lim) { arena_destroy(&arena); return route_rule_below("via_drill_mm", r.via_drill_nm, "drill_min_mm", lim); }
+    if (fab_limit(fj, "via_diameter_over_hole_min_mm", &need) && r.via_size_nm - r.via_drill_nm < need) { arena_destroy(&arena); return route_rule_below("via_size_mm - via_drill_mm", r.via_size_nm - r.via_drill_nm, "via_diameter_over_hole_min_mm", need); }
+
+    Board board;
+    BoardDiag diag;
+    memset(&diag, 0, sizeof diag);
+    if (board_load_kicad(board_path, &arena, &board, &diag) != BOARD_OK) {
+        fprintf(stderr, "route: cannot load %s: %s\n", board_path, diag.message);
+        arena_destroy(&arena);
+        return 2;
+    }
+    AutorouteResult res;
+    AutorouteStatus st = autoroute_board(&arena, &board, &r, &res);
+    printf("Routing: %s - %s\n", autoroute_status_name(st), res.message);
+    for (size_t i = 0; i < res.net_count; i++) {
+        const AutorouteNetResult *n = &res.nets[i];
+        if (n->status == AUTOROUTE_NET_SINGLE_PAD) continue;
+        printf("  %-10s %-14s pads %zu, %zu segment(s), %zu via(s)%s%s\n", autoroute_net_status_name(n->status), n->name ? n->name : "?",
+               n->pads, n->segments, n->vias, n->message[0] ? ": " : "", n->message);
+    }
+    if (st == AUTOROUTE_ROUTED || st == AUTOROUTE_PARTIAL) {
+        const char *seed = board_path, *text = NULL;
+        size_t len = 0;
+        for (const char *p = board_path; *p; p++) if (*p == '/' || *p == '\\') seed = p + 1;
+        if (autoroute_write_kicad(&arena, (const char *)pcb_text, pcb_len, &board, &res, seed, &text, &len) != AUTOROUTE_ROUTED) {
+            fprintf(stderr, "route: cannot write the routed board\n");
+            arena_destroy(&arena);
+            return 1;
+        }
+        FILE *f = fopen(out_path, "wb");
+        if (!f || fwrite(text, 1, len, f) != len) { if (f) fclose(f); fprintf(stderr, "route: cannot write %s\n", out_path); arena_destroy(&arena); return 1; }
+        if (fclose(f) != 0) { fprintf(stderr, "route: cannot write %s\n", out_path); arena_destroy(&arena); return 1; }
+    }
+    if (report_path) {
+        JsonWriter w;
+        json_writer_init(&w, &arena);
+        json_write_begin_object(&w);
+        json_write_key(&w, "format"); json_write_string(&w, "copper.routing_report/1");
+        json_write_key(&w, "status"); json_write_string(&w, autoroute_status_name(st));
+        json_write_key(&w, "message"); json_write_string(&w, res.message);
+        json_write_key(&w, "rules"); json_write_string(&w, rules_path);
+        json_write_key(&w, "fab_profile"); json_write_string(&w, fab_path);
+        json_write_key(&w, "tracks"); json_write_uint(&w, res.track_count);
+        json_write_key(&w, "vias"); json_write_uint(&w, res.via_count);
+        json_write_key(&w, "nets_routed"); json_write_uint(&w, res.nets_routed);
+        json_write_key(&w, "nets_failed"); json_write_uint(&w, res.nets_failed);
+        json_write_key(&w, "pass"); json_write_uint(&w, res.pass_used);
+        json_write_key(&w, "nets");
+        json_write_begin_array(&w);
+        for (size_t i = 0; i < res.net_count; i++) {
+            const AutorouteNetResult *n = &res.nets[i];
+            json_write_begin_object(&w);
+            json_write_key(&w, "net"); json_write_string(&w, n->name ? n->name : "");
+            json_write_key(&w, "status"); json_write_string(&w, autoroute_net_status_name(n->status));
+            json_write_key(&w, "pads"); json_write_uint(&w, n->pads);
+            json_write_key(&w, "width_nm"); json_write_int(&w, n->width_nm);
+            json_write_key(&w, "segments"); json_write_uint(&w, n->segments);
+            json_write_key(&w, "vias"); json_write_uint(&w, n->vias);
+            json_write_key(&w, "message"); json_write_string(&w, n->message);
+            json_write_end_object(&w);
+        }
+        json_write_end_array(&w);
+        json_write_end_object(&w);
+        size_t len = 0;
+        const char *json = json_writer_finish(&w, &len);
+        FILE *f = json ? fopen(report_path, "wb") : NULL;
+        if (!f || fwrite(json, 1, len, f) != len) { if (f) fclose(f); fprintf(stderr, "route: cannot write %s\n", report_path); arena_destroy(&arena); return 1; }
+        fclose(f);
+    }
+    arena_destroy(&arena);
+    switch (st) {
+    case AUTOROUTE_ROUTED: return 0;
+    case AUTOROUTE_PARTIAL: return 6;
+    case AUTOROUTE_INVALID_INPUT: return 2;
+    case AUTOROUTE_UNSUPPORTED: return 7;
+    default: return 1;
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 2 || strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
         print_usage(); return argc < 2 ? 64 : 0;
@@ -2492,6 +2685,8 @@ int main(int argc, char **argv) {
             return command_design_check_intent(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "generate") == 0)
             return command_design_generate(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "route") == 0)
+            return command_design_route(argc, argv);
         print_usage(); return 64;
     }
     if (strcmp(argv[1], "user") == 0) {

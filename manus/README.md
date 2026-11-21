@@ -51,8 +51,11 @@ Start each task with: **"Read MANUS.md in this folder first and follow it."** Th
 
 ## What to expect
 
-- **Not routed.** Generated boards have footprints and nets but **no tracks**, so DRC reports the unconnected nets.
-  This is the current compiler's limit, not a hidden problem.
+- **Routed by Copper's C router.** `compile` routes the placed board on two layers (`copper design route`,
+  `src/v2_src/autoroute.c`) with the rules in `routing_profiles/copper_2layer_default.json`, which it first checks
+  against the fab profile. Each net's copper is checked with exact integer geometry before it is written; a net that
+  fails is left out and reported, and the facts sheet says **ROUTED** only when the router routed every net and
+  KiCad's DRC lists 0 unconnected items. Track widths are template choices, not computed from current.
 - **Read all three results.** Compile success, clean ERC/DRC and DFM are separate results. The agent is told to
   report each one and never to call a board manufacturing-ready.
 - **KiCad version.** With a KiCad other than 9.x, ERC and DRC results are a development check, and `doctor` says so.

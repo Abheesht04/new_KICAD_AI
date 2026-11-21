@@ -79,7 +79,7 @@ function KicadSummary([string]$projectDir) {
 switch ($Command) {
     'doctor' {
         $items = [ordered]@{}
-        foreach ($k in 'copper', 'copper_core', 'python', 'kicad_cli', 'symbols_root', 'footprints_root', 'compiler', 'asset_context', 'intent_schema', 'fab_profile', 'repo') {
+        foreach ($k in 'copper', 'copper_core', 'python', 'kicad_cli', 'symbols_root', 'footprints_root', 'compiler', 'asset_context', 'intent_schema', 'fab_profile', 'routing_rules', 'repo') {
             $v = $cfg.$k
             $items[$k] = [ordered]@{ path = $v; present = [bool]($v -and (Test-Path -LiteralPath $v)) }
         }
@@ -127,8 +127,27 @@ switch ($Command) {
         $g = Gate (Full $Intent) $gateReport
         if ($g -ne 0) { Result 'compile' 2 'REJECTED_UNGROUNDED' @{ out = $outDir; gate_report = $gateReport; note = 'the grounding gate rejected the intent; nothing was compiled' } }
         $code = Run $cfg.python @($cfg.compiler, '--intent', (Full $Intent), '--out', $outDir, '--symbols-root', $cfg.symbols_root, '--footprints-root', $cfg.footprints_root, '--kicad-cli', $cfg.kicad_cli, '--copper-cli', $cfg.copper)
-        $meaning = switch ($code) { 0 { 'GENERATED_NOT_ROUTED' } 2 { 'INVALID_INPUT' } 3 { 'ERROR_NETLIST_EXPORT' } default { 'ERROR_COPPER_IMPORT' } }
-        Result 'compile' $code $meaning @{ out = $outDir; next = 'run: .\copper.ps1 checks -Project <out>\<project.name>  (exit 0 here does NOT mean ERC/DRC are clean)' }
+        if ($code -ne 0) {
+            $meaning = switch ($code) { 2 { 'INVALID_INPUT' } 3 { 'ERROR_NETLIST_EXPORT' } default { 'ERROR_COPPER_IMPORT' } }
+            Result 'compile' $code $meaning @{ out = $outDir }
+        }
+        # Route the placed board in C (copper design route), then re-run DRC and the import on the routed board.
+        $projName = (Get-Content -Raw -Encoding UTF8 -LiteralPath (Full $Intent) | ConvertFrom-Json).project.name
+        $proj = Join-Path $outDir $projName
+        $pcbPath = Join-Path $proj "$projName.kicad_pcb"
+        $rules = if ($cfg.routing_rules) { $cfg.routing_rules } else { Join-Path $cfg.repo 'routing_profiles\copper_2layer_default.json' }
+        $routingData = Join-Path (Split-Path -Parent (Full $Intent)) 'routing.json'
+        $validation = Join-Path $proj 'validation'
+        $routeArgs = @('design', 'route', $pcbPath, '--rules', $rules, '--fab-profile', $cfg.fab_profile, '--out', $pcbPath, '--report', (Join-Path $validation 'routing.json'))
+        if (Test-Path -LiteralPath $routingData) { $routeArgs += @('--routing', $routingData) }
+        $rc = Run $cfg.copper $routeArgs
+        if ($rc -eq 0 -or $rc -eq 6) {
+            & $cfg.kicad_cli @('pcb', 'drc', '--format', 'json', '--severity-all', '--output', (Join-Path $validation 'drc.json'), $pcbPath) 2>&1 | Out-Null
+            $imp = & $cfg.copper @('design', 'import', $proj, '--netlist', (Join-Path $validation 'design.kicad_net')) 2>&1 | ForEach-Object { "$_" }
+            [IO.File]::WriteAllText((Join-Path $proj 'copper_import.stdout.log'), ($imp -join "`n") + "`n", (New-Object Text.UTF8Encoding($false)))
+        }
+        $meaning = switch ($rc) { 0 { 'GENERATED_ROUTED' } 6 { 'GENERATED_PARTIALLY_ROUTED' } default { 'GENERATED_NOT_ROUTED' } }
+        Result 'compile' 0 $meaning @{ out = $outDir; routing = (Join-Path $validation 'routing.json'); routing_exit = $rc; next = 'run: .\copper.ps1 report -Project <out>\<project.name>  (exit 0 here does NOT mean ERC/DRC are clean)' }
     }
     'inspect' {
         Need 'Board' $Board
@@ -175,11 +194,18 @@ switch ($Command) {
         $dfmJson = (& $cfg.copper_core @('dfm', $pcb.FullName, $cfg.fab_profile) 2>$null | Out-String)
         $dfm = $null; try { $dfm = $dfmJson | ConvertFrom-Json } catch { }
         $kicad = KicadSummary $proj
+        # Routing status from Copper's router report and KiCad's DRC (unconnected items), never from track count alone.
+        $routePath = Join-Path $proj 'validation\routing.json'
+        $route = if (Test-Path -LiteralPath $routePath) { Get-Content -Raw -Encoding UTF8 -LiteralPath $routePath | ConvertFrom-Json } else { $null }
+        $drcFile = Join-Path $proj 'validation\drc.json'
+        $unconnected = if (Test-Path -LiteralPath $drcFile) { @((Get-Content -Raw -Encoding UTF8 -LiteralPath $drcFile | ConvertFrom-Json).unconnected_items | Where-Object { $_ }).Count } else { -1 }
+        $routing = if ($tracks -le 0) { 'NOT_ROUTED' } elseif ($route -and $route.status -eq 'ROUTED' -and $unconnected -eq 0) { 'ROUTED' } else { 'PARTIALLY_ROUTED' }
         $facts = [ordered]@{
             format = 'copper.facts/1'; project = $proj; board = $pcb.Name
             grounding_gate = $gate
             footprints = $(if ($fp.Success) { [int]$fp.Groups[1].Value } else { -1 })
-            tracks = $tracks; vias = $vias; routed = ($tracks -gt 0)
+            tracks = $tracks; vias = $vias; routed = ($routing -eq 'ROUTED'); routing = $routing; drc_unconnected = $unconnected
+            routing_failed_nets = @($(if ($route) { $route.nets | Where-Object { $_.status -eq 'FAILED' } | ForEach-Object { "$($_.net): $($_.message)" } }))
             erc = $kicad['erc']; drc = $kicad['drc']
             dfm_verdict = $(if ($dfm) { $dfm.verdict } else { 'NOT_RUN' })
             dfm_not_passed = @($(if ($dfm) { $dfm.rules | Where-Object { $_.verdict -ne 'PASS' } | ForEach-Object { "$($_.rule): $($_.verdict)" } }))
@@ -194,7 +220,7 @@ switch ($Command) {
             'Generated by copper.ps1 report from tool output only. Paste it unchanged; do not add verdicts.', '',
             "- Grounding gate (parts, pins, pin names, pads, nets vs installed KiCad libraries): **$gate**",
             "- Footprints on the board: $($facts.footprints)",
-            "- Routing: **$(if ($facts.routed) { "$tracks track segment(s), $vias via(s)" } else { 'NOT ROUTED (0 tracks)' })**",
+            "- Routing: **$(switch ($routing) { 'ROUTED' { "ROUTED: $tracks track segment(s), $vias via(s); KiCad DRC lists 0 unconnected items" } 'PARTIALLY_ROUTED' { "PARTIALLY ROUTED: $tracks track segment(s), $vias via(s); KiCad DRC lists $unconnected unconnected item(s)$(if ($facts.routing_failed_nets.Count) { '; not routed: ' + ($facts.routing_failed_nets -join '; ') })" } default { 'NOT ROUTED (0 tracks)' } })**",
             "- ERC: $(if ($erc -is [System.Collections.IDictionary]) { "$($erc.findings) finding(s) $(($erc.by_severity.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '): $($erc.types -join ', ')" } else { $erc })",
             "- DRC: $(if ($drc -is [System.Collections.IDictionary]) { "$($drc.findings) finding(s) $(($drc.by_severity.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '): $($drc.types -join ', ')" } else { $drc })",
             "- DFM: **$($facts.dfm_verdict)** against $($facts.dfm_profile)$(if ($facts.dfm_not_passed.Count) { '; not passed: ' + ($facts.dfm_not_passed -join '; ') } else { '' })",
@@ -217,7 +243,7 @@ switch ($Command) {
         $drcFindings = if ($f.drc -is [string]) { -1 } else { [int]$f.drc.findings }
         # Each rule: a claim pattern, and when the facts contradict it (or it is never allowed).
         $rules = @(
-            @{ id = 'ROUTED'; re = '\b(fully\s+|completely\s+)?routed\b|\btraces?\s+(are|were)\s+(laid|added|routed)'; bad = (-not $f.routed); why = "the board has $($f.tracks) track segment(s): it is not routed" },
+            @{ id = 'ROUTED'; re = '\b(fully\s+|completely\s+)?routed\b|\btraces?\s+(are|were)\s+(laid|added|routed)'; bad = (-not $f.routed); why = "routing is $(if ($f.routing) { $f.routing } else { 'NOT_ROUTED' }) ($($f.tracks) track segment(s); KiCad DRC unconnected items: $($f.drc_unconnected))" },
             @{ id = 'ERC_CLEAN'; re = '\bERC\b[^.\n]{0,40}\b(pass(ed|es)?|clean|no\s+(errors|violations|issues|findings)|0\s+(errors|violations))'; bad = ($ercFindings -ne 0); why = "ERC lists $ercFindings finding(s)" },
             @{ id = 'DRC_CLEAN'; re = '\bDRC\b[^.\n]{0,40}\b(pass(ed|es)?|clean|no\s+(errors|violations|issues|findings)|0\s+(errors|violations))'; bad = ($drcFindings -ne 0); why = "DRC lists $drcFindings finding(s)" },
             @{ id = 'DFM_PASS'; re = '\bDFM\b[^.\n]{0,40}\b(pass(ed|es)?|clean|no\s+(issues|problems|findings))'; bad = ($f.dfm_verdict -ne 'PASS'); why = "the DFM verdict is $($f.dfm_verdict)" },
@@ -225,7 +251,7 @@ switch ($Command) {
             @{ id = 'PART_DATA'; re = '\b(MPN|manufacturer\s+part\s+number|LCSC\s*(part|#|number)?|in\s+stock|datasheet\s+(rating|value)s?)\b'; bad = $true; why = 'Copper holds no MPN, stock or rating data for this design; such statements are unsupported' },
             @{ id = 'VERIFIED'; re = '\b(fully\s+)?(verified|validated|guaranteed)\b'; bad = $true; why = 'Copper reports findings, not verification; use the facts sheet wording' }
         )
-        $negation = '(\bnot\b|n''t\b|\bnever\b|\bno\b|\bwithout\b|\bunrouted\b|\bisn''t\b|\bnor\b)'
+        $negation = '(\bnot\b|n''t\b|\bnever\b|\bno\b|\bwithout\b|\bunrouted\b|\bisn''t\b|\bnor\b|\bpartially\b)'
         foreach ($rule in $rules) {
             foreach ($m in [regex]::Matches($answer, $rule.re, 'IgnoreCase')) {
                 # A negation counts only within the three words right before the claim ("is not routed",

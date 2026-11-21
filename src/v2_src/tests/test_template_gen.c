@@ -91,7 +91,7 @@ static void test_switch_from_the_owner_prompt(void)
     assert(strstr(out.report_json, "\"name\": \"pulldown_ohm\",\n      \"value\": \"10k\",\n      \"provenance\": \"stated\""));
     assert(strstr(out.report_json, "\"name\": \"gate_voltage_on\",\n      \"value\": \"3.267 V\""));
     assert(strstr(out.report_json, "\"id\": \"MOSFET_RATINGS\",\n      \"status\": \"UNVERIFIED\""));
-    assert(strstr(out.report_json, "\"id\": \"TRACE_WIDTH\",\n      \"status\": \"NOT_IMPLEMENTED\""));
+    assert(strstr(out.report_json, "\"id\": \"TRACE_WIDTH\",\n      \"status\": \"UNVERIFIED\""));
     grounded(&out);
 }
 
@@ -133,7 +133,7 @@ static void test_stated_no_flyback_and_scope(void)
     /* A circuit Copper has no template for. */
     req = mutate(SWITCH, "\"circuit\": \"low_side_switch\"", "\"circuit\": \"other\"");
     assert(gen(req, PROMPT, &out) == TGEN_NOT_IMPLEMENTED);
-    assert(strstr(out.report_json, "it can generate: low_side_switch, led_indicator"));
+    assert(strstr(out.report_json, "it can generate: low_side_switch, led_indicator, esp32_led"));
     /* Malformed analysis. */
     assert(gen("{\"schema\": \"something-else\"}", PROMPT, &out) == TGEN_INVALID_INPUT);
 }
@@ -164,6 +164,81 @@ static void test_led_indicator(void)
     assert(strstr(out.report_json, "SUPPLY_TOO_LOW"));
 }
 
+/* An analysis that only fills the LED fields; `circuit` and the supply are set per test. */
+static const char *esp_req(const char *circuit, const char *supply_json, const char *supply_quote)
+{
+    static char buf[2048];
+    snprintf(buf, sizeof buf,
+             "{\"schema\": \"copper.requirements\", \"schema_version\": 1, \"circuit\": \"%s\", \"summary\": \"ESP32 with LED\","
+             " \"supply_voltage_v\": %s, \"load_current_a\": null, \"logic_voltage_v\": null, \"switch_part\": null,"
+             " \"gate_resistor_ohm\": null, \"pulldown_ohm\": null, \"flyback_diode\": null, \"led_color\": null,"
+             " \"led_current_ma\": null, \"led_forward_voltage_v\": null, \"board_width_mm\": null, \"board_height_mm\": null,"
+             " \"evidence\": [%s], \"open_questions\": [], \"unsupported_requests\": []}",
+             circuit, supply_json, supply_quote);
+    size_t n = strlen(buf) + 1;
+    char *s = arena_alloc(&arena, n);
+    assert(s);
+    memcpy(s, buf, n);
+    return s;
+}
+
+/* Fix 1: a request is never silently reduced to a smaller circuit. The owner's prompt "Build a ESP32 circuit with
+ * LED" was analysed (live Manus run, 2026-11-20) as led_indicator, which would have dropped the ESP32. */
+static void test_scope_never_drops_part_of_the_request(void)
+{
+    TemplateGenOutput out;
+    /* The live analysis: led_indicator, no supply. Copper switches to the one template that covers "esp32" and "led". */
+    assert(gen(esp_req("led_indicator", "null", ""), "Build a ESP32 circuit with LED ", &out) == TGEN_NEEDS_INPUT);
+    assert(strstr(out.report_json, "\"template\": \"esp32_led\""));
+    assert(strstr(out.report_json, "\"id\": \"TEMPLATE_CHANGED\""));
+    assert(strstr(out.report_json, "The board regulates it down to 3.3 V."));
+    /* Something no template builds: NOT_IMPLEMENTED, naming it; no intent, no questions asked. */
+    assert(gen(esp_req("led_indicator", "5", "{\"field\": \"supply_voltage_v\", \"quote\": \"5 V\"}"),
+               "A 5 V board with an LED and a temperature sensor", &out) == TGEN_NOT_IMPLEMENTED && !out.intent_json);
+    assert(strstr(out.report_json, "\"id\": \"UNSUPPORTED_REQUEST\"") && strstr(out.report_json, "\\\"sensor\\\""));
+    assert(strstr(out.report_json, "\"questions\": []"));
+    /* Longest term wins: an ESP32-S3 is not an ESP32-WROOM-32. Plurals count. */
+    assert(gen(esp_req("esp32_led", "5", "{\"field\": \"supply_voltage_v\", \"quote\": \"5 V\"}"),
+               "ESP32-S3 board with two LEDs, 5 V", &out) == TGEN_NOT_IMPLEMENTED);
+    assert(strstr(out.report_json, "\\\"esp32-s3\\\""));
+    assert(gen(esp_req("led_indicator", "5", "{\"field\": \"supply_voltage_v\", \"quote\": \"5 V\"}"),
+               "5 V board with two LEDs and USB", &out) == TGEN_NOT_IMPLEMENTED);
+    assert(strstr(out.report_json, "\\\"usb\\\""));
+    /* Words inside other words are not terms ("pickled" is not "pic", "blend" is not "led"). */
+    assert(gen(esp_req("led_indicator", "5", "{\"field\": \"supply_voltage_v\", \"quote\": \"5 V\"}"),
+               "a pickled-blend 5 V LED board", &out) == TGEN_GENERATED);
+    /* The owner's MOSFET prompt mentions the off-board microcontroller: allowed, and reported as off-board. */
+    assert(gen(SWITCH, PROMPT, &out) == TGEN_GENERATED);
+    assert(strstr(out.report_json, "\"id\": \"OFF_BOARD\"") && strstr(out.report_json, "\\\"microcontroller\\\""));
+    /* The analysis's own unsupported items are reported, not dropped silently. */
+    assert(strstr(out.report_json, "\"id\": \"NOT_HANDLED\"") && strstr(out.report_json, "trace width and clearance"));
+}
+
+static void test_esp32_led(void)
+{
+    TemplateGenOutput out;
+    const char *req = esp_req("esp32_led", "5", "{\"field\": \"supply_voltage_v\", \"quote\": \"powered from 5 V\"}");
+    TemplateGenStatus st = gen(req, "An ESP32 board with an LED, powered from 5 V", &out);
+    if (st != TGEN_GENERATED) fprintf(stderr, "%s\n", out.report_json);
+    assert(st == TGEN_GENERATED && out.intent_json);
+    /* (3.3 V - 2 V assumed) / 2 mA = 650 ohm -> E24 rounded up: 680 ohm -> 1.912 mA; LDO (5 - 3.3) V x 0.5 A = 0.85 W. */
+    assert(strstr(out.report_json, "\"name\": \"led_resistor_ohm\",\n      \"value\": \"680\""));
+    assert(strstr(out.report_json, "\"name\": \"led_current_actual\",\n      \"value\": \"1.912 mA\""));
+    assert(strstr(out.report_json, "\"name\": \"ldo_dissipation\",\n      \"value\": \"0.85 W\""));
+    assert(strstr(out.report_json, "\"id\": \"MODULE_STATUS\",\n      \"status\": \"UNVERIFIED\""));
+    assert(strstr(out.report_json, "\"id\": \"REGULATOR_RATINGS\",\n      \"status\": \"UNVERIFIED\""));
+    /* Pins resolved from the library: the module's four GND pins share one name; IO4 drives the LED. */
+    assert(strstr(out.intent_json, "\"symbol_pin\": \"39\",\n          \"pin_name\": \"GND\",\n          \"pad\": \"39\",\n          \"net\": \"GND\""));
+    assert(strstr(out.intent_json, "\"pin_name\": \"IO4\",\n          \"pad\": \"26\",\n          \"net\": \"LED_GPIO\""));
+    assert(strstr(out.intent_json, "\"pin_name\": \"VO\",\n          \"pad\": \"2\",\n          \"net\": \"+3V3\""));
+    assert(strstr(out.intent_json, "\"value\": \"AMS1117-3.3\""));
+    grounded(&out);
+    /* Outside the template's supply scope (4.5 V to 6 V). */
+    req = esp_req("esp32_led", "12", "{\"field\": \"supply_voltage_v\", \"quote\": \"powered from 12 V\"}");
+    assert(gen(req, "An ESP32 board with an LED, powered from 12 V", &out) == TGEN_NOT_IMPLEMENTED && !out.intent_json);
+    assert(strstr(out.report_json, "4.5 V to 6 V"));
+}
+
 static void test_without_prompt_and_template_mismatch(void)
 {
     TemplateGenOutput out;
@@ -187,6 +262,8 @@ int main(void)
     test_invented_requirements_are_ignored();
     test_stated_no_flyback_and_scope();
     test_led_indicator();
+    test_scope_never_drops_part_of_the_request();
+    test_esp32_led();
     test_without_prompt_and_template_mismatch();
     arena_destroy(&arena);
     puts("template_gen: all tests passed");

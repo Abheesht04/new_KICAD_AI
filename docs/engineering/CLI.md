@@ -172,10 +172,25 @@ authentication. See [TOOL_SERVER.md](TOOL_SERVER.md).
 
 ## copper-core agent-eval
 
-`copper-core agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] [--url U] [--root DIR]` runs every prompt
+`copper-core agent-eval PROMPTS OUT [--backend mock] [--root DIR]` (mock is the only backend since 2026-11-20) runs every prompt
 through the agent loop against a fresh tool server and writes `OUT/results.jsonl`, `OUT/summary.txt` and per-prompt
 logs (OUT must not exist). The mock backend is the default and needs no model. `scripts/run_llm_eval.sh` / `.ps1`
 pick `eval_out/<date>`. See [LLM_BRIDGE.md](LLM_BRIDGE.md).
+## copper design route
+
+`copper design route BOARD.kicad_pcb --rules FILE --fab-profile FILE --out FILE [--routing routing.json] [--report FILE]`
+routes a placed, unrouted board on F.Cu and B.Cu with through vias (`src/v2_src/autoroute.c`) and writes the tracks
+and vias into `--out` (which may be the input file). `--rules` is a `copper.routing_rules/1` file
+(`routing_profiles/copper_2layer_default.json`); every rule is checked against the `--fab-profile` limits first.
+`--routing` is the `copper.routing/1` file `copper design generate` writes from the template: per-net track widths
+and keep-outs in board coordinates. Every routed net is checked with exact integer geometry before it is kept.
+Exit codes:
+- 0: ROUTED, every net with two or more pads;
+- 6: PARTIALLY_ROUTED: the verified nets are written, the others are listed with the reason;
+- 2: INVALID_INPUT: a rule below the fab profile, a board that already has tracks, bad JSON;
+- 7: UNSUPPORTED: zones, custom pads, inner-layer pads or a non-rectangular outline;
+- 1: I/O error; 64: bad arguments.
+
 ## copper-core place
 
 `copper-core place PROBLEM ITERATIONS SEEDS` runs the C placer (`src/v2_src/placement.c`) on a version-1

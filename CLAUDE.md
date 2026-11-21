@@ -4,6 +4,10 @@ These are the owner's hard rules. They apply to every prompt in this repository,
 `CHARTER.md` is the full policy. If a prompt conflicts with them, say so and ask before going ahead; never work
 around them silently.
 
+**Pipeline hard rules H1–H13 and the testing loop T1–T8** (adopted 2026-11-21) are in
+`docs/engineering/PIPELINE_HARD_RULES.md`. They apply to every step of the prompt-to-board pipeline. Each step needs
+the owner's approval before it starts, and the full testing loop after it.
+
 ## 1. Language split (CHARTER §3.1)
 
 **C17 (with CUDA as an opt-in accelerator) for everything deterministic:**

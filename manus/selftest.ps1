@@ -51,7 +51,7 @@ if ($ready) {
     Copy-Item (Join-Path $ws 'examples\led_indicator.intent.json') $intent
     $k = Copper @('compile', '-Intent', $intent, '-Out', (Join-Path $ws 'designs\led'))
     $proj = Join-Path $ws 'designs\led\LedIndicator'
-    if ($k.exit -eq 0 -and (Test-Path (Join-Path $proj 'LedIndicator.kicad_pcb'))) { Step 'compile' 'PASS' ($k.result.outcome) } else { Step 'compile' 'FAIL' $k.text }
+    if ($k.exit -eq 0 -and $k.result.outcome -eq 'GENERATED_ROUTED' -and (Test-Path (Join-Path $proj 'LedIndicator.kicad_pcb'))) { Step 'compile (and route)' 'PASS' ($k.result.outcome) } else { Step 'compile (and route)' 'FAIL' $k.text }
 
     $g = Copper @('check', '-Intent', $intent)
     if ($g.exit -eq 0 -and $g.result.outcome -eq 'GROUNDED') { Step 'gate accepts the grounded example' 'PASS' 'GROUNDED' } else { Step 'gate accepts the grounded example' 'FAIL' $g.text }
@@ -103,17 +103,25 @@ if ($ready) {
 if ($ready) {
     $rp = Copper @('report', '-Project', $proj)
     $md = Join-Path $proj 'REPORT.md'
-    if ($rp.exit -eq 0 -and (Test-Path $md) -and ((Get-Content -Raw $md) -match 'NOT ROUTED') -and ((Get-Content -Raw $md) -match 'GROUNDED')) { Step 'report (facts sheet)' 'PASS' 'REPORT.md: GROUNDED, NOT ROUTED, NOT APPROVED' } else { Step 'report (facts sheet)' 'FAIL' $rp.text }
+    if ($rp.exit -eq 0 -and (Test-Path $md) -and ((Get-Content -Raw $md) -match 'Routing: \*\*ROUTED: .*0 unconnected') -and ((Get-Content -Raw $md) -match 'GROUNDED')) { Step 'report (facts sheet)' 'PASS' 'REPORT.md: GROUNDED, ROUTED (KiCad DRC: 0 unconnected), NOT APPROVED' } else { Step 'report (facts sheet)' 'FAIL' $rp.text }
 
     $hall = Join-Path $ws 'designs\led\answer_hallucinated.txt'
     [IO.File]::WriteAllText($hall, "Done! The board is fully routed and DRC passed with no errors and it is ready to manufacture. ERC is clean, DFM passed. I used MPN LTST-C191KRKT for the LED, verified against the datasheet.", (New-Object Text.UTF8Encoding($false)))
     $h = Copper @('claimcheck', '-Text', $hall, '-Project', $proj)
-    $want = 'ROUTED', 'DRC_CLEAN', 'ERC_CLEAN', 'MANUFACTURING_READY', 'PART_DATA', 'VERIFIED'
+    $want = 'DRC_CLEAN', 'ERC_CLEAN', 'MANUFACTURING_READY', 'PART_DATA', 'VERIFIED'
     $missing = @($want | Where-Object { $h.text -notmatch "\[$_\]" })
     if ($h.exit -eq 1 -and -not $missing.Count) { Step 'claimcheck flags a hallucinated answer' 'PASS' ($want -join ', ') } else { Step 'claimcheck flags a hallucinated answer' 'FAIL' ("missing: " + ($missing -join ', ') + "`n" + $h.text) }
 
+    # The same answer about a board whose routing is incomplete: the "fully routed" claim must be flagged too.
+    $un = Join-Path $ws 'designs\led_unrouted'; New-Item -ItemType Directory -Force $un | Out-Null
+    $uf = Get-Content -Raw (Join-Path $proj 'copper_facts.json') | ConvertFrom-Json
+    $uf.routed = $false; $uf.routing = 'PARTIALLY_ROUTED'; $uf.drc_unconnected = 2
+    [IO.File]::WriteAllText((Join-Path $un 'copper_facts.json'), ($uf | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding($false)))
+    $hu = Copper @('claimcheck', '-Text', $hall, '-Project', $un)
+    if ($hu.exit -eq 1 -and $hu.text -match '\[ROUTED\]') { Step 'claimcheck flags "fully routed" on an incompletely routed board' 'PASS' 'ROUTED' } else { Step 'claimcheck flags "fully routed" on an incompletely routed board' 'FAIL' $hu.text }
+
     $honest = Join-Path $ws 'designs\led\answer_honest.txt'
-    [IO.File]::WriteAllText($honest, ((Get-Content -Raw $md) + "`nThe board is not routed and is not manufacturing-ready; the ERC and DRC findings above need review. No MPN was chosen."), (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText($honest, ((Get-Content -Raw $md) + "`nCopper routed the board; it is not manufacturing-ready, and the ERC and DRC findings above need review. No MPN was chosen."), (New-Object Text.UTF8Encoding($false)))
     $o = Copper @('claimcheck', '-Text', $honest, '-Project', $proj)
     if ($o.exit -eq 0) { Step 'claimcheck accepts an honest answer' 'PASS' 'no unsupported claims' } else { Step 'claimcheck accepts an honest answer' 'FAIL' $o.text }
 }
@@ -135,8 +143,8 @@ if ($ready) {
     $mtext = $mp -join "`n"
     $requests = Get-Content -Raw $mlog | ConvertFrom-Json
     $allMock = -not @($requests | Where-Object { -not $_.key_is_mock }).Count
-    if ($mtext -match 'GENERATED' -and $mtext -match 'IGNORED board_width_mm' -and $mtext -match 'gate_voltage_on\s+3\.267 V' -and $mtext -match 'GROUNDED' -and $mtext -match 'NOT ROUTED' -and $allMock) {
-        Step 'prompt -> Manus analysis -> Copper design (mock)' 'PASS' 'analysis only; C generated the switch; invented value ignored; GROUNDED; real key never sent'
+    if ($mtext -match 'GENERATED' -and $mtext -match 'IGNORED board_width_mm' -and $mtext -match 'gate_voltage_on\s+3\.267 V' -and $mtext -match 'GROUNDED' -and $mtext -match 'Routing: \*\*ROUTED' -and $allMock) {
+        Step 'prompt -> Manus analysis -> Copper design (mock)' 'PASS' 'analysis only; C generated and routed the switch; invented value ignored; GROUNDED; real key never sent'
     } else { Step 'prompt -> Manus analysis -> Copper design (mock)' 'FAIL' (($mp | Select-Object -Last 30) -join "`n") }
 
     # copper.ps1 generate directly: an LED analysis, and one that omits the supply (Copper asks, never guesses).
@@ -151,6 +159,29 @@ if ($ready) {
     [IO.File]::WriteAllText((Join-Path $nd 'requirements.json'), ($req -replace '"supply_voltage_v":5', '"supply_voltage_v":null'), (New-Object Text.UTF8Encoding($false)))
     $gn = Copper @('generate', '-Requirements', (Join-Path $nd 'requirements.json'), '-PromptFile', (Join-Path $nd 'prompt.txt'), '-Out', $nd)
     if ($gn.exit -eq 3 -and $gn.result.outcome -eq 'NEEDS_INPUT' -and $gn.text -match 'What is the supply voltage' -and -not (Test-Path (Join-Path $nd 'intent.json'))) { Step 'generate: missing supply -> question' 'PASS' 'NEEDS_INPUT, nothing designed' } else { Step 'generate: missing supply -> question' 'FAIL' $gn.text }
+
+    # The live analysis of "Build a ESP32 circuit with LED" (2026-11-20) said led_indicator: Copper must not drop the
+    # ESP32. With a supply, the ESP32 template is generated, grounded and compiled with the installed KiCad libraries.
+    $ed = Join-Path $ws 'designs\esp32_gen'; New-Item -ItemType Directory -Force $ed | Out-Null
+    [IO.File]::WriteAllText((Join-Path $ed 'prompt.txt'), 'Build a ESP32 circuit with LED, powered from 5 V', (New-Object Text.UTF8Encoding($false)))
+    $ereq = $req -replace '"led_color":"red"', '"led_color":null' -replace '"led_current_ma":5', '"led_current_ma":null' -replace '"evidence":\[[^\]]*\]', '"evidence":[{"field":"supply_voltage_v","quote":"powered from 5 V"}]'
+    [IO.File]::WriteAllText((Join-Path $ed 'requirements.json'), $ereq, (New-Object Text.UTF8Encoding($false)))
+    $ge = Copper @('generate', '-Requirements', (Join-Path $ed 'requirements.json'), '-PromptFile', (Join-Path $ed 'prompt.txt'), '-Out', $ed)
+    $gej = if (Test-Path (Join-Path $ed 'generation.json')) { Get-Content -Raw (Join-Path $ed 'generation.json') | ConvertFrom-Json } else { $null }
+    if ($ge.exit -eq 0 -and $gej.template -eq 'esp32_led' -and @($gej.checks | Where-Object { $_.id -eq 'TEMPLATE_CHANGED' }).Count -eq 1) {
+        $ce = Copper @('compile', '-Intent', (Join-Path $ed 'intent.json'), '-Out', (Join-Path $ed 'out'))
+        if ($ce.result.outcome -eq 'GENERATED_ROUTED' -and $ce.text -match 'GROUNDED \(13 component') { Step 'generate: ESP32 + LED (template switched from led_indicator)' 'PASS' 'esp32_led: 13 parts GROUNDED, compiled, ROUTED' }
+        else { Step 'generate: ESP32 + LED (template switched from led_indicator)' 'FAIL' $ce.text }
+    } else { Step 'generate: ESP32 + LED (template switched from led_indicator)' 'FAIL' $ge.text }
+
+    # A part no template builds stops the run instead of being dropped.
+    $sd = Join-Path $ws 'designs\scope'; New-Item -ItemType Directory -Force $sd | Out-Null
+    [IO.File]::WriteAllText((Join-Path $sd 'prompt.txt'), 'A 5 V board with a red LED driven at 5 mA and a USB port.', (New-Object Text.UTF8Encoding($false)))
+    $sreq = $req -replace '"quote":"A 5 V board"', '"quote":"A 5 V board"'
+    [IO.File]::WriteAllText((Join-Path $sd 'requirements.json'), $sreq, (New-Object Text.UTF8Encoding($false)))
+    $gs = Copper @('generate', '-Requirements', (Join-Path $sd 'requirements.json'), '-PromptFile', (Join-Path $sd 'prompt.txt'), '-Out', $sd)
+    if ($gs.exit -eq 4 -and $gs.text -match 'UNSUPPORTED_REQUEST' -and $gs.text -match 'usb' -and -not (Test-Path (Join-Path $sd 'intent.json'))) { Step 'scope: unsupported part -> NOT_IMPLEMENTED' 'PASS' 'USB named, nothing designed, nothing dropped' }
+    else { Step 'scope: unsupported part -> NOT_IMPLEMENTED' 'FAIL' $gs.text }
 }
 
 # Copper Lab's own test script (Python compiler and web-pipeline tests).

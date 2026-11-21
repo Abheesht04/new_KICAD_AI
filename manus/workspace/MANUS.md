@@ -35,7 +35,8 @@ Every command ends with one line `COPPER_RESULT {...}`. Read `exit` and `outcome
 3. **Write the analysis.** Write `designs\<name>\requirements.json` following `manus_requirements.schema.json` (in this
    folder). Rules:
    - `"schema": "copper.requirements"`, `"schema_version": 1`.
-   - `circuit`: `"low_side_switch"` (a MOSFET switching a load from a logic signal), `"led_indicator"` (an LED
+   - `circuit`: `"low_side_switch"` (a MOSFET switching a load from a logic signal), `"esp32_led"` (an ESP32 board
+     with an LED: supply input, 3.3 V regulator, reset/boot buttons, UART header), `"led_indicator"` (an LED
      with a series resistor), otherwise `"other"`, with what was asked in `summary`.
    - **Fill a value only if the user stated it**; otherwise `null`. Never estimate, assume or calculate.
    - Units: volts, amps, ohms (10 kOhm = 10000), milliamps for `led_current_ma`, millimetres for the board.
@@ -44,7 +45,8 @@ Every command ends with one line `COPPER_RESULT {...}`. Read `exit` and `outcome
      value; anything else is ignored.
    - `switch_part`: a part number the user named (for example `AO3400A`), exactly as written.
    - `open_questions`: anything unclear or missing. `unsupported_requests`: anything the fields cannot express
-     (trace width or clearance assumptions, enclosure, firmware...).
+     (trace width or clearance assumptions, enclosure, firmware...). Copper also checks the request itself: any part
+     or function no template builds (a sensor, USB, a display...) stops the run as NOT_IMPLEMENTED.
 4. **Let Copper design it.** Run `generate`.
    - `GENERATED`: continue.
    - `NEEDS_INPUT`: ask the user Copper's `questions` (from `generation.json`). Do not answer them yourself.
@@ -72,5 +74,6 @@ Every command ends with one line `COPPER_RESULT {...}`. Read `exit` and `outcome
 
 - Work only inside this folder. Do not modify the Copper repository, run git, or install or upgrade software.
 - Do not start servers other than `workbench`, and never expose them beyond this PC.
-- Copper currently generates two circuits: the low-side MOSFET switch and the LED indicator. Boards are placed but
-  **not routed**.
+- Copper currently generates three circuits: the low-side MOSFET switch, the LED indicator and the ESP32 board with
+  an LED. `compile` places and routes them (Copper's C router). Report the routing exactly as REPORT.md states it
+  (ROUTED, PARTIALLY ROUTED or NOT ROUTED); never call a board manufacturing-ready.

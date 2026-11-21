@@ -17,7 +17,8 @@ questions. It never chooses parts, pins, nets or values. Everything else is Copp
 Missing information comes back as Copper's questions; a circuit without a template is NOT_IMPLEMENTED. Everything is
 saved under designs\<name>_<time>\. Each prompt uses Manus credits on your account (one analysis task).
 
-Key: the one stored by manus\set_manus_api_key.ps1 (%APPDATA%\Copper\manus_api_key.dpapi). It is sent only to
+Key: manus_api_key.txt in this workspace folder (paste it there in an editor; the file is outside git), else the one
+stored by manus\set_manus_api_key.ps1 (%APPDATA%\Copper\manus_api_key.dpapi). It is sent only to
 https://api.manus.ai; with COPPER_MANUS_API_BASE pointing anywhere else (tests), a dummy key is sent instead.
 #>
 [CmdletBinding()]
@@ -40,8 +41,17 @@ function Say([string]$text, [string]$color = 'Gray') { Write-Host $text -Foregro
 
 function Get-ApiKey {
     if ($base -ne $official) { return 'mock-key' }   # never send the real key anywhere but Manus
+    # 1. manus_api_key.txt next to this script (the workspace folder, outside git): edit it in any editor.
+    $txt = Join-Path $here 'manus_api_key.txt'
+    if (Test-Path -LiteralPath $txt) {
+        foreach ($line in Get-Content -Encoding UTF8 -LiteralPath $txt) {
+            $k = $line.Trim()
+            if ($k -and -not $k.StartsWith('#') -and $k -ne 'PASTE-YOUR-MANUS-API-KEY-HERE') { return $k }
+        }
+    }
+    # 2. The DPAPI store written by manus\set_manus_api_key.ps1.
     $file = Join-Path $env:APPDATA 'Copper\manus_api_key.dpapi'
-    if (-not (Test-Path -LiteralPath $file)) { throw 'No Manus API key stored. Run: manus\set_manus_api_key.ps1' }
+    if (-not (Test-Path -LiteralPath $file)) { throw "No Manus API key. Paste it into $txt (replace the placeholder line) or run manus\set_manus_api_key.ps1" }
     $secure = (Get-Content -Raw -LiteralPath $file).Trim() | ConvertTo-SecureString
     $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
@@ -61,7 +71,7 @@ function Manus([string]$method, [string]$path, $body) {
             if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
             if ($status -eq 429 -and $attempt -le 5) { Start-Sleep -Seconds ([Math]::Min(60, 5 * $attempt + (Get-Random -Maximum 3))); continue }
             if ($status -eq 401) {
-                throw "Manus rejected the API key (HTTP 401): $detail`n  Create a new key at https://manus.im/app#settings/developers (it is shown only once), then store it with: manus\set_manus_api_key.ps1"
+                throw "Manus rejected the API key (HTTP 401): $detail`n  Create a new key at https://manus.im/app#settings/developers (it is shown only once), then paste it into $(Join-Path $here 'manus_api_key.txt')"
             }
             throw "Manus API $path failed (HTTP $status): $detail"
         }
@@ -129,8 +139,9 @@ and fill in the structured output (copper.requirements v1). You do NOT design an
 nets, footprints, component values or layouts, and never claim anything was checked, routed or is ready. Copper's own
 code generates the design from your analysis.
 Rules:
-- circuit: "low_side_switch" (a MOSFET/transistor switching a load from a logic signal), "led_indicator" (an LED with a
-  series resistor), otherwise "other" (and say what was asked in summary).
+- circuit: "low_side_switch" (a MOSFET/transistor switching a load from a logic signal), "esp32_led" (an ESP32 board
+  with an LED), "led_indicator" (an LED with a series resistor and nothing else), otherwise "other" (and say what was
+  asked in summary). Pick the circuit that includes EVERYTHING the user asked for; if none does, use "other".
 - Fill a value ONLY if the user stated it. Otherwise leave it null; do not estimate, assume or calculate.
 - For every non-null value add an evidence item: field = the field name, quote = the exact words from the request that
   state it, copied verbatim (Copper checks that the quote occurs in the request and contains the value).
@@ -179,7 +190,8 @@ $text
         foreach ($q in @($gen.questions)) { Say "  Copper needs: $q" 'Yellow' }
         foreach ($c in @($gen.checks | Where-Object { $_.status -ne 'INFO' })) { Say "  [$($c.status)] $($c.message)" 'Yellow' }
         if ($manusNotes.Count) { Say 'Manus analysis notes:'; $manusNotes | ForEach-Object { Say "  $_" } }
-        Say 'Add the missing information to your prompt and run it again.' 'DarkGray'
+        if ($gen.status -eq 'NEEDS_INPUT') { Say 'Add the missing information to your prompt and run it again.' 'DarkGray' }
+        elseif ($gen.status -eq 'NOT_IMPLEMENTED') { Say 'Copper cannot build this request yet (no template covers all of it). Nothing was reduced or guessed.' 'DarkGray' }
         return
     }
 
@@ -222,7 +234,7 @@ if ($text) { Run-Prompt $text.Trim(); exit 0 }
 
 Say 'Copper prompt console: type a design request and press Enter (empty line to quit).' 'Cyan'
 Say "Manus only analyses each request ($Profile profile, uses credits); Copper's own code designs, checks and reports." 'DarkGray'
-Say 'Copper can currently generate: low-side MOSFET switch, LED indicator. Other circuits are reported as NOT_IMPLEMENTED.' 'DarkGray'
+Say 'Copper can currently generate: low-side MOSFET switch, LED indicator, ESP32 board with an LED. Other circuits are reported as NOT_IMPLEMENTED.' 'DarkGray'
 while ($true) {
     Write-Host ''
     $line = Read-Host 'Prompt'

@@ -1,12 +1,33 @@
 {
   "format": "copper.templates/1",
   "note": "Circuit templates for Copper's deterministic generator (src/v2_src/template_gen.c). A language model only analyses the request; it never chooses parts, pins, nets or values. Pins are mapped by NAME (or by number for unnamed pins) and resolved to numbers from the installed KiCad libraries at generation time; each footprint pad equals its symbol pin number, which the grounding gate re-checks. Defaults are engineering choices of this template, recorded with their reason; they are not part ratings.",
+  "component_terms_note": "Scope check (template_gen.c): every term below that occurs in the prompt as a word (plural -s/-es accepted, case-insensitive; the longest term wins) must be in the chosen template's 'covers' list (built on the board) or 'offboard' list (connected, reported as such), otherwise the run is NOT_IMPLEMENTED and names the term, so a request is never silently reduced to a smaller circuit. Add a term here when a new kind of part or function should be caught.",
+  "component_terms": [
+    "esp32", "esp8266", "esp32-s2", "esp32-s3", "esp32-c3", "esp32-c6", "stm32", "arduino", "atmega", "attiny", "rp2040", "pico",
+    "nrf52", "pic", "avr", "microcontroller", "mcu", "fpga", "raspberry pi",
+    "wifi", "wi-fi", "bluetooth", "ble", "lora", "zigbee", "gsm", "gps", "antenna", "rf",
+    "usb", "usb-c", "type-c", "uart", "i2c", "spi", "can bus", "rs485", "rs232", "ethernet", "sd card",
+    "sensor", "thermistor", "accelerometer", "gyroscope", "imu", "camera", "microphone",
+    "motor", "stepper", "servo", "relay", "solenoid", "fan", "lamp", "buzzer", "speaker",
+    "display", "oled", "lcd", "e-ink", "seven segment", "7-segment",
+    "battery", "charger", "lipo", "li-ion", "regulator", "ldo", "buck", "boost", "converter", "inverter",
+    "mosfet", "transistor", "bjt", "igbt", "triac", "optocoupler", "diode", "zener", "flyback",
+    "led", "rgb", "neopixel", "ws2812",
+    "button", "push button", "pushbutton", "potentiometer", "encoder", "keypad",
+    "crystal", "oscillator", "op amp", "op-amp", "opamp", "amplifier", "comparator", "adc", "dac", "timer", "555",
+    "eeprom", "fuse", "h-bridge", "audio", "ac", "mains", "transformer"
+  ],
   "templates": {
     "low_side_switch": {
+      "covers": ["mosfet", "transistor", "diode", "flyback"],
+      "offboard": ["microcontroller", "mcu", "motor", "relay", "solenoid", "fan", "lamp"],
+      "offboard_why": "the switch is driven through J2 by an off-board logic source (for example a microcontroller GPIO) and switches an off-board load wired to J1; Copper cannot tell from the words alone whether a prompt wants these ON the board",
       "description": "N-channel MOSFET low-side switch: a logic signal drives the gate through a series resistor, a pull-down keeps the MOSFET off when the input floats, an optional diode clamps the load's flyback voltage.",
       "required": ["supply_voltage_v", "load_current_a", "logic_voltage_v"],
       "limits": {"supply_voltage_v_max": 60, "logic_voltage_v_max": 20},
       "board": {"width_mm": 50, "height_mm": 35},
+      "routing": {"net_widths_mm": {"+VIN": 1.0, "LOAD_NEG": 1.0, "GND": 1.0},
+                  "why": "template choice for the load path, NOT computed from the load current (Copper has no current-capacity data): check the copper width for your load current"},
       "defaults": {
         "gate_resistor_ohm": {"value": 100, "why": "template default: limits the gate charging current from the logic pin and damps ringing"},
         "pulldown_ohm": {"value": 10000, "why": "template default: holds the gate low when the logic input is floating"},
@@ -34,10 +55,12 @@
       ]
     },
     "led_indicator": {
+      "covers": ["led"],
       "description": "A supply-powered LED with a series current-limiting resistor.",
       "required": ["supply_voltage_v"],
       "limits": {"supply_voltage_v_max": 30},
       "board": {"width_mm": 30, "height_mm": 20},
+      "routing": {"net_widths_mm": {}, "why": "every net carries only the LED current: the default track width"},
       "defaults": {
         "led_current_ma": {"value": 2, "why": "template default: a modest indicator current"},
         "led_forward_voltage_v": {"value": 2, "why": "template ASSUMPTION for a red LED: Copper has no LED datasheet data, so the real forward voltage is UNVERIFIED"}
@@ -50,6 +73,68 @@
          "pins_by_number": {"1": "VIN", "2": "LED_A"}, "position": [16, 10], "role": "LED series resistor"},
         {"ref": "D1", "value_from": "led_color", "value_default": "LED", "symbol": "Device:LED", "footprint": "LED_SMD:LED_0603_1608Metric",
          "pins_by_name": {"A": "LED_A", "K": "GND"}, "position": [24, 10], "role": "indicator LED"}
+      ]
+    },
+    "esp32_led": {
+      "covers": ["esp32", "microcontroller", "mcu", "wifi", "wi-fi", "bluetooth", "ble", "antenna", "uart", "regulator", "ldo", "led", "button", "push button", "pushbutton"],
+      "description": "ESP32-WROOM-32 module powered through a 3.3 V AMS1117 LDO, with the EN reset RC network and reset button, a BOOT button on IO0, a 3-pin UART header for flashing, and an LED with series resistor on IO4.",
+      "sources": [
+        {"what": "EN RC delay R = 10 kOhm, C = 1 uF; 22 uF on the module's 3V3 supply (peripheral schematic)", "source": "Espressif, ESP32-WROOM-32E & ESP32-WROOM-32UE Datasheet v2.1, https://documentation.espressif.com/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf", "retrieved": "2026-11-20"},
+        {"what": "ESP32-WROOM-32 is marked NOT RECOMMENDED FOR NEW DESIGNS", "source": "Espressif, ESP32-WROOM-32 Datasheet v3.8, https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf", "retrieved": "2026-11-20"},
+        {"what": "AMS1117: 10 uF on the input, 22 uF (tantalum) on the output for stability", "source": "AMS1117 datasheet copies, e.g. https://files.waveshare.com/upload/b/b8/AMS1117-datasheet.pdf (maximum input voltage differs between copies: not used)", "retrieved": "2026-11-20"}
+      ],
+      "required": ["supply_voltage_v"],
+      "limits": {"supply_voltage_v_min": 4.5, "supply_voltage_v_max": 6},
+      "limits_why": "template scope, not part ratings: the minimum leaves headroom for the LDO's dropout, the maximum keeps the LDO's dissipation small because Copper does no thermal analysis",
+      "board": {"width_mm": 60, "height_mm": 66},
+      "routing": {"net_widths_mm": {"+VIN": 0.5, "+3V3": 0.5, "GND": 0.5},
+                  "why": "template choice for the supply nets, NOT computed from the module's current: check the copper width",
+                  "keepouts": [{"ref": "U1", "rect_mm": [-24, -30.74, 24, -9.8], "layers": ["F.Cu", "B.Cu"],
+                                "why": "the antenna keep-out drawn on the courtyard of KiCad's ESP32-WROOM-32 footprint: no tracks or vias on either layer"}]},
+      "defaults": {
+        "rail_voltage_v": {"value": 3.3, "why": "the AMS1117-3.3 output that powers the module and drives the LED from IO4"},
+        "design_current_a": {"value": 0.5, "why": "template ASSUMPTION for the module's supply current, used only to estimate the LDO's dissipation (Wi-Fi transmit peaks); UNVERIFIED"},
+        "led_current_ma": {"value": 2, "why": "template default: a modest indicator current"},
+        "led_forward_voltage_v": {"value": 2, "why": "template ASSUMPTION for a red LED: Copper has no LED datasheet data, so the real forward voltage is UNVERIFIED"}
+      },
+      "parts": [
+        {"ref": "U1", "value": "ESP32-WROOM-32", "symbol": "RF_Module:ESP32-WROOM-32", "footprint": "RF_Module:ESP32-WROOM-32",
+         "pins_by_name": {"GND": "GND", "VDD": "+3V3", "EN": "EN", "SENSOR_VP": null, "SENSOR_VN": null, "IO34": null, "IO35": null,
+                          "IO32": null, "IO33": null, "IO25": null, "IO26": null, "IO27": null, "IO14": null, "IO12": null, "IO13": null,
+                          "SHD/SD2": null, "SWP/SD3": null, "SCS/CMD": null, "SCK/CLK": null, "SDO/SD0": null, "SDI/SD1": null,
+                          "IO15": null, "IO2": null, "IO0": "BOOT", "IO4": "LED_GPIO", "IO16": null, "IO17": null, "IO5": null,
+                          "IO18": null, "IO19": null, "NC": null, "IO21": null, "RXD0/IO3": "RXD0", "TXD0/IO1": "TXD0",
+                          "IO22": null, "IO23": null},
+         "position": [30, 31],
+         "role": "ESP32 module; the antenna keep-out of its footprint is the top of the board; pins 17-22 (internal flash) are left unconnected"},
+        {"ref": "J1", "value": "VIN", "symbol": "Connector_Generic:Conn_01x02",
+         "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+         "pins_by_name": {"Pin_1": "+VIN", "Pin_2": "GND"}, "position": [6, 47], "role": "supply input: 1 +, 2 GND"},
+        {"ref": "C1", "value": "10uF", "symbol": "Device:C", "footprint": "Capacitor_SMD:C_0805_2012Metric",
+         "pins_by_number": {"1": "+VIN", "2": "GND"}, "position": [13, 48], "role": "LDO input capacitor (AMS1117 datasheet: 10 uF)"},
+        {"ref": "U2", "value": "AMS1117-3.3", "symbol": "Regulator_Linear:AP1117-15", "footprint": "Package_TO_SOT_SMD:SOT-223-3_TabPin2",
+         "pins_by_name": {"GND": "GND", "VO": "+3V3", "VI": "+VIN"}, "position": [23, 48],
+         "role": "3.3 V LDO; KiCad's AMS1117-3.3 symbol is derived, so its base AP1117-15 gives the same SOT-223 pinout (1 GND, 2 VO, 3 VI)"},
+        {"ref": "C2", "value": "22uF", "symbol": "Device:C", "footprint": "Capacitor_SMD:C_1206_3216Metric",
+         "pins_by_number": {"1": "+3V3", "2": "GND"}, "position": [33, 48], "role": "LDO output capacitor (AMS1117 datasheet: 22 uF for stability)"},
+        {"ref": "C3", "value": "22uF", "symbol": "Device:C", "footprint": "Capacitor_SMD:C_1206_3216Metric",
+         "pins_by_number": {"1": "+3V3", "2": "GND"}, "position": [40, 48], "role": "module supply capacitor (Espressif peripheral schematic: 22 uF)"},
+        {"ref": "R1", "value": "10k", "symbol": "Device:R", "footprint": "Resistor_SMD:R_0603_1608Metric",
+         "pins_by_number": {"1": "+3V3", "2": "EN"}, "position": [8, 58], "role": "EN pull-up of the RC reset delay (Espressif: 10 kOhm)"},
+        {"ref": "C4", "value": "1uF", "symbol": "Device:C", "footprint": "Capacitor_SMD:C_0603_1608Metric",
+         "pins_by_number": {"1": "EN", "2": "GND"}, "position": [14, 58], "role": "EN capacitor of the RC reset delay (Espressif: 1 uF)"},
+        {"ref": "SW1", "value": "RESET", "symbol": "Switch:SW_Push", "footprint": "Button_Switch_SMD:SW_SPST_TL3342",
+         "pins_by_number": {"1": "EN", "2": "GND"}, "position": [24, 58], "role": "reset button: pulls EN low"},
+        {"ref": "SW2", "value": "BOOT", "symbol": "Switch:SW_Push", "footprint": "Button_Switch_SMD:SW_SPST_TL3342",
+         "pins_by_number": {"1": "BOOT", "2": "GND"}, "position": [37, 58], "role": "boot button: hold IO0 low during reset to enter the serial bootloader"},
+        {"ref": "J2", "value": "UART", "symbol": "Connector_Generic:Conn_01x03",
+         "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
+         "pins_by_name": {"Pin_1": "GND", "Pin_2": "TXD0", "Pin_3": "RXD0"}, "position": [50, 55],
+         "role": "flashing header: 1 GND, 2 TXD0 (to the adapter's RX), 3 RXD0 (to the adapter's TX); 3.3 V logic"},
+        {"ref": "R2", "value_from": "led_resistor_ohm", "symbol": "Device:R", "footprint": "Resistor_SMD:R_0603_1608Metric",
+         "pins_by_number": {"1": "LED_GPIO", "2": "LED_A"}, "position": [47, 48], "role": "LED series resistor on IO4 (IO4 is not a strapping pin)"},
+        {"ref": "D1", "value_from": "led_color", "value_default": "LED", "symbol": "Device:LED", "footprint": "LED_SMD:LED_0603_1608Metric",
+         "pins_by_name": {"A": "LED_A", "K": "GND"}, "position": [53, 48], "role": "indicator LED, on when IO4 is high"}
       ]
     }
   }

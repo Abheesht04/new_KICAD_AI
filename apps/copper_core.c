@@ -285,24 +285,22 @@ static int serve(int argc,char **argv) {
     free(buf); tool_server_destroy(&s); if(log) fclose(log);
     return 0;
 }
-/* agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] [--url U] [--root DIR] [--kicad-cli PATH]: run every
+/* agent-eval PROMPTS OUT [--backend mock] [--root DIR] [--kicad-cli PATH]: run every
  * prompt of PROMPTS (eval/prompts.jsonl) through the agent loop (src/v2_src/agent_loop.c) against a fresh tool server,
  * score it against its "expect", and write OUT/results.jsonl (one line per prompt), OUT/summary.txt and, per prompt,
  * OUT/logs/<id>.agent.jsonl (turns) and OUT/logs/<id>.tools.jsonl (tool-server session). OUT must not exist.
- * The default backend is the mock: no model is needed. Exit 0 when every prompt PASSes, 2 otherwise. */
+ * The mock is the only backend (Ollama was removed on 2026-11-20): no model is needed. Exit 0 when every prompt
+ * PASSes, 2 otherwise. */
 static void file_log(void *ctx,const char *line,size_t len) { FILE *f=ctx; if(f) { fwrite(line,1,len,f); fputc('\n',f); } }
 static int agent_eval(int argc,char **argv) {
-    const char *prompts=argv[2],*out=argv[3],*backend="mock",*model=NULL,*url=NULL,*root=NULL,*kcli=NULL;
+    const char *prompts=argv[2],*out=argv[3],*backend="mock",*root=NULL,*kcli=NULL;
     for(int i=4;i<argc;i++) {
         if(i+1<argc && !strcmp(argv[i],"--backend")) backend=argv[++i];
-        else if(i+1<argc && !strcmp(argv[i],"--model")) model=argv[++i];
-        else if(i+1<argc && !strcmp(argv[i],"--url")) url=argv[++i];
         else if(i+1<argc && !strcmp(argv[i],"--root")) root=argv[++i];
         else if(i+1<argc && !strcmp(argv[i],"--kicad-cli")) kcli=argv[++i];
-        else { fprintf(stderr,"agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] [--url U] [--root DIR] [--kicad-cli PATH]\n"); return 64; }
+        else { fprintf(stderr,"agent-eval PROMPTS OUT [--backend mock] [--root DIR] [--kicad-cli PATH]\n"); return 64; }
     }
-    if(strcmp(backend,"mock")&&strcmp(backend,"ollama")) { fprintf(stderr,"agent-eval: --backend is mock or ollama\n"); return 64; }
-    if(!strcmp(backend,"ollama")&&!model) { fprintf(stderr,"agent-eval: --backend ollama needs --model (e.g. qwen3:8b)\n"); return 64; }
+    if(strcmp(backend,"mock")) { fprintf(stderr,"agent-eval: --backend is mock, the only backend (Manus runs outside copper-core)\n"); return 64; }
     if(fs_file_exists(out)||fs_directory_exists(out)) { fprintf(stderr,"agent-eval: %s already exists: nothing is overwritten\n",out); return 64; }
     Arena arena; arena_init(&arena,1<<20);
     JsonValue *dummy; JsonError je;
@@ -324,8 +322,8 @@ static int agent_eval(int argc,char **argv) {
         FILE *af=fopen(ap,"wb"),*tf=fopen(tp,"wb");
         ToolServerConfig tc; memset(&tc,0,sizeof tc); tc.root=root; tc.kicad_cli=kcli; tc.version="eval"; tc.log=file_log; tc.log_ctx=tf;
         ToolServer ts; tool_server_init(&ts,&tc);
-        LlmBackend be; LlmMockState ms_; LlmOllamaState os; LlmOllamaConfig oc={url,model,0};
-        if(!strcmp(backend,"mock")) llm_mock_init_rules(&be,&ms_); else llm_ollama_init(&be,&os,&oc);
+        LlmBackend be; LlmMockState ms_;
+        llm_mock_init_rules(&be,&ms_);
         AgentConfig ac; memset(&ac,0,sizeof ac); ac.log=file_log; ac.log_ctx=af;
         AgentResult r; agent_run(&run,&be,&ts,&ac,prompt,&r);
         char reasons[2048]; AgentVerdict verdict=agent_score(&r,json_get(v,"expect"),reasons,sizeof reasons);
@@ -335,7 +333,7 @@ static int agent_eval(int argc,char **argv) {
         json_write_begin_object(&w);
         json_write_key(&w,"id"); json_write_string(&w,id);
         json_write_key(&w,"backend"); json_write_string(&w,backend);
-        json_write_key(&w,"model"); json_write_string(&w,model?model:"mock-rules");
+        json_write_key(&w,"model"); json_write_string(&w,"mock-rules");
         json_write_key(&w,"verdict"); json_write_string(&w,agent_verdict_name(verdict));
         json_write_key(&w,"status"); json_write_string(&w,agent_status_name(r.status));
         json_write_key(&w,"turns"); json_write_uint(&w,r.turns);
@@ -360,8 +358,8 @@ static int agent_eval(int argc,char **argv) {
     FILE *sf=fopen(path,"wb");
     if(sf) {
         fprintf(sf,"Copper LLM eval: %s\nbackend %s, model %s\n%zu prompts: %zu PASS, %zu FAIL, %zu UNVERIFIED\nmodel time %llu ms, %llu prompt tokens, %llu completion tokens\n\n%s",
-                prompts,backend,model?model:"mock-rules (deterministic, no model)",total,pass,fail,unverified,ms,ptok,ctok,summary_rows);
-        if(!strcmp(backend,"mock")) fputs("\nThe mock backend measures the pipeline (prompts, tools, scoring), not a model.\n",sf);
+                prompts,backend,"mock-rules (deterministic, no model)",total,pass,fail,unverified,ms,ptok,ctok,summary_rows);
+        fputs("\nThe mock backend measures the pipeline (prompts, tools, scoring), not a model.\n",sf);
         fclose(sf);
     }
     printf("%zu prompts: %zu PASS, %zu FAIL, %zu UNVERIFIED (results in %s)\n",total,pass,fail,unverified,out);
@@ -483,7 +481,7 @@ int main(int argc,char **argv) {
     if(argc==3 && !strcmp(argv[1],"gerber")) return gerber_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"dfm")) return dfm_json(argv[2],argv[3]);
     if(argc==5 && !strcmp(argv[1],"kicad")) return kicad_job(argv[2],argv[3],argv[4]);
-    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | agent-eval PROMPTS OUT [--backend mock|ollama] [--model M] | serve-http [--port N] [--root DIR] [--ui FILE] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR | place PROBLEM ITERATIONS SEEDS\n");return 64;}
+    if(argc<3) {fprintf(stderr,"copper-core analyze PROJECT | transient PROJECT DT STEPS [be|trap] | ac PROJECT START STOP POINTS [log|lin] | classify TEXT | models | catalogue FILE | eseries E24|E96 VALUE | drill FILE | board FILE | gerber FILE | report BOARD PROFILE [DRILL|GERBER...] | serve [--root DIR] [--kicad-cli PATH] [--log FILE] | agent-eval PROMPTS OUT [--backend mock] | serve-http [--port N] [--root DIR] [--ui FILE] | dfm BOARD PROFILE | kicad drc|gerbers|drill|pos BOARD OUT | kicad-new PARENT NAME | kicad-open DIR | place PROBLEM ITERATIONS SEEDS\n");return 64;}
     if(argc==5 && !strcmp(argv[1],"place")) return place(argv[2],argv[3],argv[4]);
     if(argc==3 && !strcmp(argv[1],"drill")) return drill_json(argv[2]);
     if(argc==4 && !strcmp(argv[1],"kicad-new")) return kicad_project(1,argv[2],argv[3]);

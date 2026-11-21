@@ -85,7 +85,6 @@ add_library(copper_v2 STATIC
     src/v2_src/tool_server.c
     src/v2_src/llm.c
     src/v2_src/llm_mock.c
-    src/v2_src/llm_ollama.c
     src/v2_src/schema_gbnf.c
     src/v2_src/agent_loop.c
     src/v2_src/dfm_cpu_ref.c
@@ -115,7 +114,7 @@ else()
     target_compile_options(copper_v2 PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 if(WIN32)
-    target_link_libraries(copper_v2 PUBLIC ws2_32)  # llm_ollama.c: HTTP to an Ollama server
+    target_link_libraries(copper_v2 PUBLIC ws2_32)  # rest_server.c: Winsock for copper-core serve-http
     target_link_libraries(copper_v2 PUBLIC ole32)  # CoCreateGuid for native KiCad project UUIDs (copper_project.c)
 endif()
 # Sanitizers for the V2 engine and its tests. MinGW has no libasan: UBSan runs in trap mode there and ASan is
@@ -273,9 +272,6 @@ if(HWCOMPILER_BUILD_TESTS)
     # The tool server over real stdio: copper-core serve with a scripted transcript (tests/golden/tool_server).
     add_test(NAME tool_server_stdio COMMAND ${CMAKE_COMMAND} "-DCORE=$<TARGET_FILE:copper-core>" "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/tool_server_stdio" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/tool_server_stdio.cmake")
-    # The same LLM test against a live Ollama server (OLLAMA_URL, OLLAMA_MODEL). Exit 77 = skipped (UNVERIFIED).
-    add_test(NAME llm_ollama_live COMMAND llm_test --live)
-    set_tests_properties(llm_ollama_live PROPERTIES SKIP_RETURN_CODE 77)
     # The eval pipeline end to end with the mock backend (eval/prompts.jsonl): every prompt must PASS.
     add_test(NAME llm_eval_mock COMMAND ${CMAKE_COMMAND} "-DCORE=$<TARGET_FILE:copper-core>" "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}"
              "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/llm_eval_mock" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/llm_eval_mock.cmake")
@@ -435,7 +431,8 @@ set(COPPER_DESIGN_SOURCES
     src/v2_src/kicad_assets.c src/v2_src/spice_mna.c src/v2_src/part_catalogue.c src/v2_src/placer.c
     src/v2_src/report.c src/v2_src/router.c src/v2_src/sha256.c
     src/v2_src/json.c src/v2_src/intent_check.c   # grounding gate for model-written intents
-    src/v2_src/template_gen.c)   # deterministic design generation from analysed requirements
+    src/v2_src/template_gen.c   # deterministic design generation from analysed requirements
+    src/v2_src/autoroute.c)     # deterministic two-layer board router
 add_library(copper_design STATIC ${COPPER_DESIGN_SOURCES})
 target_include_directories(copper_design PUBLIC src/v2_src)
 function(copper_design_policy target)
@@ -453,7 +450,7 @@ if(WIN32)
     target_link_libraries(copper_design PUBLIC ole32)   # CoCreateGuid (copper_project.c)
 endif()
 # Geometry and DFM modules of the overlay: no floating point or libm (CLAUDE.md section 2).
-foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c fab_rules.c jlc_catalogue.c)
+foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c autoroute.c fab_rules.c jlc_catalogue.c)
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/v2_src/${module}" module_source)
     if(module_source MATCHES "#[ \t]*include[ \t]*<math\\.h>" OR
        module_source MATCHES "(^|[^A-Za-z0-9_])(double|float)([^A-Za-z0-9_]|$)" OR
@@ -468,7 +465,7 @@ if(HWCOMPILER_BUILD_TESTS)
     # The overlay's tests use assert(); NDEBUG is undefined for them so Release builds still check.
     foreach(pair core:test_core design:test_design catalogue_asset:test_catalogue_assets topology:test_topology
                  engineering:test_engineering_loop optimization:test_optimization_loop intent_check:test_intent_check
-                 template_gen:test_template_gen)
+                 template_gen:test_template_gen autoroute:test_autoroute)
         string(REPLACE ":" ";" parts "${pair}")
         list(GET parts 0 name)
         list(GET parts 1 source)

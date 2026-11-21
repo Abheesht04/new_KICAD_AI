@@ -8,7 +8,7 @@
   "properties": {
     "schema": {"type": "string", "enum": ["copper.requirements"]},
     "schema_version": {"type": "integer", "enum": [1]},
-    "circuit": {"type": "string", "enum": ["low_side_switch", "led_indicator", "other"]},
+    "circuit": {"type": "string", "enum": ["low_side_switch", "led_indicator", "esp32_led", "other"]},
     "summary": {"type": "string"},
     "supply_voltage_v": {"type": ["number", "null"]},
     "load_current_a": {"type": ["number", "null"]},

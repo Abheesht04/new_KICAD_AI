@@ -15,7 +15,7 @@ rename or move existing files); the build compiles them in place.
 | `src/v2_src/{IR,arena,cplx,nmath,sexpr,u128}.{c,h}` | byte-identical to the copies in `src/`, which `hwcore` compiles; test `v2_src_shared_in_sync` fails if they ever differ | base modules |
 | `src/v2_src.zip` | not built: the folder as delivered | — |
 | `export_cam_kicad906.ps1` | run by hand on a machine with KiCad 9.0.6 | KiCad 9 CAM export |
-| `src/v2_src/copper_ai_model_probe.ps1` | run by hand against an Ollama server | Ollama probe (Qwen3 8B, Llama 3.2) for the smart-layer plan |
+| ~~`src/v2_src/copper_ai_model_probe.ps1`~~ | not in this tree | Ollama/Qwen probe, not imported: Ollama and Qwen were removed on 2026-11-20 |
 | `manufacturing_audit/{gerber_test,drill_test}` | **real KiCad 9.0.6 CAM output** of the divider board, the test oracle for `kicad_native_test` and `test_native_gates.Cam` | — |
 | `manufacturing_audit/gerber_test.zip` | not built: the same Gerbers zipped | — |
 
@@ -71,7 +71,5 @@ tests. On the branch none of the modules were part of any build target.
 
 ## Smart-layer probe
 
-`src/v2_src/copper_ai_model_probe.ps1` sends one under-specified request (a USB-C sensor board) to a local Ollama server
-(`qwen3:8b`, `llama3.2:latest`). It asks the model to separate requirements from assumptions and to ask at most three
-questions, then reports latency, tokens per second, CPU/GPU placement and GPU memory. It is an evaluation script for
-the plan's §6; nothing in the product calls a model. It has not been run on this machine (no Ollama here).
+The Ollama/Qwen probe (`copper_ai_model_probe.ps1`) from the source branch was not imported: Ollama and Qwen were
+removed on 2026-11-20 at the owner's request. Manus is the only model and does prompt analysis only (`manus/README.md`).

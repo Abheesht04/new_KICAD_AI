@@ -1,0 +1,17 @@
+{
+  "format": "copper.routing_rules/1",
+  "name": "copper_2layer_default",
+  "note": "Rules for Copper's two-layer router (src/v2_src/autoroute.c). They are Copper's design choices, not fabricator capabilities: `copper design route` refuses them (INVALID_INPUT) if any is below the limit of the fab profile it is given. Values are kept well above the minimums of fab_profiles/jlcpcb_2layer.json (JLCPCB capabilities page, retrieved 2026-11-06) so a board does not depend on the fab's tightest process.",
+  "fab_profile": "fab_profiles/jlcpcb_2layer.json",
+  "rules": {
+    "grid_mm": {"value": 0.25, "why": "routing grid pitch; fine enough to escape 1.27 mm pitch module pads, coarse enough to keep the grid small"},
+    "track_mm": {"value": 0.25, "why": "default signal track: 2.5x the profile's 0.10 mm minimum track width"},
+    "clearance_mm": {"value": 0.3, "why": "copper to copper of different nets: above every copper spacing minimum in the profile, the largest being PTH to track (0.28 mm)"},
+    "edge_clearance_mm": {"value": 0.5, "why": "copper to board outline: 2.5x the profile's 0.20 mm minimum (routed edge)"},
+    "via_size_mm": {"value": 0.6, "why": "via pad diameter: above the profile's 0.25 mm minimum and 0.3 mm larger than the hole (profile: at least 0.10 mm)"},
+    "via_drill_mm": {"value": 0.3, "why": "via hole: 2x the profile's 0.15 mm minimum via hole"},
+    "via_cost": {"value": 8, "why": "a via costs as much as 8 grid steps, so the router changes layer only when it saves length or is needed"},
+    "passes": {"value": 4, "why": "rip-up-and-reroute passes: nets that fail are routed first in the next pass"},
+    "max_cells": {"value": 4000000, "why": "grid cells per layer the router may use (a 500 mm x 500 mm board at 0.25 mm)"}
+  }
+}

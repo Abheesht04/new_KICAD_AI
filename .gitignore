@@ -24,3 +24,6 @@ imgui.ini
 # Copper Lab run outputs (generated designs, logs)
 /copper_lab/runs/
 /copper_lab/manual_compile*/
+
+# Manus API key file (copper-prompt.ps1 reads it); never commit it
+manus_api_key.txt

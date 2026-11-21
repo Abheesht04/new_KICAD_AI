@@ -56,3 +56,18 @@ and set `COPPER_SYMBOLS_ROOT` and `COPPER_FOOTPRINTS_ROOT`.
 - Derived and multi-unit symbols are rejected.
 - Parts are placed but **not routed**: DRC lists the unconnected nets.
 - ERC, DRC and DFM results are findings for review, not approval.
+
+## Compared with `feature/copper-lab-integrated` (checked 2026-11-20)
+
+The friend's branch tip is still `d994df7` (2026-11-19); it was imported here in `8586bc1`. A file-by-file comparison
+on 2026-11-20 found nothing better left behind:
+
+| From the branch | Here | Why |
+|---|---|---|
+| `copper_lab/` app, `copper_design_compile.py`, `kicad_asset_context.py`, `design_parity.c`, design tests, schema | **kept** | ported in `8586bc1`, then fixed (dotted library nicknames, ERC/DRC judged from the reports, JSON-only POSTs, part names `intent_*` instead of `qwen_*`) |
+| `board.c`, `board.h`, `copper_cli.c`, `CMakeLists.txt` | **ours kept** | the branch has the older versions; ours are the V2 integer-nm board model and the strict build (`-UNDEBUG`, `-Werror`) |
+| Qwen/Ollama generation path, `prompts/COPPER_DESIGN_INTENT_SYSTEM.md`, `copper_ai_model_probe.ps1`, `ollama_smoke_test.ps1` | **removed / not taken** | owner: "remove qwen and ollama, keep Manus" |
+| `apply_patch.ps1`, `PATCH_MANIFEST.json`, `copper_lab.zip`, `build/` | **not taken** | installer and build outputs for the branch's own layout |
+| `scripts/test_copper_lab_pipeline.ps1` | **kept** | imported in `8586bc1` and adapted to this layout; `manus/selftest.ps1` runs it |
+
+The C LLM bridge's Ollama backend (`llm_ollama.c`) was removed at the same time; the mock is its only backend.

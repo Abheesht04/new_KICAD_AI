@@ -342,22 +342,16 @@ static void low_side_switch(Ctx *c, const JsonValue *tpl, Named *named, size_t *
     if (fly) check(c, "DIODE_RATINGS", "UNVERIFIED",
                    fmt(c, "D1 must block at least %s in reverse and carry the load current (%s) when the switch turns off. Copper has no rating data for it.", micro_text(c, vs, "V"), micro_text(c, il, "A"), NULL));
     else check(c, "NO_FLYBACK", "INFO", "no flyback diode: suitable for resistive loads only");
-    check(c, "TRACE_WIDTH", "NOT_IMPLEMENTED",
-          fmt(c, "copper width and clearance for %s are not computed by Copper, and the board is not routed: size the load path (J1 to Q1 to D1) when routing", micro_text(c, il, "A"), NULL, NULL));
+    check(c, "TRACE_WIDTH", "UNVERIFIED",
+          fmt(c, "the router gives the load path (+VIN, LOAD_NEG, GND) the template's 1 mm width; Copper does not compute the width a %s load needs: check it", micro_text(c, il, "A"), NULL, NULL));
 }
 
-static void led_indicator(Ctx *c, const JsonValue *tpl, Named *named, size_t *nn)
+/* The LED and its series resistor, driven from `vdrive` (micro-volts): the supply (led_indicator) or a 3.3 V GPIO
+ * (esp32_led). `ready`: vdrive is known. Returns the LED current actually set (micro-mA), 0 when not computed. */
+static int64_t led_branch(Ctx *c, const JsonValue *tpl, Named *named, size_t *nn, int64_t vdrive, bool ready, const char *drive)
 {
-    int64_t vs = 0, ima = 0, vf = 0, max = 0;
+    int64_t ima = 0, vf = 0;
     const char *why = "";
-    bool has_vs = req_number(c, "supply_voltage_v", &vs);
-    if (!has_vs) need(c, "supply_voltage_v", "What is the supply voltage that powers the LED (V)?");
-    const JsonValue *lim = json_get(tpl, "limits");
-    if (has_vs && json_to_nm(json_get(lim, "supply_voltage_v_max"), &max) == JSON_NUMBER_OK && (vs <= 0 || vs > max)) {
-        check(c, "OUT_OF_SCOPE", "NOT_IMPLEMENTED", fmt(c, "a supply of %s is outside this template's scope (above 0 and up to %s)", micro_text(c, vs, "V"), micro_text(c, max, "V"), NULL));
-        c->status = TGEN_NOT_IMPLEMENTED;
-    }
-    if (has_vs) value(c, "supply_voltage_v", micro_text(c, vs, "V"), "stated", "from the prompt");
     if (req_number(c, "led_current_ma", &ima)) value(c, "led_current_ma", micro_text(c, ima, "mA"), "stated", "from the prompt");
     else { ima = template_default_micro(tpl, "led_current_ma", &why); value(c, "led_current_ma", micro_text(c, ima, "mA"), "default", why); }
     bool vf_assumed = false;
@@ -368,27 +362,214 @@ static void led_indicator(Ctx *c, const JsonValue *tpl, Named *named, size_t *nn
         named[*nn].name = "led_color";
         named[(*nn)++].text = norm(c, color);
     }
-    if (ima <= 0 || vf <= 0) { check(c, "INVALID_VALUE", "INVALID_INPUT", "the LED current and forward voltage must be above 0"); c->status = TGEN_INVALID_INPUT; return; }
-    if (!has_vs || c->status != TGEN_GENERATED) return;
-    if (vs <= vf) {
-        check(c, "SUPPLY_TOO_LOW", "INVALID_INPUT", fmt(c, "a supply of %s cannot drive an LED with a forward voltage of %s", micro_text(c, vs, "V"), micro_text(c, vf, "V"), NULL));
+    if (ima <= 0 || vf <= 0) { check(c, "INVALID_VALUE", "INVALID_INPUT", "the LED current and forward voltage must be above 0"); c->status = TGEN_INVALID_INPUT; return 0; }
+    if (!ready || c->status != TGEN_GENERATED) return 0;
+    if (vdrive <= vf) {
+        check(c, "SUPPLY_TOO_LOW", "INVALID_INPUT", fmt(c, "%s cannot drive an LED with a forward voltage of %s", drive, micro_text(c, vf, "V"), NULL));
         c->status = TGEN_INVALID_INPUT;
-        return;
+        return 0;
     }
     int64_t ia = ima / 1000;                            /* mA micro-units -> uA */
-    if (ia <= 0) { check(c, "INVALID_VALUE", "INVALID_INPUT", "the LED current is below 1 uA"); c->status = TGEN_INVALID_INPUT; return; }
-    int64_t r = e24_at_least(vs - vf, ia);              /* uV / uA = ohm; rounded UP so the current stays at or below the target */
-    if (!r) { check(c, "INVALID_VALUE", "INVALID_INPUT", "no E24 resistor up to 91M gives that current"); c->status = TGEN_INVALID_INPUT; return; }
-    int64_t actual_na = (vs - vf) * 1000 / r;                   /* uV * 1000 / ohm = nA (mA in micro-units) */
+    if (ia <= 0) { check(c, "INVALID_VALUE", "INVALID_INPUT", "the LED current is below 1 uA"); c->status = TGEN_INVALID_INPUT; return 0; }
+    int64_t r = e24_at_least(vdrive - vf, ia);          /* uV / uA = ohm; rounded UP so the current stays at or below the target */
+    if (!r) { check(c, "INVALID_VALUE", "INVALID_INPUT", "no E24 resistor up to 91M gives that current"); c->status = TGEN_INVALID_INPUT; return 0; }
+    int64_t actual_na = (vdrive - vf) * 1000 / r;               /* uV * 1000 / ohm = nA (mA in micro-units) */
     int64_t p_uw = (actual_na * r / 1000) * actual_na / 1000000000;   /* uV x nA = 1e-15 W -> uW */
-    value(c, "led_resistor_ohm", ohms_text(c, r), "computed", "(supply - LED forward voltage) / LED current, rounded UP to the E24 series");
-    value(c, "led_current_actual", micro_text(c, actual_na, "mA"), "computed", "(supply - forward voltage) / chosen resistor");
+    value(c, "led_resistor_ohm", ohms_text(c, r), "computed", fmt(c, "(%s - LED forward voltage) / LED current, rounded UP to the E24 series", drive, NULL, NULL));
+    value(c, "led_current_actual", micro_text(c, actual_na, "mA"), "computed", fmt(c, "(%s - forward voltage) / chosen resistor", drive, NULL, NULL));
     value(c, "resistor_power", micro_text(c, p_uw * 1000, "mW"), "computed", "current squared x resistor");
     named[*nn].name = "led_resistor_ohm";
     named[(*nn)++].text = ohms_text(c, r);
     check(c, "LED_RATINGS", vf_assumed ? "UNVERIFIED" : "INFO",
           vf_assumed ? "the LED forward voltage is a template assumption, not datasheet data: the real current depends on the LED used"
                      : "LED forward voltage taken from the prompt; LED ratings are not checked by Copper");
+    return actual_na;
+}
+
+/* Supply in [min, max] of the template's limits (either may be absent); otherwise OUT_OF_SCOPE. */
+static void supply_in_scope(Ctx *c, const JsonValue *tpl, int64_t vs)
+{
+    const JsonValue *lim = json_get(tpl, "limits");
+    int64_t min = 0, max = INT64_MAX;
+    bool has_min = json_to_nm(json_get(lim, "supply_voltage_v_min"), &min) == JSON_NUMBER_OK;
+    bool has_max = json_to_nm(json_get(lim, "supply_voltage_v_max"), &max) == JSON_NUMBER_OK;
+    if (vs > 0 && (!has_min || vs >= min) && (!has_max || vs <= max)) return;
+    const JsonValue *why = json_get(tpl, "limits_why");
+    const char *range = has_min ? fmt(c, "%s to %s", micro_text(c, min, "V"), has_max ? micro_text(c, max, "V") : "any", NULL)
+                                : fmt(c, "above 0 and up to %s", has_max ? micro_text(c, max, "V") : "any", NULL, NULL);
+    check(c, "OUT_OF_SCOPE", "NOT_IMPLEMENTED", fmt(c, "a supply of %s is outside this template's scope (%s)%s", micro_text(c, vs, "V"), range,
+                                                    why && why->kind == JSON_STRING ? fmt(c, ": %s", why->text, NULL, NULL) : ""));
+    c->status = TGEN_NOT_IMPLEMENTED;
+}
+
+static void led_indicator(Ctx *c, const JsonValue *tpl, Named *named, size_t *nn)
+{
+    int64_t vs = 0;
+    bool has_vs = req_number(c, "supply_voltage_v", &vs);
+    if (!has_vs) need(c, "supply_voltage_v", "What is the supply voltage that powers the LED (V)?");
+    if (has_vs) supply_in_scope(c, tpl, vs);
+    if (has_vs) value(c, "supply_voltage_v", micro_text(c, vs, "V"), "stated", "from the prompt");
+    led_branch(c, tpl, named, nn, vs, has_vs, has_vs ? fmt(c, "the %s supply", micro_text(c, vs, "V"), NULL, NULL) : "the supply");
+}
+
+static void esp32_led(Ctx *c, const JsonValue *tpl, Named *named, size_t *nn)
+{
+    int64_t vs = 0, rail = 0, idesign = 0;
+    const char *why_rail = "", *why_i = "";
+    bool has_vs = req_number(c, "supply_voltage_v", &vs);
+    if (!has_vs) need(c, "supply_voltage_v", "What is the supply voltage at the board's power input (V)? The board regulates it down to 3.3 V.");
+    if (has_vs) supply_in_scope(c, tpl, vs);
+    if (has_vs) value(c, "supply_voltage_v", micro_text(c, vs, "V"), "stated", "from the prompt");
+    rail = template_default_micro(tpl, "rail_voltage_v", &why_rail);
+    idesign = template_default_micro(tpl, "design_current_a", &why_i);
+    if (rail <= 0 || idesign <= 0) { check(c, "TEMPLATE_DEFAULTS", "ERROR", "the template lacks rail_voltage_v or design_current_a"); c->status = TGEN_TEMPLATE_ERROR; return; }
+    value(c, "rail_voltage_v", micro_text(c, rail, "V"), "default", why_rail);
+    value(c, "design_current_a", micro_text(c, idesign, "A"), "assumed", why_i);
+    if (has_vs && c->status == TGEN_GENERATED && vs <= rail) {
+        check(c, "SUPPLY_TOO_LOW", "INVALID_INPUT", fmt(c, "a supply of %s cannot be regulated down to %s", micro_text(c, vs, "V"), micro_text(c, rail, "V"), NULL));
+        c->status = TGEN_INVALID_INPUT;
+    }
+    int64_t iled = led_branch(c, tpl, named, nn, rail, true, fmt(c, "the %s GPIO (IO4)", micro_text(c, rail, "V"), NULL, NULL));
+    if (!has_vs || c->status != TGEN_GENERATED) return;
+    int64_t p_uw = ((vs - rail) / 1000) * (idesign / 1000);     /* mV x mA = uW */
+    value(c, "ldo_dissipation", micro_text(c, p_uw, "W"), "computed", "(supply - 3.3 V) x the assumed module current");
+    check(c, "LDO_THERMAL", "UNVERIFIED",
+          fmt(c, "U2 dissipates about %s at the assumed %s. Copper does no thermal analysis: check the regulator's package rating and give its tab copper area when routing.", micro_text(c, p_uw, "W"), micro_text(c, idesign, "A"), NULL));
+    check(c, "REGULATOR_RATINGS", "UNVERIFIED",
+          fmt(c, "U2 (AMS1117-3.3) must accept %s at its input and deliver at least %s at 3.3 V. Copper has no rating data for it, and the maximum input voltage differs between AMS1117 datasheet copies: check the datasheet of the part you buy.", micro_text(c, vs, "V"), micro_text(c, idesign, "A"), NULL));
+    check(c, "REGULATOR_CAPACITORS", "UNVERIFIED",
+          "AMS1117 datasheets specify tantalum capacitors (10 uF in, 22 uF out) for stability; this template places ceramic footprints: confirm the output capacitor's ESR suits the regulator you use");
+    check(c, "MODULE_STATUS", "UNVERIFIED",
+          "U1 uses KiCad's ESP32-WROOM-32 symbol and footprint; Espressif marks that module NOT RECOMMENDED FOR NEW DESIGNS. Its pins 17-22 (internal flash) are left unconnected, as they are NC on the ESP32-WROOM-32E, but Copper has not verified that the two footprints match (KiCad's WROOM-32E symbol stacks its GND pins, which this generator cannot map yet).");
+    check(c, "ESP32_REFERENCE", "INFO",
+          "EN reset delay R1 = 10 kOhm, C4 = 1 uF and the 22 uF module capacitor C3 follow Espressif's ESP32-WROOM-32E datasheet v2.1 (peripheral schematic); Espressif notes the RC values may need tuning to the supply's power-up timing");
+    check(c, "ANTENNA_KEEPOUT", "UNVERIFIED",
+          "keep copper, parts and ground pour out of U1's antenna keep-out at the top of the board; follow the module datasheet's placement guidance. Copper does not check RF layout.");
+    if (iled > 0)
+        check(c, "GPIO_DRIVE", "UNVERIFIED",
+              fmt(c, "IO4 sources the LED current (%s); check it against the ESP32 datasheet's GPIO output limits. IO4 is not a strapping pin.", micro_text(c, iled, "mA"), NULL, NULL));
+    check(c, "PROGRAMMING", "INFO", "flash through J2 with a 3.3 V USB-UART adapter (adapter RX to pin 2 TXD0, TX to pin 3 RXD0, GND to pin 1): hold BOOT, press RESET, release BOOT");
+    check(c, "THERMAL_VIAS", "UNVERIFIED",
+          "KiCad's ESP32-WROOM-32 footprint puts 0.2 mm vias in the module's GND pad; a fab profile with a larger minimum hole makes DRC report them (drill_out_of_range): check your fab's minimum drill, or remove those vias");
+    check(c, "POWER_FLAGS", "INFO",
+          "ERC reports 'power pin not driven' on GND and +VIN because Copper's schematic writer places no PWR_FLAG symbols yet; the nets themselves are connected");
+    check(c, "TRACE_WIDTH", "UNVERIFIED", "the router gives +VIN, +3V3 and GND the template's 0.5 mm width; Copper does not compute the width the module's supply current needs: check it");
+}
+
+/* ---------------------------------------------------------------------------------------------- scope */
+
+static bool word_char(char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'); }
+
+/* Characters of `p` that `term` matches as a whole word (plural -s/-es accepted), or 0. */
+static size_t term_at(const char *p, const char *term)
+{
+    size_t n = strlen(term);
+    if (!n || strncmp(p, term, n) != 0) return 0;
+    const char *e = p + n;
+    if (!word_char(*e)) return n;
+    if (e[0] == 's' && !word_char(e[1])) return n + 1;
+    if (e[0] == 'e' && e[1] == 's' && !word_char(e[2])) return n + 2;
+    return 0;
+}
+
+static bool listed(const JsonValue *arr, const char *s)
+{
+    for (size_t i = 0; arr && arr->kind == JSON_ARRAY && i < arr->count; i++)
+        if (arr->items[i]->kind == JSON_STRING && !strcmp(arr->items[i]->text, s)) return true;
+    return false;
+}
+
+#define MAX_TERMS 32
+
+/* The component terms in the prompt: at each word start the longest term wins ("esp32-s3" over "esp32"). */
+static size_t prompt_terms(Ctx *c, const JsonValue *terms, const char **out)
+{
+    size_t n = 0;
+    const char *s = c->prompt_norm;
+    if (!s || !terms || terms->kind != JSON_ARRAY) return 0;
+    for (size_t i = 0; s[i] && n < MAX_TERMS;) {
+        if (!word_char(s[i]) || (i > 0 && word_char(s[i - 1]))) { i++; continue; }
+        size_t best = 0;
+        const char *bt = NULL;
+        for (size_t k = 0; k < terms->count; k++) {
+            if (terms->items[k]->kind != JSON_STRING) continue;
+            size_t m = term_at(s + i, terms->items[k]->text);
+            if (m > best) { best = m; bt = terms->items[k]->text; }
+        }
+        if (!bt) { i++; continue; }
+        bool seen = false;
+        for (size_t k = 0; k < n; k++) seen |= !strcmp(out[k], bt);
+        if (!seen) out[n++] = bt;
+        i += best;
+    }
+    return n;
+}
+
+/* Terms the template neither builds ("covers") nor connects off the board ("offboard"). */
+static size_t uncovered(const JsonValue *tpl, const char *const *terms, size_t n, const char **out)
+{
+    size_t u = 0;
+    const JsonValue *covers = json_get(tpl, "covers"), *off = json_get(tpl, "offboard");
+    for (size_t i = 0; i < n; i++) if (!listed(covers, terms[i]) && !listed(off, terms[i])) out[u++] = terms[i];
+    return u;
+}
+
+static const char *joined(Ctx *c, const char *const *items, size_t n)
+{
+    char buf[512] = "";
+    size_t len = 0;
+    for (size_t i = 0; i < n; i++) {
+        int k = snprintf(buf + len, sizeof buf - len, "%s\"%s\"", i ? ", " : "", items[i]);
+        if (k < 0 || (size_t)k >= sizeof buf - len) break;
+        len += (size_t)k;
+    }
+    return dup(c, buf);
+}
+
+/* Fix for silently reduced requests: every component term in the prompt must be built ("covers") or connected off
+ * the board ("offboard", reported) by the chosen template. When the analysis picked a template that misses part of
+ * the request and exactly one other template covers all of it, that one is used (reported); otherwise the run is
+ * NOT_IMPLEMENTED and names what is missing. The analysis's own unsupported_requests are reported as not handled
+ * (they are free text, often about assumptions rather than parts); the term scan is what stops a run.
+ * Returns the template to use (NULL: stop). */
+static const JsonValue *scope(Ctx *c, const JsonValue *tpls, const JsonValue *tpl)
+{
+    const JsonValue *all = json_get(tpls, "templates");
+    const char *terms[MAX_TERMS] = {0}, *miss[MAX_TERMS] = {0};
+    size_t nt = prompt_terms(c, json_get(tpls, "component_terms"), terms);
+    size_t nm = uncovered(tpl, terms, nt, miss);
+    if (nm) {
+        const JsonValue *pick = NULL;
+        const char *pick_name = NULL;
+        size_t candidates = 0;
+        const char *dummy[MAX_TERMS] = {0};
+        for (size_t i = 0; all && i < all->count; i++)
+            if (all->items[i] != tpl && uncovered(all->items[i], terms, nt, dummy) == 0) { pick = all->items[i]; pick_name = all->keys[i]; candidates++; }
+        if (candidates == 1) {
+            check(c, "TEMPLATE_CHANGED", "INFO",
+                  fmt(c, "the analysis chose \"%s\", which does not build %s; Copper uses the \"%s\" template, which covers everything the prompt asks for",
+                      c->template_name, joined(c, miss, nm), pick_name));
+            c->template_name = pick_name;
+            tpl = pick;
+        } else {
+            check(c, "UNSUPPORTED_REQUEST", "NOT_IMPLEMENTED",
+                  fmt(c, "the prompt asks for %s, which the \"%s\" template does not build, and no single Copper template covers the whole request; nothing is generated rather than a reduced circuit",
+                      joined(c, miss, nm), c->template_name, NULL));
+            return NULL;
+        }
+    }
+    const JsonValue *off = json_get(tpl, "offboard"), *why = json_get(tpl, "offboard_why");
+    const char *offs[MAX_TERMS] = {0};
+    size_t no = 0;
+    for (size_t i = 0; i < nt; i++) if (listed(off, terms[i]) && !listed(json_get(tpl, "covers"), terms[i])) offs[no++] = terms[i];
+    if (no)
+        check(c, "OFF_BOARD", "INFO", fmt(c, "the prompt mentions %s; this template does not place it on the board%s", joined(c, offs, no),
+                                          why && why->kind == JSON_STRING ? fmt(c, ": %s", why->text, NULL, NULL) : "", NULL));
+    const JsonValue *un = json_get(c->req, "unsupported_requests");
+    for (size_t i = 0; un && un->kind == JSON_ARRAY && i < un->count; i++)
+        if (un->items[i]->kind == JSON_STRING && un->items[i]->text[0])
+            check(c, "NOT_HANDLED", "NOT_IMPLEMENTED", fmt(c, "the analysis says the prompt also asks for: %s. Copper does not do this; it is not in the design", un->items[i]->text, NULL, NULL));
+    return tpl;
 }
 
 /* ---------------------------------------------------------------------------------------------- intent writer */
@@ -525,7 +706,10 @@ static const char *write_intent(Ctx *c, const JsonValue *tpl, const char *projec
         const JsonValue *by_name = json_get(p, "pins_by_name"), *by_num = json_get(p, "pins_by_number");
         const JsonValue *map = by_name ? by_name : by_num;
         if (!map || map->kind != JSON_OBJECT) { template_error(c, ref->text, "no pin map"); break; }
-        size_t mapped = 0;
+        /* Which template keys matched a library pin: several pins may share a name (a module's GND pins). */
+        bool *key_used = arena_alloc(c->a, map->count ? map->count : 1);
+        if (!key_used) { c->oom = true; break; }
+        memset(key_used, 0, map->count ? map->count : 1);
         json_write_key(&w, "pins");
         json_write_begin_array(&w);
         for (size_t k = 0; k < asset->pin_count; k++) {
@@ -539,7 +723,7 @@ static const char *write_intent(Ctx *c, const JsonValue *tpl, const char *projec
             const JsonValue *net = json_get(map, key);
             if (!net) { template_error(c, ref->text, fmt(c, "the template does not map library pin %s (%s)", pin->number, pin->name, NULL)); break; }
             if (!kicad_footprint_has_pad(&fp, pin->number)) { template_error(c, ref->text, fmt(c, "footprint %s has no pad %s for pin %s", fpid->text, pin->number, pin->name)); break; }
-            mapped++;
+            for (size_t m = 0; m < map->count; m++) if (!strcmp(map->keys[m], key)) key_used[m] = true;
             json_write_begin_object(&w);
             json_write_key(&w, "symbol_pin"); json_write_string(&w, pin->number);
             json_write_key(&w, "pin_name"); json_write_string(&w, pin->name ? pin->name : "");
@@ -550,12 +734,70 @@ static const char *write_intent(Ctx *c, const JsonValue *tpl, const char *projec
         }
         json_write_end_array(&w);
         json_write_end_object(&w);
-        if (c->status == TGEN_GENERATED && mapped != map->count)
-            template_error(c, ref->text, "the template maps a pin the installed symbol does not have");
+        for (size_t m = 0; m < map->count && c->status == TGEN_GENERATED; m++)
+            if (!key_used[m]) template_error(c, ref->text, fmt(c, "the template maps pin %s, which the installed symbol does not have", map->keys[m], NULL, NULL));
     }
     json_write_end_array(&w);
     json_write_end_object(&w);
     if (c->status != TGEN_GENERATED) return NULL;
+    return json_writer_finish(&w, len);
+}
+
+/* ---------------------------------------------------------------------------------------------- routing data */
+
+/* copper.routing/1: the template's per-net track widths, and its keep-outs moved to board coordinates by the
+ * position of the part they belong to (template parts are placed without rotation). */
+static const char *write_routing(Ctx *c, const JsonValue *tpl, size_t *len)
+{
+    const JsonValue *rt = json_get(tpl, "routing"), *widths = json_get(rt, "net_widths_mm"), *kos = json_get(rt, "keepouts");
+    const JsonValue *why = json_get(rt, "why"), *parts = json_get(tpl, "parts");
+    JsonWriter w;
+    json_writer_init(&w, c->a);
+    json_write_begin_object(&w);
+    json_write_key(&w, "format"); json_write_string(&w, "copper.routing/1");
+    json_write_key(&w, "template"); json_write_string(&w, c->template_name ? c->template_name : "");
+    json_write_key(&w, "why"); json_write_string(&w, why && why->kind == JSON_STRING ? why->text : "");
+    json_write_key(&w, "net_widths_mm");
+    json_write_begin_object(&w);
+    for (size_t i = 0; widths && widths->kind == JSON_OBJECT && i < widths->count; i++) {
+        int64_t v = 0;
+        if (json_to_nm(widths->items[i], &v) != JSON_NUMBER_OK || v <= 0) { template_error(c, "routing", fmt(c, "the width of net %s is not a positive number", widths->keys[i], NULL, NULL)); return NULL; }
+        json_write_key(&w, widths->keys[i]);
+        write_mm(&w, c, v);
+    }
+    json_write_end_object(&w);
+    json_write_key(&w, "keepouts");
+    json_write_begin_array(&w);
+    for (size_t i = 0; kos && kos->kind == JSON_ARRAY && i < kos->count; i++) {
+        const JsonValue *k = kos->items[i], *ref = json_get(k, "ref"), *rect = json_get(k, "rect_mm"), *layers = json_get(k, "layers"), *kw = json_get(k, "why");
+        int64_t px = 0, py = 0, v[4];
+        bool found = false;
+        for (size_t p = 0; ref && ref->kind == JSON_STRING && parts && p < parts->count && !found; p++) {
+            const JsonValue *pr = json_get(parts->items[p], "ref"), *pos = json_get(parts->items[p], "position");
+            if (pr && pr->kind == JSON_STRING && !strcmp(pr->text, ref->text) && pos && pos->kind == JSON_ARRAY && pos->count == 2 &&
+                json_to_nm(pos->items[0], &px) == JSON_NUMBER_OK && json_to_nm(pos->items[1], &py) == JSON_NUMBER_OK) found = true;
+        }
+        if (!found || !rect || rect->kind != JSON_ARRAY || rect->count != 4 || !layers || layers->kind != JSON_ARRAY) {
+            template_error(c, "routing", "a keep-out lacks a placed part (ref), a 4-number rect_mm or layers");
+            return NULL;
+        }
+        for (int m = 0; m < 4; m++)
+            if (json_to_nm(rect->items[m], &v[m]) != JSON_NUMBER_OK) { template_error(c, "routing", "a keep-out rect_mm value is not a number"); return NULL; }
+        json_write_begin_object(&w);
+        json_write_key(&w, "ref"); json_write_string(&w, ref->text);
+        json_write_key(&w, "rect_mm");
+        json_write_begin_array(&w);
+        write_mm(&w, c, px + v[0]); write_mm(&w, c, py + v[1]); write_mm(&w, c, px + v[2]); write_mm(&w, c, py + v[3]);
+        json_write_end_array(&w);
+        json_write_key(&w, "layers");
+        json_write_begin_array(&w);
+        for (size_t m = 0; m < layers->count; m++) if (layers->items[m]->kind == JSON_STRING) json_write_string(&w, layers->items[m]->text);
+        json_write_end_array(&w);
+        json_write_key(&w, "why"); json_write_string(&w, kw && kw->kind == JSON_STRING ? kw->text : "");
+        json_write_end_object(&w);
+    }
+    json_write_end_array(&w);
+    json_write_end_object(&w);
     return json_writer_finish(&w, len);
 }
 
@@ -682,10 +924,12 @@ TemplateGenStatus template_generate(Arena *arena, const char *requirements_json,
                 }
                 check(&c, "NO_TEMPLATE", "NOT_IMPLEMENTED", fmt(&c, "Copper has no template for this circuit (\"%s\"); it can generate: %s", circ->text, list, NULL));
                 c.status = TGEN_NOT_IMPLEMENTED;
+            } else if (c.template_name = circ->text, (tpl = scope(&c, tpls, tpl)) == NULL) {
+                c.status = TGEN_NOT_IMPLEMENTED;
             } else {
-                c.template_name = circ->text;
-                if (!strcmp(circ->text, "low_side_switch")) low_side_switch(&c, tpl, named, &nn, &include_flyback);
-                else if (!strcmp(circ->text, "led_indicator")) led_indicator(&c, tpl, named, &nn);
+                if (!strcmp(c.template_name, "low_side_switch")) low_side_switch(&c, tpl, named, &nn, &include_flyback);
+                else if (!strcmp(c.template_name, "led_indicator")) led_indicator(&c, tpl, named, &nn);
+                else if (!strcmp(c.template_name, "esp32_led")) esp32_led(&c, tpl, named, &nn);
                 else { check(&c, "NO_GENERATOR", "NOT_IMPLEMENTED", "this template has no generator yet"); c.status = TGEN_NOT_IMPLEMENTED; }
                 /* Board: the template's size, or a stated one that is at least as large. */
                 const JsonValue *tb = json_get(tpl, "board");
@@ -710,8 +954,9 @@ TemplateGenStatus template_generate(Arena *arena, const char *requirements_json,
                                                  "pulldown_ohm", "flyback_diode", "led_color", "led_current_ma", "led_forward_voltage_v", NULL};
             static const char *const switch_fields[] = {"supply_voltage_v", "load_current_a", "logic_voltage_v", "switch_part", "gate_resistor_ohm", "pulldown_ohm", "flyback_diode", NULL};
             static const char *const led_fields[] = {"supply_voltage_v", "led_color", "led_current_ma", "led_forward_voltage_v", NULL};
-            const char *const *used = tpl && !strcmp(c.template_name ? c.template_name : "", "low_side_switch") ? switch_fields
-                                      : tpl && !strcmp(c.template_name ? c.template_name : "", "led_indicator") ? led_fields : NULL;
+            const char *tn = tpl && c.template_name ? c.template_name : "";
+            const char *const *used = !strcmp(tn, "low_side_switch") ? switch_fields
+                                      : !strcmp(tn, "led_indicator") || !strcmp(tn, "esp32_led") ? led_fields : NULL;
             for (const char *const *f = fields; used && *f; f++) {
                 const JsonValue *v = json_get(req, *f);
                 if (!v || v->kind == JSON_NULL) continue;
@@ -725,6 +970,10 @@ TemplateGenStatus template_generate(Arena *arena, const char *requirements_json,
         out->intent_json = write_intent(&c, tpl, project_name(&c, c.template_name), bw, bh, named, nn, include_flyback,
                                         symbols_root, footprints_root, &out->intent_len);
         if (!out->intent_json && c.status == TGEN_GENERATED) c.status = TGEN_ERR_MEMORY;
+        if (c.status == TGEN_GENERATED) {
+            out->routing_json = write_routing(&c, tpl, &out->routing_len);
+            if (!out->routing_json) { out->intent_json = NULL; if (c.status == TGEN_GENERATED) c.status = TGEN_ERR_MEMORY; }
+        }
     }
     if (c.oom) return TGEN_ERR_MEMORY;
     out->report_json = write_report(&c, &out->report_len);

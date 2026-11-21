@@ -13,6 +13,11 @@
  *   - A requirement value is used only when an "evidence" quote for it occurs in the prompt (case- and
  *     space-insensitive) and, for numbers, the quote contains that number (also as k/M/m multiples). Anything else
  *     is IGNORED and reported, so the analysis cannot add requirements the user never stated.
+ *   - Scope: every component term of the template file's "component_terms" that occurs in the prompt (whole words,
+ *     plurals, longest term first) must be built ("covers") or connected off the board ("offboard") by the chosen
+ *     template. If the analysis chose a template that misses part of the request and exactly one other template
+ *     covers all of it, that template is used (TEMPLATE_CHANGED); otherwise NOT_IMPLEMENTED names what is missing.
+ *     A request is never silently reduced to a smaller circuit.
  *   - Missing required values become questions (NEEDS_INPUT); an unknown circuit is NOT_IMPLEMENTED; values that
  *     cannot work (an LED supply below its forward voltage) are INVALID_INPUT. Nothing is guessed.
  *   - Every value carries its provenance: stated (from the prompt), default (template, with its reason), computed
@@ -45,6 +50,9 @@ typedef struct TemplateGenOutput {
     size_t intent_len;
     const char *report_json;   /* copper.generation/1: status, values with provenance, checks, questions, ignored */
     size_t report_len;
+    const char *routing_json;  /* copper.routing/1 for `copper design route`: per-net widths and keep-outs in board
+                                  coordinates, from the template; only when TGEN_GENERATED */
+    size_t routing_len;
 } TemplateGenOutput;
 
 /* `prompt` may be NULL: evidence is then not checked, and the report says so. */
