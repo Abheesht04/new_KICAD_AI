@@ -1,0 +1,62 @@
+; Discrete semiconductors. Each source retrieved 2026-11-21 from the manufacturer's site. Transcribed, NOT verified by a
+; person. Negative minimum temperatures are in the descriptions only (G-068). Pin maps follow the KiCad symbol: for the
+; LED and diode, pad 1 is the cathode (KiCad convention); that the part's cathode mark lands on pad 1 is checked by a
+; person against the package drawing, not by Copper.
+(copper_parts
+  (schema 1)
+  (part
+    (id "led_0603_red_kingbright_apt1608ec")
+    (kind D)
+    (manufacturer "Kingbright")
+    (mpn "APT1608EC")
+    (package "0603")
+    (description "Red (high efficiency red, 627 nm peak) LED 0603. voltage = reverse voltage VR; current = DC forward current IF; VF is 2.0 V typ, 2.5 V max at IF 20 mA (page 2) and is not a rating entry. Operating -40 to +85 C (page 2)")
+    (datasheet "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf")
+    (supplier "Kingbright")
+    (symbol "Device:LED")
+    (footprint "LED_SMD:LED_0603_1608Metric")
+    (identity_source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652")
+      (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 1) (status "unverified"))
+    (ratings
+      (rating current maximum 30000 uA (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
+      (rating voltage maximum 5000000 uV (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
+      (rating power maximum 75000 uW (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified")))
+      (rating temperature maximum 85000 mC (source (url "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf") (document "Kingbright APT1608EC, spec DSAD0924 / 1203001652") (revision "V.18A, 02/19/2022 (retrieved 2026-11-21)") (page 2) (status "unverified"))))
+    (pins (pin "cathode" "1" "1") (pin "anode" "2" "2")))
+  (part
+    (id "diode_schottky_sma_vishay_ss14")
+    (kind D)
+    (manufacturer "Vishay")
+    (mpn "SS14-E3/61T")
+    (package "SMA (DO-214AC)")
+    (description "Schottky rectifier 40 V 1 A, SMA. voltage = VRRM; current = IF(AV) at TL (fig. 1). Junction -65 to +150 C (page 1). Part number built from the ordering example (page 2: base P/N E3, package code 61T, 1800 per 7 inch reel)")
+    (datasheet "https://www.vishay.com/docs/88746/ss12.pdf")
+    (supplier "Vishay")
+    (symbol "Device:D_Schottky")
+    (footprint "Diode_SMD:D_SMA")
+    (identity_source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746")
+      (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 2) (status "unverified"))
+    (ratings
+      (rating voltage maximum 40000000 uV (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating current maximum 1000000 uA (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature maximum 150000 mC (source (url "https://www.vishay.com/docs/88746/ss12.pdf") (document "Vishay SS12 thru SS16, document 88746") (revision "23-Apr-2020 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+    (pins (pin "cathode" "1" "1") (pin "anode" "2" "2")))
+  (part
+    (id "nmos_sot23_aos_ao3400a")
+    (kind M)
+    (manufacturer "Alpha and Omega Semiconductor")
+    (mpn "AO3400A")
+    (package "SOT-23")
+    (description "N-channel MOSFET 30 V. voltage = VDS; current = continuous ID at TA 25 C (4.7 A at TA 70 C); power = PD at TA 25 C (0.9 W at 70 C); VGS is +/-12 V and is not a rating entry. TJ and TSTG -55 to 150 C (page 1)")
+    (datasheet "https://www.aosmd.com/res/datasheets/AO3400A.pdf")
+    (supplier "Alpha and Omega Semiconductor")
+    (symbol "Transistor_FET:AO3400A")
+    (footprint "Package_TO_SOT_SMD:SOT-23")
+    (identity_source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet")
+      (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified"))
+    (ratings
+      (rating voltage maximum 30000000 uV (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating current maximum 5700000 uA (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating power maximum 1400000 uW (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified")))
+      (rating temperature maximum 150000 mC (source (url "https://www.aosmd.com/res/datasheets/AO3400A.pdf") (document "Alpha and Omega AO3400A datasheet") (revision "Rev 3.1, July 2023 (retrieved 2026-11-21)") (page 1) (status "unverified"))))
+    (pins (pin "gate" "1" "1") (pin "source" "2" "2") (pin "drain" "3" "3"))))

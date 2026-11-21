@@ -256,3 +256,71 @@ The fake-runner tests (`kicad_cli`, `tool_server`, `tool_server_stdio`) and the 
 | T7: records | G-003 and G-044 notes; G-061 to G-066 (`GAP_REGISTER.md` §8) |
 
 **Not verified:** KiCad 9 native gates (G-010), Linux, MSVC, ASan, GPU.
+
+## Lab branch: Step 1a, `copper catalogue check` (2026-11-21, owner approved)
+
+**Changes:**
+- new `src/v2_src/parts_check.{c,h}` (copper_design; on the no-float lint list);
+- `copper catalogue check` in `apps/copper_cli.c`, a new command beside `catalogue validate`, which is unchanged;
+- the test `src/v2_src/tests/test_parts_check.c` with `tests/fixtures/parts_check/sample_library.sx`. The catalogues
+  are Copper-written test data; the KiCad libraries are the template_gen fixtures extracted from KiCad 10.0.5;
+- `PIPELINE_HARD_RULES.md` H2: only a person marks data verified;
+- `CLI.md` section.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees (one with UBSan on `copper_v2` and `copper_design`), exit 0, **0 warnings** |
+| T2 | **85/85 passed** (79 run, 6 skipped: KiCad 9.x ×5, GPU ×1), 241 s, UBSan build |
+| T3 | `copper_parts_check_tests`: 11 test groups pass. Mutation check: with the KiCad check disabled, the test fails (`test_every_kicad_problem_is_reported`) |
+| T3 (CLI) | exit codes checked: 3 UNVERIFIED (with and without roots), 2 INVALID_INPUT (other format, missing file), 64 (half the roots or an unknown option), 1 FAIL (`catalogue_resolution/parts.sx`: 9 FAIL and 5 UNVERIFIED findings in one run) |
+| T4 | self-test **23/23** |
+| T5 | golden boards **PASS**, identical to the baseline |
+| T6 | `parts_check.c`: no `malloc`, `printf` or `exit`; no float (CMake lint) |
+| T7 | G-018 note, G-067 (two catalogue formats); this entry; CLI.md; H2 |
+
+**Not verified:** KiCad 9 (G-010); Linux, MSVC, ASan.
+
+## Lab branch: Step 1b, first parts library (2026-11-21, owner approved; format `copper_parts` chosen by the owner)
+
+**Added:**
+- `parts_library/` (README and 5 files): 19 parts from Vishay, Murata, Kingbright, Alpha and Omega, Advanced
+  Monolithic Systems, Espressif, TI, E-Switch, Samtec and GCT;
+- `tests/parts_library_check.cmake`, run as ctest `parts_library_parse`.
+
+**How the data was taken:**
+- datasheets were downloaded from the manufacturers' sites;
+- text was extracted per page with PyMuPDF (a local tool, not part of Copper);
+- every table a value was taken from was also rendered to an image and read, so table columns could not be mixed up;
+- every source is `unverified`; no value was estimated;
+- two corrections came from the documents themselves:
+  - Samtec's current catalogue page has no "G" plating code, so the headers are `-T` (matte tin);
+  - `SS14-E3/61T` follows the ordering example on page 2 of the Vishay document.
+
+**Results (`copper catalogue check`, KiCad 10.0.5 libraries, a development check):**
+
+| File | Parts | KiCad | Verdict |
+|---|---|---|---|
+| resistors | 5 | 5 PASS | UNVERIFIED (exit 3) |
+| capacitors | 4 | 4 PASS | UNVERIFIED (exit 3) |
+| semiconductors | 3 | 3 PASS | UNVERIFIED (exit 3) |
+| ics | 3 | 2 PASS, 1 FAIL (ESP32 GND stacked pins in KiCad 10, G-069) | FAIL (exit 1) |
+| electromechanical | 4 | 4 PASS | UNVERIFIED (exit 3) |
+
+The Step 1b "done when" criterion of 0 FAIL is **not fully met**: the one FAIL is G-069, a KiCad 10 library
+difference, not a data error.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | **86/86 passed** (80 run, 6 skipped: KiCad 9.x ×5, GPU ×1), UBSan build |
+| T3 | `parts_library_parse` passes on all 5 files. With a duplicate-MPN copy of a file it fails, as it should |
+| T4 | self-test 23/23 |
+| T5 | golden boards PASS, identical to the baseline |
+| T6 | no C code changed |
+| T7 | G-018 note 2, G-068 (parser rejects negative ratings), G-069 (ESP32 stacked GND pins in KiCad 10) |
+
+**Found:** G-068, a defect in a base module. It is not fixed: it needs the owner's approval.

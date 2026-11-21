@@ -1,0 +1,42 @@
+; Copper-written test catalogue for test_parts_check.c. Not part data: the manufacturer, MPNs and URLs are
+; placeholders (example.invalid), and every source is unverified, as Copper-transcribed data must be.
+(copper_parts
+  (schema 1)
+  (part
+    (id "fx_led_red_0603")
+    (kind D)
+    (manufacturer "Fixture Mfr")
+    (mpn "FX-LED-R-0603")
+    (package "0603")
+    (datasheet "https://example.invalid/fx-led.pdf")
+    (symbol "Device:LED")
+    (footprint "LED_SMD:LED_0603_1608Metric")
+    (identity_source (url "https://example.invalid/fx-led.pdf") (document "FX LED datasheet") (revision "A, 2026-01")
+      (status "unverified"))
+    (ratings
+      (rating current maximum 20000 uA
+        (source (url "https://example.invalid/fx-led.pdf") (document "FX LED datasheet") (revision "A, 2026-01")
+          (page 3) (status "unverified")))
+      (rating voltage maximum 5000000 uV
+        (source (url "https://example.invalid/fx-led.pdf") (document "FX LED datasheet") (revision "A, 2026-01")
+          (page 3) (status "unverified"))))
+    (pins (pin "cathode" "1" "1") (pin "anode" "2" "2")))
+  (part
+    (id "fx_cap_1u_0603")
+    (kind C)
+    (manufacturer "Fixture Mfr")
+    (mpn "FX-C1U-0603")
+    (package "0603")
+    (datasheet "https://example.invalid/fx-cap.pdf")
+    (symbol "Device:C")
+    (footprint "Capacitor_SMD:C_0603_1608Metric")
+    (identity_source (url "https://example.invalid/fx-cap.pdf") (document "FX capacitor datasheet") (revision "B, 2025-06")
+      (status "unverified"))
+    (ratings
+      (rating capacitance nominal 1000000 pF
+        (source (url "https://example.invalid/fx-cap.pdf") (document "FX capacitor datasheet") (revision "B, 2025-06")
+          (page 1) (status "unverified")))
+      (rating voltage maximum 16000000 uV
+        (source (url "https://example.invalid/fx-cap.pdf") (document "FX capacitor datasheet") (revision "B, 2025-06")
+          (page 1) (status "unverified"))))
+    (pins (pin "terminal_1" "1" "1") (pin "terminal_2" "2" "2"))))

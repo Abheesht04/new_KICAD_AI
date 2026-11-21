@@ -191,6 +191,38 @@ Exit codes:
 - 7: UNSUPPORTED: zones, custom pads, inner-layer pads or a non-rectangular outline;
 - 1: I/O error; 64: bad arguments.
 
+## copper catalogue check
+
+`copper catalogue check FILE.parts [--symbols-root DIR --footprints-root DIR] [--out REPORT.json]` reports every
+problem of every part in a `copper_parts` catalogue (`src/v2_src/parts_check.c`). `catalogue validate` is unchanged
+and still stops at the first KiCad problem.
+
+The findings are:
+
+| Code | Level | Meaning |
+|---|---|---|
+| `MISSING_IDENTITY` | FAIL | manufacturer, MPN, datasheet, symbol or footprint is absent |
+| `NO_IDENTITY_SOURCE` | FAIL | the part does not say which document its identity comes from |
+| `CITATION_INCOMPLETE` | FAIL | a source without a revision, or a rating source without a page |
+| `DUPLICATE_MPN` | FAIL | two parts have the same manufacturer and MPN |
+| `UNKNOWN_FIELD` | FAIL | a field the parser would silently ignore, such as a misspelt `(mnp ...)` |
+| `KICAD_ASSET` | FAIL | symbol or footprint missing, or a mapped pin or pad absent; checked for each part, not just the first failure |
+| `REQUIRED_RATING_MISSING` | UNVERIFIED | the part lacks a rating its kind needs:<br>• resistor: resistance and power<br>• capacitor: capacitance and voltage<br>• inductor: inductance and current<br>• diode, transistor, MOSFET: voltage and current |
+| `SOURCE_UNVERIFIED` | UNVERIFIED | the identity or a rating that no person has verified |
+| `KICAD_NOT_RUN` | NOT_RUN | no library roots were given |
+
+The check never fills in a value. Only a person marks a source verified (PIPELINE_HARD_RULES.md H2).
+
+Exit codes:
+- 0: PASS: every source is verified by a person and every KiCad mapping exists;
+- 3: UNVERIFIED, including when the KiCad check was not run;
+- 1: FAIL;
+- 2: INVALID_INPUT: the file does not parse as `(copper_parts ...)`;
+- 64: usage error;
+- 70: internal error.
+
+`--out` writes `copper.parts-check/1` JSON.
+
 ## copper-core place
 
 `copper-core place PROBLEM ITERATIONS SEEDS` runs the C placer (`src/v2_src/placement.c`) on a version-1

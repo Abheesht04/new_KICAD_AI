@@ -24,6 +24,7 @@
 #include "template_gen.h"
 #include "autoroute.h"
 #include "json.h"
+#include "parts_check.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -108,6 +109,8 @@ static void print_usage(void) {
     puts("  copperv2 assets import-kicad <symbols-dir> <footprints-dir> --root DIR");
     puts("  copperv2 catalogue create <file.parts>");
     puts("  copperv2 catalogue validate <file.parts> [--symbols-root DIR --footprints-root DIR]");
+    puts("  copperv2 catalogue check <file.parts> [--symbols-root DIR --footprints-root DIR] [--out report.json]");
+    puts("      every problem of every part; exit 0 PASS, 3 UNVERIFIED, 1 FAIL, 2 INVALID_INPUT");
     puts("  copperv2 catalogue install <file.parts> --scope project|user [--project-root DIR] [--user-root DIR]");
     puts("  copperv2 catalogue list --scope project|user [--project-root DIR] [--user-root DIR]");
     puts("  copperv2 catalogue resolve <part-id> [--project-root DIR] [--user-root DIR] [--bundled-root DIR]");
@@ -1072,6 +1075,61 @@ static bool option_value(int argc, char **argv, const char *option,
         if (strcmp(argv[i], option) == 0) { *out = argv[i + 1]; return true; }
     }
     return false;
+}
+
+/* copper catalogue check FILE [--symbols-root DIR --footprints-root DIR] [--out REPORT.json]
+ * Every problem of every part (src/v2_src/parts_check.c); `catalogue validate` is unchanged.
+ * Exit: 0 PASS, 3 UNVERIFIED, 1 FAIL, 2 INVALID_INPUT, 64 usage, 70 internal error. */
+static int command_catalogue_check(int argc, char **argv) {
+    const char *path = argv[3], *symbols_root = NULL, *footprints_root = NULL, *out_path = NULL;
+    for (int i = 4; i < argc; i += 2) {
+        if (i + 1 >= argc) { fprintf(stderr, "ERROR: %s needs a value\n", argv[i]); return 64; }
+        if (!strcmp(argv[i], "--symbols-root")) symbols_root = argv[i + 1];
+        else if (!strcmp(argv[i], "--footprints-root")) footprints_root = argv[i + 1];
+        else if (!strcmp(argv[i], "--out")) out_path = argv[i + 1];
+        else { fprintf(stderr, "ERROR: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!!symbols_root != !!footprints_root) {
+        fprintf(stderr, "ERROR: provide both --symbols-root and --footprints-root, or neither\n");
+        return 64;
+    }
+    Arena arena;
+    arena_init(&arena, 1u << 20);
+    PartsCheckReport r;
+    PartsCheckStatus st = parts_check_file(&arena, path, symbols_root, footprints_root, &r);
+    if (st == PARTS_CHECK_ERR_ARGUMENT || st == PARTS_CHECK_ERR_MEMORY) {
+        fprintf(stderr, "ERROR: catalogue check: %s\n", parts_check_status_name(st));
+        arena_destroy(&arena);
+        return 70;
+    }
+    if (st == PARTS_CHECK_INVALID_INPUT) {
+        printf("%s: %s\n", path, r.invalid_message);
+    } else {
+        printf("%-28s %-2s %-22s %-7s %s\n", "part", "k", "mpn", "kicad", "verified (identity; ratings)");
+        for (size_t i = 0; i < r.part_count; ++i) {
+            const PartsCheckPart *p = &r.parts[i];
+            printf("%-28s %-2s %-22s %-7s %s; %zu/%zu\n", p->id, p->kind, p->mpn ? p->mpn : "-", p->kicad,
+                   p->identity_verified ? "yes" : "no", p->ratings_verified, p->ratings);
+        }
+        for (size_t i = 0; i < r.finding_count; ++i) {
+            const PartsFinding *f = &r.findings[i];
+            printf("  %-10s %-23s %s: %s\n", parts_finding_level_name(f->level), f->code,
+                   f->part_id ? f->part_id : "(catalogue)", f->message);
+        }
+    }
+    int code = st == PARTS_CHECK_PASS ? 0 : st == PARTS_CHECK_UNVERIFIED ? 3 : st == PARTS_CHECK_FAIL ? 1 : 2;
+    if (out_path) {
+        size_t len = 0;
+        const char *json = parts_check_report_json(&arena, &r, &len);
+        FILE *f = json ? fopen(out_path, "wb") : NULL;
+        bool ok = f && fwrite(json, 1, len, f) == len;
+        if (f && fclose(f) != 0) ok = false;
+        if (!ok) { fprintf(stderr, "ERROR: cannot write %s\n", out_path); code = 70; }
+    }
+    printf("STATUS catalogue check: %s (%zu parts, %zu FAIL, %zu UNVERIFIED/NOT_RUN findings)\n",
+           parts_check_status_name(st), r.part_count, r.fail_count, r.unverified_count);
+    arena_destroy(&arena);
+    return code;
 }
 
 static int command_catalogue_install(int argc, char **argv) {
@@ -2760,6 +2818,8 @@ int main(int argc, char **argv) {
             return command_catalogue_resolve(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "search") == 0)
             return command_catalogue_search(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "check") == 0)
+            return command_catalogue_check(argc, argv);
         print_usage(); return 64;
     }
     print_usage();

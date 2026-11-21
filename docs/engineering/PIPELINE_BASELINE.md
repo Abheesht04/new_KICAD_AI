@@ -25,7 +25,7 @@
 
 | Environment | Result |
 |---|---|
-| Default | 84 tests: **74 passed, 10 skipped, 0 failed** (exit 0) |
+| Default | 84 tests: **74 passed, 10 skipped, 0 failed** (exit 0). Since Step 1a, 85 tests (`copper_parts_check_tests` added); every later step must keep all of them passing |
 | `KICAD_CLI` and `KICAD_DEMOS_DIR` set to KiCad 10.0.5 | 84 tests: **78 passed, 6 skipped, 0 failed** (exit 0, 214 s) |
 
 The 6 tests still skipped (exit 77, never reported as passed) are:
