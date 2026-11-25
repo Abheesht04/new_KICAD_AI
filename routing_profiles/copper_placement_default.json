@@ -1,0 +1,18 @@
+{
+  "format": "copper.placement_rules/1",
+  "name": "copper_placement_default",
+  "note": "Settings for placing composed designs with the C placer (src/v2_src/placement.c via `copper-core place`). They are Copper's design choices, not fabricator capabilities; the router and DRC still check every clearance against the fab profile.",
+  "rules": {
+    "edge_mm": {"value": 1.0, "why": "pad to board edge: twice the router's 0.5 mm copper-to-edge clearance (routing_profiles/copper_2layer_default.json), so a track can pass between a pad and the edge"},
+    "gap_mm": {"value": 0.5, "why": "courtyard to courtyard: room for one 0.25 mm track with 0.3 mm clearance is not guaranteed by this alone; the router re-checks every clearance"},
+    "body_margin_mm": {"value": 2.5, "why": "no part body within 2.5 mm of the board edge: the design compiler and the grounding gate require every part origin at least 2.5 mm inside the board, and an origin lies inside its part's body"},
+    "step_mm": {"value": 1.0, "why": "placement grid, the step tools/layout.py used with the same placer"},
+    "area_weight_per_mm2": {"value": 0.01, "why": "tools/layout.py WEIGHTS placement_area_mm2: a small pull toward a compact placement"},
+    "decoupling_weight_per_mm": {"value": 1.0, "why": "tools/layout.py WEIGHTS decoupling_mm: a decoupling capacitor is pulled toward its IC"},
+    "keepout_edge_weight_per_mm": {"value": 0.5, "why": "tools/layout.py WEIGHTS keepout_edge_mm: a part keep-out (the ESP32-S3 antenna zone) is pulled toward the board edge"},
+    "fine_pitch_gap_mm": {"value": 0.3, "why": "Step 3c, LAYOUT_RULES.md R5: a part whose own pads (different nets) are closer than this is fine-pitch; equal to the router's clearance_mm (routing_profiles/copper_2layer_default.json), the same test the router uses"},
+    "fine_pitch_escape_mm": {"value": 1.0, "why": "room for a fine-pitch part's escape stubs: an escape end cell needs half a track + clearance + the router's grid slack (0.125 + 0.3 + 0.1875 = 0.6125 mm) from every other-net pad, about 1.5 mm from the pad row to the next part's pad; a SOT-563 courtyard is only 0.15 mm beyond its pads and gap_mm adds 0.5 mm, so the body grows by 1.0 mm (about 0.7 mm is the least that works)"},
+    "iterations": {"value": 4000, "why": "annealing moves per seed; seconds for boards of tens of parts"},
+    "seeds": {"value": [1, 2, 3, 4], "why": "independent annealing runs; the lowest-cost legal one is kept, so the result is deterministic"}
+  }
+}

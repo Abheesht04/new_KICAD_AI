@@ -56,6 +56,13 @@ typedef struct AutorouteRules {
     size_t max_cells;             /* per layer */
     const AutorouteNetWidth *widths; size_t width_count;   /* per-net track widths (others: track_nm) */
     const AutorouteKeepout *keepouts; size_t keepout_count;
+    /* Fine-pitch escapes (Step 3c, LAYOUT_RULES.md R5; added beside the base fields, 0 = off, both or neither).
+     * A footprint is fine-pitch when two of its own pads on different nets are closer than clearance_nm. Each of its
+     * pads connects through a straight stub fine_neck_nm wide (or the net's width, if narrower) from the pad centre
+     * to a free grid cell; that stub keeps fine_clearance_nm to the other SMD pads of the same footprint and the
+     * normal clearance to everything else. Nothing else is relaxed. The caller checks both against the fab profile. */
+    G2Nm fine_clearance_nm;
+    G2Nm fine_neck_nm;
 } AutorouteRules;
 
 typedef enum AutorouteNetStatus { AUTOROUTE_NET_ROUTED, AUTOROUTE_NET_FAILED, AUTOROUTE_NET_SINGLE_PAD } AutorouteNetStatus;

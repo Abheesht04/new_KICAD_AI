@@ -1,0 +1,41 @@
+{
+  "format": "copper.block/1",
+  "name": "reset_boot",
+  "summary": "RESET and BOOT tactile switches for an ESP32-S3 module: RESET pulls EN low (with Espressif's 0.1 uF), BOOT pulls IO0 low; IO0 has the pull-up Espressif recommends.",
+  "sources": [
+    {"id": "s3_periph", "document": "ESP32-S3-WROOM-1 & WROOM-1U Datasheet, figure 9-1 Peripheral Schematics: SW1 from EN to GND with C8 0.1 uF; boot option on IO0 to GND",
+     "url": "https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
+     "revision": "Version 1.8 (retrieved 2026-11-21)", "page": 41},
+    {"id": "s3_ratings", "document": "ESP32-S3-WROOM-1 & WROOM-1U Datasheet, table 6-2 Recommended Operating Conditions (VDD33 3.0-3.6 V)",
+     "url": "https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
+     "revision": "Version 1.8 (retrieved 2026-11-21)", "page": 27},
+    {"id": "hdg_gpio0", "document": "Espressif ESP32-S3 Hardware Design Guidelines, section 1.3.9 Strapping Pins: a pull-up resistor at GPIO0 is recommended; no high-value capacitors at GPIO0",
+     "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/esp-hardware-design-guidelines-en-master-esp32s3.pdf",
+     "revision": "release master, Nov 12, 2026 (retrieved 2026-11-21)", "page": 18},
+    {"id": "pullup_current", "document": "Ohm's law: the GPIO0 pull-up draws at most 3.6 V / 10 kohm = 360 uA, while BOOT is pressed", "standard": "circuit theory"},
+    {"id": "copper_choice", "document": "Copper design choice: 10 kohm for the GPIO0 pull-up (Espressif recommends a pull-up but gives no value)",
+     "standard": "Copper design choice (2026-11-21), not a datasheet value"}
+  ],
+  "ports": [
+    {"name": "v3v3", "kind": "power_in", "voltage_min": 3000000, "voltage_max": 3600000, "source": "s3_ratings",
+     "current": 360, "current_source": "pullup_current"},
+    {"name": "gnd", "kind": "ground"},
+    {"name": "en", "kind": "signal"},
+    {"name": "io0", "kind": "gpio"}
+  ],
+  "parts": [
+    {"role": "reset_switch", "prefix": "SW", "select": {"part_id": "switch_tact_smt_eswitch_tl3342f160qg"},
+     "pins": {"a": "en", "b": "gnd"}},
+    {"role": "reset_capacitor", "prefix": "C", "select": {"part_id": "cap_0603_100n_50v_x7r_murata"},
+     "pins": {"terminal_1": "en", "terminal_2": "gnd"}},
+    {"role": "boot_switch", "prefix": "SW", "select": {"part_id": "switch_tact_smt_eswitch_tl3342f160qg"},
+     "pins": {"a": "io0", "b": "gnd"}},
+    {"role": "io0_pullup", "prefix": "R", "select": {"part_id": "res_0603_10k_vishay_crcw"},
+     "pins": {"terminal_1": "v3v3", "terminal_2": "io0"}}
+  ],
+  "notes": [
+    {"text": "RESET: switch from EN to GND with 0.1 uF, as in Espressif's figure (its 0 ohm R7 is omitted). BOOT: hold BOOT, press and release RESET to enter download mode.", "source": "s3_periph"},
+    {"text": "GPIO0 has a pull-up as Espressif recommends; no capacitor is placed on GPIO0, which could force download mode.", "source": "hdg_gpio0"},
+    {"text": "The 10 kohm value of the GPIO0 pull-up is Copper's choice: Espressif gives no value.", "source": "copper_choice"}
+  ]
+}

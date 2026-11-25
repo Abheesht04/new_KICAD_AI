@@ -1,0 +1,28 @@
+{
+  "format": "copper.compose/1",
+  "project": {"name": "Esp32S3LedSensor", "board": {"width_mm": 70, "height_mm": 60}},
+  "blocks": [
+    {"id": "power", "block": "power_input_header", "parameters": {"supply_voltage": 5000000}},
+    {"id": "ldo", "block": "ldo_3v3"},
+    {"id": "mcu", "block": "esp32s3_core"},
+    {"id": "buttons", "block": "reset_boot"},
+    {"id": "led1", "block": "led_indicator"},
+    {"id": "temp", "block": "i2c_sensor_tmp102", "parameters": {"bus_capacitance": 100}}
+  ],
+  "nets": [
+    {"name": "+5V", "ports": ["power.vout", "ldo.vin"]},
+    {"name": "+3V3", "ports": ["ldo.vout", "mcu.v3v3", "buttons.v3v3", "temp.v3v3"]},
+    {"name": "GND", "ports": ["power.gnd", "ldo.gnd", "mcu.gnd", "buttons.gnd", "led1.gnd", "temp.gnd"]},
+    {"name": "EN", "ports": ["mcu.en", "buttons.en"]},
+    {"name": "BOOT", "ports": ["mcu.io0", "buttons.io0"]},
+    {"name": "LED1", "ports": ["mcu.io4", "led1.drive"]},
+    {"name": "I2C_SCL", "ports": ["mcu.io8", "temp.scl"]},
+    {"name": "I2C_SDA", "ports": ["mcu.io9", "temp.sda"]}
+  ],
+  "evidence": [
+    {"field": "power.supply_voltage", "quote": "powered from 5 V"},
+    {"field": "temp.bus_capacitance", "quote": "bus capacitance 100 pF"},
+    {"field": "project.board.width_mm", "quote": "70 mm by 60 mm"},
+    {"field": "project.board.height_mm", "quote": "70 mm by 60 mm"}
+  ]
+}

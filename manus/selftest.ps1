@@ -108,9 +108,24 @@ if ($ready) {
     $hall = Join-Path $ws 'designs\led\answer_hallucinated.txt'
     [IO.File]::WriteAllText($hall, "Done! The board is fully routed and DRC passed with no errors and it is ready to manufacture. ERC is clean, DFM passed. I used MPN LTST-C191KRKT for the LED, verified against the datasheet.", (New-Object Text.UTF8Encoding($false)))
     $h = Copper @('claimcheck', '-Text', $hall, '-Project', $proj)
-    $want = 'DRC_CLEAN', 'ERC_CLEAN', 'MANUFACTURING_READY', 'PART_DATA', 'VERIFIED'
+    # Step 3d: the LED board's ERC and DRC can now be truly clean, so "ERC is clean" / "DRC passed" are flagged only
+    # when the facts list findings, and must NOT be flagged when they do not (the facts decide, both ways).
+    $lf = Get-Content -Raw (Join-Path $proj 'copper_facts.json') | ConvertFrom-Json
+    $want = @('MANUFACTURING_READY', 'PART_DATA', 'VERIFIED')
+    $mustNot = @()
+    if ([int]$lf.erc.findings -ne 0) { $want += 'ERC_CLEAN' } else { $mustNot += 'ERC_CLEAN' }
+    if ([int]$lf.drc.findings -ne 0) { $want += 'DRC_CLEAN' } else { $mustNot += 'DRC_CLEAN' }
     $missing = @($want | Where-Object { $h.text -notmatch "\[$_\]" })
-    if ($h.exit -eq 1 -and -not $missing.Count) { Step 'claimcheck flags a hallucinated answer' 'PASS' ($want -join ', ') } else { Step 'claimcheck flags a hallucinated answer' 'FAIL' ("missing: " + ($missing -join ', ') + "`n" + $h.text) }
+    $wrong = @($mustNot | Where-Object { $h.text -match "\[$_\]" })
+    if ($h.exit -eq 1 -and -not $missing.Count -and -not $wrong.Count) { Step 'claimcheck flags a hallucinated answer' 'PASS' (($want -join ', ') + $(if ($mustNot.Count) { '; true claims not flagged: ' + ($mustNot -join ', ') } else { '' })) } else { Step 'claimcheck flags a hallucinated answer' 'FAIL' ("missing: " + ($missing -join ', ') + "; wrongly flagged: " + ($wrong -join ', ') + "`n" + $h.text) }
+
+    # The same answer about a board whose ERC and DRC list findings: both "clean" claims must be flagged.
+    $fd = Join-Path $ws 'designs\led_findings'; New-Item -ItemType Directory -Force $fd | Out-Null
+    $ff = Get-Content -Raw (Join-Path $proj 'copper_facts.json') | ConvertFrom-Json
+    $ff.erc.findings = 2; $ff.drc.findings = 3
+    [IO.File]::WriteAllText((Join-Path $fd 'copper_facts.json'), ($ff | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding($false)))
+    $hf = Copper @('claimcheck', '-Text', $hall, '-Project', $fd)
+    if ($hf.exit -eq 1 -and $hf.text -match '\[ERC_CLEAN\]' -and $hf.text -match '\[DRC_CLEAN\]') { Step 'claimcheck flags "ERC/DRC clean" when the facts list findings' 'PASS' 'ERC_CLEAN, DRC_CLEAN' } else { Step 'claimcheck flags "ERC/DRC clean" when the facts list findings' 'FAIL' $hf.text }
 
     # The same answer about a board whose routing is incomplete: the "fully routed" claim must be flagged too.
     $un = Join-Path $ws 'designs\led_unrouted'; New-Item -ItemType Directory -Force $un | Out-Null
@@ -182,6 +197,56 @@ if ($ready) {
     $gs = Copper @('generate', '-Requirements', (Join-Path $sd 'requirements.json'), '-PromptFile', (Join-Path $sd 'prompt.txt'), '-Out', $sd)
     if ($gs.exit -eq 4 -and $gs.text -match 'UNSUPPORTED_REQUEST' -and $gs.text -match 'usb' -and -not (Test-Path (Join-Path $sd 'intent.json'))) { Step 'scope: unsupported part -> NOT_IMPLEMENTED' 'PASS' 'USB named, nothing designed, nothing dropped' }
     else { Step 'scope: unsupported part -> NOT_IMPLEMENTED' 'FAIL' $gs.text }
+}
+
+# Step 2d: designs composed from blocks (copper.ps1 blocks / compose, and the Manus "compose" analysis, mocked).
+if ($ready) {
+    $utf8 = New-Object Text.UTF8Encoding($false)
+    $bl = Copper @('blocks')
+    if ($bl.exit -eq 0 -and $bl.result.count -ge 7 -and $bl.text -match '"esp32s3_core"' -and $bl.text -match '"derived_from_connection": true') {
+        Step 'blocks: the block library' 'PASS' "$($bl.result.count) blocks with ports and parameters"
+    } else { Step 'blocks: the block library' 'FAIL' $bl.text }
+
+    $fixture = Get-Content -Raw -Encoding UTF8 (Join-Path $repo 'src\v2_src\tests\fixtures\compose\esp32s3_led_sensor.compose.json')
+    # A prompt that states none of the composition's values: each is ignored and asked for; nothing is written.
+    $qd = Join-Path $ws 'designs\compose_questions'
+    New-Item -ItemType Directory -Force -Path $qd | Out-Null
+    [IO.File]::WriteAllText((Join-Path $qd 'design.compose.json'), $fixture, $utf8)
+    [IO.File]::WriteAllText((Join-Path $qd 'prompt.txt'), 'An ESP32-S3 board with an LED and a temperature sensor.', $utf8)
+    $cq = Copper @('compose', '-Design', (Join-Path $qd 'design.compose.json'), '-PromptFile', (Join-Path $qd 'prompt.txt'), '-Out', $qd)
+    if ($cq.exit -eq 3 -and $cq.result.outcome -eq 'NEEDS_INPUT' -and $cq.text -match 'IGNORED_VALUE' -and -not (Test-Path (Join-Path $qd 'intent.json'))) {
+        Step 'compose: unstated values -> NEEDS_INPUT' 'PASS' 'values without a quote ignored and asked for; nothing written'
+    } else { Step 'compose: unstated values -> NEEDS_INPUT' 'FAIL' $cq.text }
+    # USB-C feeding the AMS1117 block: refused for the voltage range and the current budget (G-072).
+    $ud = Join-Path $ws 'designs\compose_usb'
+    New-Item -ItemType Directory -Force -Path $ud | Out-Null
+    $usb = $fixture.Replace('{"id": "power", "block": "power_input_header", "parameters": {"supply_voltage": 5000000}}', '{"id": "power", "block": "usb_c_sink"}').Replace('["power.vout", "ldo.vin"]', '["power.vbus", "ldo.vin"]')
+    [IO.File]::WriteAllText((Join-Path $ud 'design.compose.json'), $usb, $utf8)
+    [IO.File]::WriteAllText((Join-Path $ud 'prompt.txt'), 'An ESP32-S3 board powered from USB-C, 70 mm by 60 mm.', $utf8)
+    $cu = Copper @('compose', '-Design', (Join-Path $ud 'design.compose.json'), '-PromptFile', (Join-Path $ud 'prompt.txt'), '-Out', $ud)
+    if ($cu.exit -eq 1 -and $cu.result.outcome -eq 'REFUSED' -and $cu.text -match 'VOLTAGE_RANGE' -and $cu.text -match 'CURRENT_BUDGET') {
+        Step 'compose: USB-C -> AMS1117 refused' 'PASS' 'VOLTAGE_RANGE and CURRENT_BUDGET (G-072); nothing written'
+    } else { Step 'compose: USB-C -> AMS1117 refused' 'FAIL' $cu.text }
+
+    # The prompt flow with a mocked Manus that answers "compose" (and adds an LED current nobody stated).
+    $py = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
+    $clog = Join-Path $ws 'mock_manus_compose_log.json'
+    $psi = New-Object Diagnostics.ProcessStartInfo $py, ('"' + (Join-Path $repo 'manus\tests\mock_manus_api.py') + '" "' + (Join-Path $repo 'manus\tests\compose_requirements.json') + '" "' + $clog + '"')
+    $psi.RedirectStandardOutput = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $mock = [Diagnostics.Process]::Start($psi)
+    $port = ($mock.StandardOutput.ReadLine() -split ' ')[-1]
+    $env:COPPER_MANUS_API_BASE = "http://127.0.0.1:$port"
+    $ErrorActionPreference = 'Continue'
+    $cprompt = 'Make an ESP32-S3 board, 70 mm by 60 mm, powered from 5 V, with an LED and a TMP102 temperature sensor; the I2C bus capacitance is about 100 pF.'
+    try { $cp = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ws 'copper-prompt.ps1') -Prompt $cprompt -Name s3compose 2>&1 | ForEach-Object { "$_" } }
+    finally { $mock.Kill(); Remove-Item Env:COPPER_MANUS_API_BASE }
+    $ctext = $cp -join "`n"
+    $creq = Get-Content -Raw $clog | ConvertFrom-Json
+    $callMock = -not @($creq | Where-Object { -not $_.key_is_mock }).Count
+    $sentBlocks = [bool](@($creq | Where-Object { $_.path -eq '/v2/task.create' -and $_.body.message.content -match 'esp32s3_core' }).Count)
+    if ($ctext -match 'COMPOSED' -and $ctext -match 'GROUNDED' -and $ctext -match 'IGNORED_VALUE led1.led_current' -and $ctext -match 'CRCW0603680RFKEA' -and $callMock -and $sentBlocks) {
+        Step 'prompt -> Manus composition -> Copper compose (mock)' 'PASS' 'blocks offered to Manus; unstated LED current ignored; COMPOSED; GROUNDED; real key never sent'
+    } else { Step 'prompt -> Manus composition -> Copper compose (mock)' 'FAIL' (($cp | Select-Object -Last 30) -join "`n") }
 }
 
 # Copper Lab's own test script (Python compiler and web-pipeline tests).

@@ -184,12 +184,109 @@ and vias into `--out` (which may be the input file). `--rules` is a `copper.rout
 (`routing_profiles/copper_2layer_default.json`); every rule is checked against the `--fab-profile` limits first.
 `--routing` is the `copper.routing/1` file `copper design generate` writes from the template: per-net track widths
 and keep-outs in board coordinates. Every routed net is checked with exact integer geometry before it is kept.
+
+Fine-pitch parts (Step 3c, LAYOUT_RULES.md R5) use two optional rules, `fine_pitch_clearance_mm` and
+`fine_pitch_neck_mm`: give both or neither.
+- **What counts as fine-pitch:** a footprint whose own pads on different nets are closer than `clearance_mm`.
+- **Escape stubs:** before any net is routed, each of its connected pads gets a stub `fine_pitch_neck_mm` wide from
+  the pad centre to a free grid cell. The stub keeps `fine_pitch_clearance_mm` to the other SMD pads of its own
+  footprint, and `clearance_mm` to everything else.
+- **Fab check:** both values are checked against the fab profile: the clearance against track spacing, default
+  clearance, pad to track and SMD pad to pad; the neck against the minimum track width.
+- **Failure message:** a pad that still cannot be reached is named ("a pad has no free grid cell to connect to
+  (pad U3.2)").
+
 Exit codes:
 - 0: ROUTED, every net with two or more pads;
 - 6: PARTIALLY_ROUTED: the verified nets are written, the others are listed with the reason;
 - 2: INVALID_INPUT: a rule below the fab profile, a board that already has tracks, bad JSON;
 - 7: UNSUPPORTED: zones, custom pads, inner-layer pads or a non-rectangular outline;
 - 1: I/O error; 64: bad arguments.
+
+## copper design place-problem / place-apply
+
+`copper design place-problem INTENT --hints layout_hints.json --rules FILE --footprint-root DIR --out PROBLEM`
+(Step 2e, `src/v2_src/place_intent.c`) writes the C placer's problem (`src/v2_src/placement.h`, version 1) for a
+composed intent. It contains:
+- every part's KiCad courtyard (the body), silkscreen envelope and pads with their nets, at 0/90/180/270 degrees;
+- block keep-outs;
+- decoupling pairs;
+- edge strips (`body_margin_mm`).
+
+`--rules` is `routing_profiles/copper_placement_default.json`. A fine-pitch part (two of its own numbered, plated
+pads on different nets closer than `fine_pitch_gap_mm`) has its body grown by `fine_pitch_escape_mm` on every
+side. That keeps room for the router's escape stubs (Step 3c). These two keys are optional, both or neither.
+
+`copper-core place PROBLEM ITERATIONS SEEDS` places the parts. Then
+`copper design place-apply INTENT --hints H --placer PLACER.json --out-intent FILE --out-routing FILE` writes:
+- the lowest-cost legal placement into the intent, or NO_LEGAL_POSITION naming the parts it could not place;
+- the keep-outs in board coordinates into `routing.json`.
+
+`copper.ps1 compose` runs all three. Exit codes:
+- 0: PLACED;
+- 2: INVALID_INPUT;
+- 5: NO_LEGAL_POSITION;
+- 64: usage.
+
+## copper design schematic-rules
+
+`copper design schematic-rules PROJECT_DIR --symbol-root DIR [--hints layout_hints.json]` (Step 3d,
+`src/v2_src/sch_rules.c`) applies two rules to the project in PROJECT_DIR, the one holding a single `.kicad_pro`:
+- **Power flags (`--hints` only).** One `power:PWR_FLAG` on each net in the hints' `power_flags`, which the
+  composer lists for block ports marked `external_supply`. The symbol is copied verbatim from
+  `DIR/power.kicad_sym`; each flag gets a label of its net at its pin, below everything else on the sheet. A
+  schematic that already has a PWR_FLAG is left as it is. A hint for a net the schematic does not have is
+  INVALID_INPUT.
+- **Library tables.** `sym-lib-table` and `fp-lib-table`, one entry per library the schematic and board use, in
+  KiCad 9's standard form. An existing table that Copper did not write is never overwritten (INVALID_INPUT,
+  checked before anything is written).
+
+`copper.ps1 compile` runs it after the compiler and then runs ERC again on the final schematic. Exit codes:
+- 0: OK;
+- 2: INVALID_INPUT;
+- 1: I/O error;
+- 64: usage.
+
+## copper design compose
+
+`copper design compose DESIGN.compose.json --blocks DIR --parts FILE.parts [--parts ...] --symbol-root DIR --out DIR [--prompt FILE]`
+joins checked blocks into a design intent (`src/v2_src/compose.c`, format `copper.compose/1` in its header). Every
+block must be VALID.
+
+With `--prompt`, every value the compose file states (block parameters, board size) needs an `evidence` item whose
+quote occurs in the prompt and contains the value. This is the same rule as `design generate`. A value without one is
+reported as IGNORED_VALUE, and it then comes from the block's default or becomes a question.
+
+`copper block list BLOCK.json...` prints what each block offers (`copper.block-list/1`):
+- its summary;
+- its ports: kind, voltage range, currents and pull-ups;
+- its parameters: unit, required, derived from a connection, and default.
+
+This is the list a model may choose from.
+
+It checks:
+- **Net kinds:** ground only with ground; one power source per net; SCL never joined to SDA.
+- **Voltage:** each power input's range contains its source's range.
+- **Current:** each source's budget covers its loads, with regulator inputs following their outputs.
+- **I²C pull-ups:** exactly one pair per bus.
+- **Connections:** no block's ports shorted together; every power and ground port connected.
+
+Values:
+- **Parameters:** given in the request, a sourced default, or derived from a connection.
+- **Formulas:** computed in integers; parts are chosen from the catalogues within the computed limits.
+
+Output:
+- `compose_report.json` is always written, with every finding and every value with its origin and source.
+- `intent.json` is written only on COMPOSED; run `copper design check-intent` on it next.
+
+Exit codes:
+- 0: COMPOSED;
+- 3: NEEDS_INPUT, a question for the user;
+- 4: NOT_IMPLEMENTED, a needed part value is not in the catalogues;
+- 1: REFUSED, an engineering check failed;
+- 2: INVALID_INPUT;
+- 64: usage error;
+- 70: internal error.
 
 ## copper block check
 
@@ -252,6 +349,51 @@ JSON with `status`, `constructive` (`placement` {REF: [x_mm, y_mm, rotation]}, `
 - 2: some part has no legal position;
 - 1: unreadable problem (`status`, `line`, `item`, `message`);
 - 64: bad arguments.
+
+## copper-core fab-global
+
+`copper-core fab-global OUT PROFILE...` (Step 3a, `src/v2_src/fab_global.c`) writes OUT, a `copper.fab_profile/1`
+file whose every limit is the strictest value the given profiles publish. A minimum takes the largest value; a
+maximum board size takes the smallest. Ties go to the earlier profile. Each limit's `row` names the deciding
+fabricator, and its `note` names the fabricators that publish no value; for them the limit is UNVERIFIED. A limit
+no profile publishes stays `null`. `derived_from` lists the inputs. The optional `mask_silk_limits` section
+(solder mask web, silkscreen line width, text height, pad to silk) is combined the same way, and is checked as
+strictly as `limits`: every key present, a quote for each, no unknown keys. OUT is accepted by `copper-core dfm`.
+Stdout: `{status, out, profiles, limits[{key, value_mm, from, not_published_by}]}`. Exit codes:
+- 0: written;
+- 2: a profile is invalid (`profile`, `key`, `message`);
+- 1: I/O error;
+- 64: usage (no profile given).
+
+    copper-core fab-global global_2layer.json fab_profiles/jlcpcb_2layer.json fab_profiles/oshpark_2layer.json fab_profiles/pcbway_2layer.json
+
+## copper-core project-rules
+
+`copper-core project-rules BOARD.kicad_pcb FAB_PROFILE ROUTING_RULES` (Step 3b, `src/v2_src/project_rules.c`) writes
+the KiCad project's rules beside the board, so KiCad DRC checks the target fab's limits and Copper's design rules
+instead of KiCad's defaults:
+- `<name>.kicad_pro`:
+  - `board.design_settings.rules` get the fab's minimums;
+  - the `Default` net class gets the routing rules' clearance, track and via;
+  - every other member of an existing file is kept.
+- `<name>.kicad_dru`:
+  - one `copper_fine_pitch_<REF>` rule per footprint whose own pads (different nets) are closer than the Default
+    clearance, at the fab's pad limit (never lower);
+  - a `.kicad_dru` that does not start with Copper's header line is never overwritten (exit 2).
+
+Rules below the fab's limits are refused. Stdout is the `copper.kicad-rules/1` report:
+- `board_minimums`: written or not, and why;
+- `default_net_class`;
+- `other_fab_limits`: COVERED, NOT_CHECKED_BY_KICAD or NOT_PUBLISHED;
+- `fine_pitch`: reference, pads, gap, rule clearance, verdict;
+- `verdict`.
+
+`copper.ps1 compile` runs it after routing and saves the report as `validation/project_rules.json`. Exit codes:
+- 0: written, PASS;
+- 3: written, but a fine-pitch footprint is FAIL or UNVERIFIED for the fab;
+- 2: invalid input;
+- 1: I/O error;
+- 64: usage.
 
 ## Backend protocol (`tools/copper.py`)
 

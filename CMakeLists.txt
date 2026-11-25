@@ -90,6 +90,8 @@ add_library(copper_v2 STATIC
     src/v2_src/dfm_cpu_ref.c
     src/v2_src/rest_server.c
     src/v2_src/placement.c
+    src/v2_src/fab_global.c   # Step 3a: strictest of several fab profiles
+    src/v2_src/project_rules.c  # Step 3b: KiCad project rules from the fab profile
     src/v2_src/sha256.c  # filesystem.c: fs_sha256_* (design overlay)
 )
 target_include_directories(copper_v2 PUBLIC src/v2_src)
@@ -179,6 +181,8 @@ if(HWCOMPILER_BUILD_TESTS)
         dfm_gpu
         rest_server
         placement
+        fab_global
+        project_rules
     )
 
     # A stand-in for kicad-cli for tests/kicad_cli_test.c (records its argv; modes for each failure path).
@@ -188,7 +192,7 @@ if(HWCOMPILER_BUILD_TESTS)
     endif()
     foreach(test_name IN LISTS TESTS)
         add_executable(${test_name}_test tests/${test_name}_test.c)
-        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm" OR test_name STREQUAL "dfm_gpu" OR test_name STREQUAL "rest_server" OR test_name STREQUAL "placement")
+        if(test_name STREQUAL "g2_types" OR test_name STREQUAL "kicad_native" OR test_name STREQUAL "board" OR test_name STREQUAL "json" OR test_name STREQUAL "dfm_v2" OR test_name STREQUAL "kicad_cli" OR test_name STREQUAL "gerber" OR test_name STREQUAL "finding" OR test_name STREQUAL "tool_server" OR test_name STREQUAL "llm" OR test_name STREQUAL "dfm_gpu" OR test_name STREQUAL "rest_server" OR test_name STREQUAL "placement" OR test_name STREQUAL "fab_global" OR test_name STREQUAL "project_rules")
             target_link_libraries(${test_name}_test PRIVATE copper_v2)
         else()
             target_link_libraries(${test_name}_test PRIVATE hwcore)
@@ -206,6 +210,14 @@ if(HWCOMPILER_BUILD_TESTS)
                 BOARD_GOLDEN_DIR="${BOARD_ROOT}/tests/golden/board"
                 DIVIDER_BOARD="${BOARD_ROOT}/examples/generated/divider/design.kicad_pcb"
                 KICAD9_DRILL="${BOARD_ROOT}/manufacturing_audit/drill_test/design.drl")
+        endif()
+        if(test_name STREQUAL "project_rules")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" PR_ROOT_PATH)
+            target_compile_definitions(${test_name}_test PRIVATE PR_ROOT="${PR_ROOT_PATH}")
+        endif()
+        if(test_name STREQUAL "fab_global")
+            file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" FAB_ROOT_PATH)
+            target_compile_definitions(${test_name}_test PRIVATE FAB_ROOT="${FAB_ROOT_PATH}")
         endif()
         if(test_name STREQUAL "dfm_v2")
             file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" DFM_ROOT)
@@ -434,7 +446,10 @@ set(COPPER_DESIGN_SOURCES
     src/v2_src/template_gen.c   # deterministic design generation from analysed requirements
     src/v2_src/autoroute.c      # deterministic two-layer board router
     src/v2_src/parts_check.c    # per-part report on a curated part catalogue (Step 1a)
-    src/v2_src/blocks.c)        # copper.block/1 definitions: load and check (Step 2a)
+    src/v2_src/blocks.c         # copper.block/1 definitions: load and check (Step 2a)
+    src/v2_src/compose.c        # join checked blocks into a design intent (Step 2c)
+    src/v2_src/place_intent.c   # placement problem and placed intent for the C placer (Step 2e)
+    src/v2_src/sch_rules.c)     # PWR_FLAGs on external-supply nets and the project library tables (Step 3d)
 add_library(copper_design STATIC ${COPPER_DESIGN_SOURCES})
 target_include_directories(copper_design PUBLIC src/v2_src)
 function(copper_design_policy target)
@@ -459,7 +474,7 @@ if(WIN32)
     target_link_libraries(copper_design PUBLIC ole32)   # CoCreateGuid (copper_project.c)
 endif()
 # Geometry and DFM modules of the overlay: no floating point or libm (CLAUDE.md section 2).
-foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c autoroute.c fab_rules.c jlc_catalogue.c parts_check.c blocks.c)
+foreach(module design_board.c board_kicad.c dfm_check.c placer.c router.c autoroute.c fab_rules.c jlc_catalogue.c parts_check.c blocks.c compose.c place_intent.c fab_global.c project_rules.c sch_rules.c)
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/v2_src/${module}" module_source)
     if(module_source MATCHES "#[ \t]*include[ \t]*<math\\.h>" OR
        module_source MATCHES "(^|[^A-Za-z0-9_])(double|float)([^A-Za-z0-9_]|$)" OR
@@ -475,7 +490,7 @@ if(HWCOMPILER_BUILD_TESTS)
     foreach(pair core:test_core design:test_design catalogue_asset:test_catalogue_assets topology:test_topology
                  engineering:test_engineering_loop optimization:test_optimization_loop intent_check:test_intent_check
                  template_gen:test_template_gen autoroute:test_autoroute parts_check:test_parts_check
-                 blocks:test_blocks)
+                 blocks:test_blocks compose:test_compose place_intent:test_place_intent sch_rules:test_sch_rules)
         string(REPLACE ":" ";" parts "${pair}")
         list(GET parts 0 name)
         list(GET parts 1 source)
@@ -493,4 +508,12 @@ if(HWCOMPILER_BUILD_TESTS)
     # Every parts_library/*.parts file parses and has no FAIL finding (KiCad not needed; Step 1b).
     add_test(NAME parts_library_parse COMMAND ${CMAKE_COMMAND} "-DCOPPER=$<TARGET_FILE:copper>"
              "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}" -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/parts_library_check.cmake)
+    # KiCad DRC applies the rules copper-core project-rules writes (Step 3b; KICAD_CLI, else SKIPPED).
+    add_test(NAME project_rules_drc COMMAND ${CMAKE_COMMAND} "-DCORE=$<TARGET_FILE:copper-core>"
+             "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}" "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/project_rules_drc"
+             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/project_rules_drc.cmake)
+    set_tests_properties(project_rules_drc PROPERTIES SKIP_REGULAR_EXPRESSION "SKIPPED:")
+    # Every blocks_library/*.block.json is VALID against the whole parts library (Step 2b).
+    add_test(NAME blocks_library_valid COMMAND ${CMAKE_COMMAND} "-DCOPPER=$<TARGET_FILE:copper>"
+             "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}" -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/blocks_library_check.cmake)
 endif()

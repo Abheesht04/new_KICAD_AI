@@ -1,0 +1,21 @@
+# ctest blocks_library_valid: every blocks_library/*.block.json must be VALID (exit 0) against all parts_library files.
+# usage: cmake -DCOPPER=<copper.exe> -DROOT=<source dir> -P blocks_library_check.cmake
+file(GLOB blocks "${ROOT}/blocks_library/*.block.json")
+file(GLOB libraries "${ROOT}/parts_library/*.parts")
+list(LENGTH blocks nblocks)
+list(LENGTH libraries nlibs)
+if(nblocks EQUAL 0 OR nlibs EQUAL 0)
+    message(FATAL_ERROR "no blocks (${nblocks}) or no part libraries (${nlibs}) under ${ROOT}")
+endif()
+set(parts_args "")
+foreach(library ${libraries})
+    list(APPEND parts_args --parts "${library}")
+endforeach()
+foreach(block ${blocks})
+    execute_process(COMMAND "${COPPER}" block check "${block}" ${parts_args}
+                    RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+    if(NOT code EQUAL 0)
+        message(FATAL_ERROR "${block}: exit ${code} (want 0, VALID)\n${out}${err}")
+    endif()
+    message(STATUS "${block}: VALID")
+endforeach()

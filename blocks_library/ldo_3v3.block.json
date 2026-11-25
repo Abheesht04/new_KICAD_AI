@@ -1,0 +1,49 @@
+{
+  "format": "copper.block/1",
+  "name": "ldo_3v3",
+  "summary": "AMS1117-3.3 linear regulator (SOT-223) with the 22 uF solid tantalum output capacitor its datasheet asks for.",
+  "sources": [
+    {"id": "ams_ratings", "document": "AMS1117 datasheet (ds1117.pdf): absolute maximum ratings, input voltage 15 V; AMS1117-3.3 output 3.300 V typ at VIN 4.8 V",
+     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "revision": "no revision or date printed (retrieved 2026-11-21)", "page": 2},
+    {"id": "ams_dropout", "document": "AMS1117 datasheet (ds1117.pdf): dropout 1.3 V max at IOUT 0.8 A; dropout is specified up to 0.8 A only (note 4)",
+     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "revision": "no revision or date printed (retrieved 2026-11-21)", "page": 3},
+    {"id": "ams_quiescent", "document": "AMS1117 datasheet (ds1117.pdf): quiescent current 11 mA max at (VIN - VOUT) = 1.5 V",
+     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "revision": "no revision or date printed (retrieved 2026-11-21)", "page": 3},
+    {"id": "ams_stability", "document": "AMS1117 datasheet (ds1117.pdf), Stability: 22 uF solid tantalum on the output ensures stability for all operating conditions",
+     "url": "http://www.advanced-monolithic.com/pdf/ds1117.pdf", "revision": "no revision or date printed (retrieved 2026-11-21)", "page": 4},
+    {"id": "esp32s3_hdg", "document": "Espressif ESP32-S3 Hardware Design Guidelines, section 1.3.2 Power Supply",
+     "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/esp-hardware-design-guidelines-en-master-esp32s3.pdf",
+     "revision": "release master, Nov 12, 2026 (retrieved 2026-11-21)", "page": 8}
+  ],
+  "parameters": [
+    {"name": "rail", "unit": "uV", "required": false, "default": 3300000, "source": "ams_ratings"},
+    {"name": "input_voltage", "unit": "uV", "required": true, "min": 1, "max": 15000000,
+     "from": {"port": "vin", "quantity": "voltage_max"}},
+    {"name": "load_current", "unit": "uA", "required": true, "min": 1, "max": 1000000,
+     "from": {"port": "vout", "quantity": "current"}}
+  ],
+  "ports": [
+    {"name": "vin", "kind": "power_in", "voltage_min": 4600000, "voltage_max": 15000000, "source": "ams_dropout",
+     "current_follows": "vout", "current": 11000, "current_source": "ams_quiescent",
+     "note": "minimum = 3.3 V output + 1.3 V maximum dropout at 0.8 A (page 3); maximum = 15 V absolute maximum input (page 2)"},
+    {"name": "vout", "kind": "power_out", "voltage_parameter": "rail", "current_max": 800000, "current_source": "ams_dropout",
+     "note": "0.8 A: the dropout is specified up to 0.8 A only (the datasheet's headline output current is 1 A)"},
+    {"name": "gnd", "kind": "ground"}
+  ],
+  "parts": [
+    {"role": "regulator", "prefix": "U", "select": {"part_id": "ldo_sot223_ams1117_3v3"},
+     "pins": {"vin": "vin", "vout": "vout", "gnd": "gnd"}},
+    {"role": "output_capacitor", "prefix": "C", "select": {"part_id": "cap_tant_b_22u_10v_vishay_293d"},
+     "pins": {"positive": "vout", "negative": "gnd"}}
+  ],
+  "formulas": [
+    {"name": "dissipation", "function": "ldo_dissipation", "source": "ams_ratings",
+     "inputs": {"vin": "input_voltage", "vout": "rail", "current": "load_current"}}
+  ],
+  "notes": [
+    {"text": "Output capacitor: 22 uF solid tantalum, as the datasheet asks for stability; a ceramic capacitor is not substituted.", "source": "ams_stability"},
+    {"text": "The datasheet gives no input capacitor value. The power-input blocks carry the 10 uF Espressif recommends at the power entrance.", "source": "esp32s3_hdg"},
+    {"text": "Dropout is specified up to 0.8 A only; from a USB 5 V source (4.0 V at 3 A in the conservative range) the input can fall below the 4.6 V this block needs.", "source": "ams_dropout"},
+    {"text": "Dissipation (V_in - 3.3 V) x I_load must be checked against the SOT-223 package; the composer computes it (formula 'dissipation').", "source": "ams_ratings"}
+  ]
+}

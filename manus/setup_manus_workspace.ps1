@@ -47,6 +47,9 @@ $cfg = [ordered]@{
     fab_profile     = Join-Path $repo 'fab_profiles\jlcpcb_2layer.json'
     templates       = Join-Path $repo 'design_templates\copper_templates.v1.json'
     routing_rules   = Join-Path $repo 'routing_profiles\copper_2layer_default.json'
+    placement_rules = Join-Path $repo 'routing_profiles\copper_placement_default.json'
+    blocks_dir      = Join-Path $repo 'blocks_library'
+    parts_dir       = Join-Path $repo 'parts_library'
 }
 
 if ((Test-Path -LiteralPath $Workspace) -and -not $Force) {

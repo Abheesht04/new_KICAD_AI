@@ -4,11 +4,11 @@
   "required": ["schema", "schema_version", "circuit", "summary", "supply_voltage_v", "load_current_a", "logic_voltage_v",
                "switch_part", "gate_resistor_ohm", "pulldown_ohm", "flyback_diode", "led_color", "led_current_ma",
                "led_forward_voltage_v", "board_width_mm", "board_height_mm", "evidence", "open_questions",
-               "unsupported_requests"],
+               "unsupported_requests", "composition"],
   "properties": {
     "schema": {"type": "string", "enum": ["copper.requirements"]},
     "schema_version": {"type": "integer", "enum": [1]},
-    "circuit": {"type": "string", "enum": ["low_side_switch", "led_indicator", "esp32_led", "other"]},
+    "circuit": {"type": "string", "enum": ["low_side_switch", "led_indicator", "esp32_led", "compose", "other"]},
     "summary": {"type": "string"},
     "supply_voltage_v": {"type": ["number", "null"]},
     "load_current_a": {"type": ["number", "null"]},
@@ -32,6 +32,52 @@
       }
     },
     "open_questions": {"type": "array", "items": {"type": "string"}},
-    "unsupported_requests": {"type": "array", "items": {"type": "string"}}
+    "unsupported_requests": {"type": "array", "items": {"type": "string"}},
+    "composition": {
+      "description": "Only for circuit 'compose'; otherwise empty lists and nulls. Kept within Manus's 5-level nesting limit: parameters are a flat list.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blocks", "parameters", "nets", "board_width_mm", "board_height_mm", "evidence"],
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "block"],
+            "properties": {"id": {"type": "string"}, "block": {"type": "string"}}
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["block_id", "name", "value"],
+            "properties": {"block_id": {"type": "string"}, "name": {"type": "string"}, "value": {"type": "integer"}}
+          }
+        },
+        "nets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "ports"],
+            "properties": {"name": {"type": ["string", "null"]}, "ports": {"type": "array", "items": {"type": "string"}}}
+          }
+        },
+        "board_width_mm": {"type": ["integer", "null"]},
+        "board_height_mm": {"type": ["integer", "null"]},
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "quote"],
+            "properties": {"field": {"type": "string"}, "quote": {"type": "string"}}
+          }
+        }
+      }
+    }
   }
 }

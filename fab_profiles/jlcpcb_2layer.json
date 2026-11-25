@@ -49,6 +49,14 @@
     "board_max_thin_x_mm": {"value": 599, "row": "Maximum Dimensions", "quote": "The thinner FR4 PCBs are 599 x 497 mm maximum."},
     "board_max_thin_y_mm": {"value": 497, "row": "Maximum Dimensions", "quote": "The thinner FR4 PCBs are 599 x 497 mm maximum."}
   },
+  "mask_silk_limits": {
+    "retrieved": "2026-11-25",
+    "solder_mask_web_min_mm": {"value": 0.10, "row": "Soldermask bridge", "quote": "1oz: Min. pad spacing: 0.10 mm (green, red, yellow, blue, purple)",
+      "note": "Green mask assumed. The same row gives 0.13 mm for black and white, and 0.20 mm for 2 oz copper."},
+    "silk_line_width_min_mm": {"value": 0.15, "row": "Minimum Line Width", "quote": "Characters width less than 0.15mm will be unidentifiable."},
+    "silk_text_height_min_mm": {"value": 1.0, "row": "Minimum text height", "quote": "Characters height less than 40 mil(1.0mm) will be unidentifiable."},
+    "pad_to_silk_min_mm": {"value": 0.15, "row": "Pad To Silkscreen", "quote": "The Minimum Distance Between Pad and Silkscreen is 0.15mm."}
+  },
   "conflicts_on_page": [
     {"limit": "drill_min_mm", "used": "0.15 mm (Drill Diameter row, 2-layer)", "other": "Min. drill diameter for 2- or more-layer PCBs is 0.1 mm (more costly!)",
      "why": "The stricter value; 0.1 mm also needs thickness <= 1 mm and ENIG/OSP."},

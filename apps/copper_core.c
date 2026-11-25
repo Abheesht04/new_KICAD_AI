@@ -14,6 +14,8 @@
 #include "filesystem.h"
 #include "json.h"
 #include "placement.h"
+#include "fab_global.h"
+#include "project_rules.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -471,7 +473,92 @@ static int place(const char *path,const char *iters,const char *seeds) {
     } else rc=st==PL_NO_LEGAL_POSITION?2:1;
     puts("]}"); arena_destroy(&arena); return rc;
 }
+/* copper-core fab-global OUT PROFILE... (Step 3a): the strictest published value of each limit over the profiles,
+   written as a copper.fab_profile/1 file; a summary on stdout. Exit 0 OK, 2 a profile is invalid, 1 I/O, 64 usage. */
+static void mm_or_null(G2Nm nm,bool present) {
+    if(!present) { fputs("null",stdout); return; }
+    printf("%lld.%06lld",(long long)(nm/1000000),(long long)(nm%1000000));
+}
+static int fab_global_cmd(int argc,char **argv) {
+    size_t n=(size_t)(argc-3);
+    Arena arena; arena_init(&arena,1<<16);
+    FabGlobalInput *in=arena_alloc_array(&arena,sizeof *in,n);
+    FabGlobalError e={0}; FabGlobal g; const char *text; size_t len; int rc=0;
+    FabGlobalStatus st=in?fab_global_load(&arena,(const char *const *)(argv+3),n,in,&e):FAB_GLOBAL_OUT_OF_MEMORY;
+    if(st==FAB_GLOBAL_OK) st=fab_global_build(&arena,in,n,&g,&e);
+    if(st!=FAB_GLOBAL_OK) {
+        printf("{\"status\":\"%s\",\"profile\":",fab_global_status_name(st)); json_string(stdout,argv[3+e.profile]);
+        fputs(",\"key\":",stdout); json_string(stdout,e.key?e.key:""); fputs(",\"message\":",stdout); json_string(stdout,e.message?e.message:""); puts("}");
+        arena_destroy(&arena); return st==FAB_GLOBAL_INVALID_PROFILE?2:1;
+    }
+    if(fab_global_write(&arena,in,&g,"global_2layer",&text,&len)!=FAB_GLOBAL_OK) { fputs("fab-global: out of memory\n",stderr); arena_destroy(&arena); return 1; }
+    FILE *f=fopen(argv[2],"wb");
+    if(!f || fwrite(text,1,len,f)!=len) rc=1;
+    if(f && fclose(f)) rc=1;
+    if(rc) { fprintf(stderr,"fab-global: cannot write %s\n",argv[2]); arena_destroy(&arena); return 1; }
+    printf("{\"status\":\"OK\",\"out\":"); json_string(stdout,argv[2]); printf(",\"profiles\":%zu,\"limits\":[",n);
+    for(int k=0;k<DFM_LIMIT_COUNT+FAB_MASK_SILK_COUNT;k++) {
+        bool ms=k>=DFM_LIMIT_COUNT; int j=ms?k-DFM_LIMIT_COUNT:k;
+        const DfmLimitValue *v=ms?&g.mask_silk[j]:&g.limits[j]; int from=ms?g.mask_silk_from[j]:g.from[j];
+        size_t missing=ms?g.mask_silk_missing[j]:g.missing[j];
+        if(k) fputc(',',stdout);
+        fputs("{\"key\":",stdout); json_string(stdout,ms?fab_mask_silk_key((FabMaskSilkLimit)j):dfm_limit_key((DfmLimit)j));
+        fputs(",\"value_mm\":",stdout); mm_or_null(v->nm,v->present);
+        fputs(",\"from\":",stdout); if(from<0) fputs("null",stdout); else json_string(stdout,in[from].profile.fabricator);
+        printf(",\"not_published_by\":%zu}",missing);
+    }
+    puts("]}"); arena_destroy(&arena); return 0;
+}
+/* copper-core project-rules BOARD.kicad_pcb FAB_PROFILE ROUTING_RULES (Step 3b): writes the project's .kicad_pro
+   rules and Default net class, and the .kicad_dru fine-pitch rules, beside the board; the report on stdout.
+   Exit 0 written and PASS; 3 written, but a fine-pitch footprint is FAIL or UNVERIFIED for the fab; 2 invalid input
+   (or a .kicad_dru that Copper did not write, which is never overwritten); 1 I/O; 64 usage. */
+static int project_rules_cmd(const char *pcb,const char *fab_path,const char *rules_path) {
+    Arena arena; arena_init(&arena,1<<20); int rc=0;
+    size_t n=strlen(pcb); const char *ext=".kicad_pcb"; size_t en=strlen(ext);
+    if(n<=en || strcmp(pcb+n-en,ext)) { fputs("project-rules: BOARD must be a .kicad_pcb file\n",stderr); arena_destroy(&arena); return 64; }
+    char *pro=arena_alloc(&arena,n+1), *dru=arena_alloc(&arena,n+1), *proname;
+    memcpy(pro,pcb,n-en); strcpy(pro+n-en,".kicad_pro");
+    memcpy(dru,pcb,n-en); strcpy(dru+n-en,".kicad_dru");
+    proname=strrchr(pro,'/'); { char *bs=strrchr(pro,'\\'); if(bs && (!proname || bs>proname)) proname=bs; }
+    proname=proname?proname+1:pro;
+    Board b; BoardError be; FabGlobalInput fab; FabGlobalError fe; JsonValue *rules_json=NULL,*pro_json=NULL; JsonError je;
+    PrDesignRules dr; PrError pe={0}; PrResult res;
+    const char *paths[1]={fab_path};
+    const char *what=NULL,*msg=NULL;
+    if(board_load(&arena,pcb,&b,&be)!=BOARD_OK) { what=pcb; msg=be.message?be.message:"the board could not be read"; }
+    else if(fab_global_load(&arena,paths,1,&fab,&fe)!=FAB_GLOBAL_OK) { what=fab_path; msg=fe.message?fe.message:"invalid fab profile"; }
+    else if(json_parse_file(&arena,rules_path,&rules_json,&je)!=JSON_OK) { what=rules_path; msg=je.message?je.message:"the routing rules could not be read"; }
+    else if(pr_design_rules_from(rules_json,&dr,&pe)!=PR_OK) { what=rules_path; msg=pe.message; }
+    if(!what) {
+        const unsigned char *data; size_t len;
+        if(fs_read_file_arena(&arena,pro,&data,&len)==FS_OK) {
+            if(json_parse(&arena,(const char *)data,len,&pro_json,&je)!=JSON_OK) { what=pro; msg="the existing .kicad_pro is not valid JSON"; }
+        }
+        if(!what && fs_read_file_arena(&arena,dru,&data,&len)==FS_OK &&
+           (len<strlen(PR_DRU_HEADER) || memcmp(data,PR_DRU_HEADER,strlen(PR_DRU_HEADER)))) { what=dru; msg="this .kicad_dru was not written by Copper; it is never overwritten"; }
+    }
+    if(!what && pr_build(&arena,&b,&fab.profile,&fab.mask_silk,&dr,pro_json,proname,&res,&pe)!=PR_OK) { what=pe.key?pe.key:pcb; msg=pe.message; }
+    if(what) {
+        printf("{\"status\":\"INVALID_INPUT\",\"where\":"); json_string(stdout,what); fputs(",\"message\":",stdout); json_string(stdout,msg?msg:""); puts("}");
+        arena_destroy(&arena); return 2;
+    }
+    if(fs_write_file_atomic_replace(pro,res.pro_text,res.pro_len)!=FS_OK) { fprintf(stderr,"project-rules: cannot write %s\n",pro); rc=1; }
+    else if(fs_write_file_atomic_replace(dru,res.dru_text,res.dru_len)!=FS_OK) { fprintf(stderr,"project-rules: cannot write %s\n",dru); rc=1; }
+    if(rc) { arena_destroy(&arena); return rc; }
+    fwrite(res.report_text,1,res.report_len,stdout);
+    arena_destroy(&arena);
+    return res.verdict==DFM_PASS?0:3;
+}
 int main(int argc,char **argv) {
+    if(argc>=2 && !strcmp(argv[1],"project-rules")) {
+        if(argc!=5) { fputs("usage: copper-core project-rules BOARD.kicad_pcb FAB_PROFILE ROUTING_RULES\n",stderr); return 64; }
+        return project_rules_cmd(argv[2],argv[3],argv[4]);
+    }
+    if(argc>=2 && !strcmp(argv[1],"fab-global")) {
+        if(argc<4) { fputs("usage: copper-core fab-global OUT PROFILE...\n",stderr); return 64; }
+        return fab_global_cmd(argc,argv);
+    }
     if(argc>=2 && !strcmp(argv[1],"serve-http")) return serve_http(argc,argv);
     if(argc>=4 && !strcmp(argv[1],"agent-eval")) return agent_eval(argc,argv);
     if(argc>=2 && !strcmp(argv[1],"serve")) return serve(argc,argv);

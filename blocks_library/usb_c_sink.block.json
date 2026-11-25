@@ -1,0 +1,47 @@
+{
+  "format": "copper.block/1",
+  "name": "usb_c_sink",
+  "summary": "USB Type-C receptacle (USB 2.0) as a power sink at default USB power: 5.1 kohm Rd on CC1 and CC2, D+/D- out, bulk capacitor at the power entrance.",
+  "sources": [
+    {"id": "usbc_spec", "document": "USB Type-C Cable and Connector Specification, Release 2.0, table 4-25 Sink CC Termination (Rd) Requirements",
+     "url": "https://www.usb.org/sites/default/files/USB%20Type-C%20Spec%20R2.0%20-%20August%202019.pdf",
+     "revision": "Release 2.0, August 2019 (retrieved 2026-11-21)", "page": 236},
+    {"id": "usbc_vbus", "document": "USB Type-C Cable and Connector Specification, Release 2.0, section 4.8.1.2 (USB-based chargers with captive cables): 4.75 V - 5.5 V with no load and 4.0 V - 5.5 V at 3 A at the plug (figure 4-38). Section 4.4.2 (page 141) says the default VBUS range of other sources is set by the USB 2.0 / 3.2 specifications, which were not retrieved; this wider range is used as a conservative bound",
+     "url": "https://www.usb.org/sites/default/files/USB%20Type-C%20Spec%20R2.0%20-%20August%202019.pdf",
+     "revision": "Release 2.0, August 2019 (retrieved 2026-11-21)", "page": 226},
+    {"id": "usbc_default", "document": "USB Type-C Cable and Connector Specification, Release 2.0: Default USB Type-C Current is the USB specification's high-power value, 500 mA for USB 2.0 ports",
+     "url": "https://www.usb.org/sites/default/files/USB%20Type-C%20Spec%20R2.0%20-%20August%202019.pdf",
+     "revision": "Release 2.0, August 2019 (retrieved 2026-11-21)", "page": 34},
+    {"id": "gct_usb4105", "document": "GCT drawing USB4105 (pin table: SHELL = GND)", "url": "https://gct.co/files/drawings/usb4105.pdf",
+     "revision": "Rev B4, 18/12/23 (retrieved 2026-11-21)", "page": 1},
+    {"id": "esp32s3_hdg", "document": "Espressif ESP32-S3 Hardware Design Guidelines, section 1.3.2 Power Supply",
+     "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/esp-hardware-design-guidelines-en-master-esp32s3.pdf",
+     "revision": "release master, Nov 12, 2026 (retrieved 2026-11-21)", "page": 8}
+  ],
+  "ports": [
+    {"name": "vbus", "external_supply": true, "kind": "power_out", "voltage_min": 4000000, "voltage_max": 5500000, "source": "usbc_vbus",
+     "current_max": 500000, "current_source": "usbc_default",
+     "note": "the lowest bound of figure 4-38 (4.0 V at 3 A) is used, so the range is conservative for lighter loads"},
+    {"name": "gnd", "external_supply": true, "kind": "ground"},
+    {"name": "usb_dp", "kind": "signal"},
+    {"name": "usb_dn", "kind": "signal"}
+  ],
+  "nets": ["cc1", "cc2"],
+  "parts": [
+    {"role": "receptacle", "prefix": "J", "select": {"part_id": "usb_c_receptacle_usb2_gct_usb4105_gf_a"},
+     "pins": {"vbus": "vbus", "gnd": "gnd", "cc1": "cc1", "cc2": "cc2", "dp": "usb_dp", "dn": "usb_dn",
+              "sbu1": "nc", "sbu2": "nc", "shield": "gnd"}},
+    {"role": "rd_cc1", "prefix": "R", "select": {"part_id": "res_0603_5k1_vishay_crcw"},
+     "pins": {"terminal_1": "cc1", "terminal_2": "gnd"}},
+    {"role": "rd_cc2", "prefix": "R", "select": {"part_id": "res_0603_5k1_vishay_crcw"},
+     "pins": {"terminal_1": "cc2", "terminal_2": "gnd"}},
+    {"role": "bulk_capacitor", "prefix": "C", "select": {"part_id": "cap_0805_10u_25v_x5r_murata"},
+     "pins": {"terminal_1": "vbus", "terminal_2": "gnd"}}
+  ],
+  "notes": [
+    {"text": "A sink uses Rd = 5.1 kohm +/-10 % to GND on each CC pin; the 1 % resistors meet it. This advertises a sink only: no USB PD, so the source gives default USB power.", "source": "usbc_spec"},
+    {"text": "The shield is connected to GND, as the GCT drawing's pin table lists SHELL = GND.", "source": "gct_usb4105"},
+    {"text": "SBU1 and SBU2 are not used by USB 2.0 and are left unconnected.", "source": "usbc_spec"},
+    {"text": "At least 10 uF at the main power entrance (Espressif); an ESD protection diode is also suggested and is NOT included (no ESD part in the library yet).", "source": "esp32s3_hdg"}
+  ]
+}

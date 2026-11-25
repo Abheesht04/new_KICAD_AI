@@ -26,6 +26,9 @@
 #include "json.h"
 #include "parts_check.h"
 #include "blocks.h"
+#include "compose.h"
+#include "place_intent.h"
+#include "sch_rules.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -80,6 +83,13 @@ static void print_usage(void) {
     puts("      grounding gate for a model-written design intent: exit 0 GROUNDED, 2 REJECTED (findings listed), 64 usage");
     puts("  copper design generate <requirements.json> --templates FILE --symbol-root DIR --footprint-root DIR --out DIR [--prompt FILE]");
     puts("  copper design route <board.kicad_pcb> --rules FILE --fab-profile FILE --out FILE [--routing routing.json] [--report FILE]");
+    puts("  copper design compose <design.compose.json> --blocks DIR --parts FILE.parts [--parts ...] --symbol-root DIR --out DIR [--prompt FILE]");
+    puts("      join checked blocks into intent.json; exit 0 COMPOSED, 3 NEEDS_INPUT, 4 NOT_IMPLEMENTED, 1 REFUSED, 2 INVALID_INPUT");
+    puts("  copper design place-problem <intent.json> --hints layout_hints.json --rules FILE --footprint-root DIR --out PROBLEM");
+    puts("  copper design place-apply <intent.json> --hints layout_hints.json --placer PLACER.json --out-intent FILE --out-routing FILE");
+    puts("      placement with the C placer (`copper-core place PROBLEM ITERATIONS SEEDS` in between); exit 5 NO_LEGAL_POSITION");
+    puts("  copper design schematic-rules <project dir> --symbol-root DIR [--hints layout_hints.json]");
+    puts("      PWR_FLAGs on the hints' external-supply nets, and the project's sym-lib-table and fp-lib-table (Step 3d)");
     puts("      deterministic design from analysed requirements (circuit templates): writes DIR/intent.json and DIR/generation.json;");
     puts("      exit 0 GENERATED, 2 INVALID_INPUT, 3 NEEDS_INPUT (questions), 4 NOT_IMPLEMENTED, 5 TEMPLATE_ERROR, 1 error, 64 usage");
     puts("  copper user design prompt \"<human requirements>\" [--out request.json]");
@@ -111,6 +121,7 @@ static void print_usage(void) {
     puts("  copperv2 catalogue create <file.parts>");
     puts("  copperv2 catalogue validate <file.parts> [--symbols-root DIR --footprints-root DIR]");
     puts("  copperv2 block check <block.json> [--parts FILE.parts]... [--out report.json]");
+    puts("  copperv2 block list <block.json>...   (what each block offers, as JSON: ports and parameters)");
     puts("      one copper.block/1 definition; exit 0 VALID, 3 UNVERIFIED (no --parts), 2 INVALID");
     puts("  copperv2 catalogue check <file.parts> [--symbols-root DIR --footprints-root DIR] [--out report.json]");
     puts("      every problem of every part; exit 0 PASS, 3 UNVERIFIED, 1 FAIL, 2 INVALID_INPUT");
@@ -1078,6 +1089,93 @@ static bool option_value(int argc, char **argv, const char *option,
         if (strcmp(argv[i], option) == 0) { *out = argv[i + 1]; return true; }
     }
     return false;
+}
+
+/* copper block list BLOCK.json...: what each block offers, as JSON ("copper.block-list/1"): its summary, its ports
+ * (kind, voltage range, currents, pull-ups) and its parameters (unit, required, derived from a connection, default).
+ * This is what a model may choose from when it writes a copper.compose/1 file. Each block is checked first (blocks.c;
+ * no catalogue); an invalid block is listed with its verdict only. Exit 0 when every block is VALID or UNVERIFIED, 2
+ * otherwise, 64 usage. */
+static void list_int(JsonWriter *w, const JsonValue *obj, const char *key)
+{
+    int64_t v = 0;
+    const JsonValue *x = json_get(obj, key);
+    if (x && x->kind == JSON_NUMBER && json_to_i64(x, &v) == JSON_NUMBER_OK) { json_write_key(w, key); json_write_int(w, v); }
+}
+
+static void list_str(JsonWriter *w, const JsonValue *obj, const char *key)
+{
+    const JsonValue *x = json_get(obj, key);
+    if (x && x->kind == JSON_STRING) { json_write_key(w, key); json_write_string(w, x->text); }
+}
+
+static int command_block_list(int argc, char **argv) {
+    if (argc < 4) { fprintf(stderr, "block list needs one or more BLOCK.json files\n"); return 64; }
+    Arena arena;
+    arena_init(&arena, 1u << 20);
+    JsonWriter w;
+    json_writer_init(&w, &arena);
+    json_write_begin_object(&w);
+    json_write_key(&w, "format"); json_write_string(&w, "copper.block-list/1");
+    json_write_key(&w, "blocks");
+    json_write_begin_array(&w);
+    int code = 0;
+    for (int i = 3; i < argc; ++i) {
+        const unsigned char *data = NULL;
+        size_t size = 0;
+        BlockReport br;
+        JsonValue *root = NULL;
+        JsonError je;
+        bool readable = fs_read_file_arena(&arena, argv[i], &data, &size) == FS_OK;
+        BlockStatus st = readable ? block_check_text(&arena, (const char *)data, size, NULL, 0, &br) : BLOCK_INVALID;
+        json_write_begin_object(&w);
+        json_write_key(&w, "file"); json_write_string(&w, argv[i]);
+        json_write_key(&w, "verdict"); json_write_string(&w, block_status_name(st));
+        if ((st != BLOCK_VALID && st != BLOCK_UNVERIFIED) || json_parse(&arena, (const char *)data, size, &root, &je) != JSON_OK) {
+            json_write_end_object(&w);
+            code = 2;
+            continue;
+        }
+        list_str(&w, root, "name");
+        list_str(&w, root, "summary");
+        json_write_key(&w, "ports");
+        json_write_begin_array(&w);
+        const JsonValue *ports = json_get(root, "ports");
+        for (size_t k = 0; ports && k < ports->count; ++k) {
+            const JsonValue *p = ports->items[k];
+            json_write_begin_object(&w);
+            list_str(&w, p, "name"); list_str(&w, p, "kind");
+            list_int(&w, p, "voltage_min"); list_int(&w, p, "voltage_max"); list_str(&w, p, "voltage_parameter");
+            list_int(&w, p, "current"); list_int(&w, p, "current_max"); list_str(&w, p, "level_port");
+            if (json_get(p, "pullup")) { json_write_key(&w, "pullup"); json_write_bool(&w, json_get(p, "pullup")->kind == JSON_TRUE); }
+            list_str(&w, p, "note");
+            json_write_end_object(&w);
+        }
+        json_write_end_array(&w);
+        json_write_key(&w, "parameters");
+        json_write_begin_array(&w);
+        const JsonValue *params = json_get(root, "parameters");
+        for (size_t k = 0; params && k < params->count; ++k) {
+            const JsonValue *p = params->items[k];
+            json_write_begin_object(&w);
+            list_str(&w, p, "name"); list_str(&w, p, "unit");
+            json_write_key(&w, "required"); json_write_bool(&w, json_get(p, "required") && json_get(p, "required")->kind == JSON_TRUE);
+            json_write_key(&w, "derived_from_connection"); json_write_bool(&w, json_get(p, "from") != NULL);
+            list_int(&w, p, "default"); list_int(&w, p, "min"); list_int(&w, p, "max");
+            json_write_end_object(&w);
+        }
+        json_write_end_array(&w);
+        json_write_end_object(&w);
+    }
+    json_write_end_array(&w);
+    json_write_end_object(&w);
+    size_t len = 0;
+    const char *text = json_writer_finish(&w, &len);
+    if (!text) { fprintf(stderr, "block list: out of memory\n"); arena_destroy(&arena); return 70; }
+    fwrite(text, 1, len, stdout);
+    putchar('\n');
+    arena_destroy(&arena);
+    return code;
 }
 
 /* copper block check BLOCK.json [--parts FILE.parts]... [--out REPORT.json]
@@ -2538,6 +2636,256 @@ static int command_design_check_intent(int argc, char **argv) {
     return st == INTENT_CHECK_GROUNDED ? 0 : 2;
 }
 
+/* copper design compose: checked blocks -> design intent (compose.c). Writes compose_report.json always, and
+ * intent.json only when the design composed. Exit 0 COMPOSED, 3 NEEDS_INPUT, 4 NOT_IMPLEMENTED, 1 REFUSED,
+ * 2 INVALID_INPUT, 64 usage, 70 internal error. */
+static int write_text_file(const char *dir, const char *name, const char *text, size_t len);
+static int command_design_compose(int argc, char **argv) {
+    const char *path = argv[3], *blocks = NULL, *symbols = NULL, *out_dir = NULL, *prompt_path = NULL;
+    enum { MAX_CATS = 32 };
+    const char *cat_paths[MAX_CATS];
+    size_t ncat = 0;
+    for (int i = 4; i < argc; i += 2) {
+        if (i + 1 >= argc) { fprintf(stderr, "compose: %s needs a value\n", argv[i]); return 64; }
+        if (!strcmp(argv[i], "--blocks")) blocks = argv[i + 1];
+        else if (!strcmp(argv[i], "--prompt")) prompt_path = argv[i + 1];
+        else if (!strcmp(argv[i], "--symbol-root")) symbols = argv[i + 1];
+        else if (!strcmp(argv[i], "--out")) out_dir = argv[i + 1];
+        else if (!strcmp(argv[i], "--parts")) {
+            if (ncat == MAX_CATS) { fprintf(stderr, "compose: at most %d --parts files\n", MAX_CATS); return 64; }
+            cat_paths[ncat++] = argv[i + 1];
+        } else { fprintf(stderr, "compose: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!blocks || !symbols || !out_dir || !ncat) {
+        fprintf(stderr, "compose needs --blocks DIR, --parts FILE (one or more), --symbol-root DIR and --out DIR\n");
+        return 64;
+    }
+    Arena arena;
+    arena_init(&arena, 1u << 22);
+    PartCatalogue cats[MAX_CATS];
+    const PartCatalogue *refs[MAX_CATS];
+    for (size_t i = 0; i < ncat; ++i) {
+        PartCatalogueError e;
+        if (part_catalogue_parse_file(&arena, cat_paths[i], &cats[i], &e) != PART_CATALOGUE_OK) {
+            printf("compose: %s does not parse as a part catalogue: %s\nSTATUS compose: INVALID_INPUT\n", cat_paths[i], e.message ? e.message : "error");
+            arena_destroy(&arena);
+            return 2;
+        }
+        refs[i] = &cats[i];
+    }
+    const unsigned char *data = NULL;
+    size_t size = 0;
+    if (fs_read_file_arena(&arena, path, &data, &size) != FS_OK) {
+        printf("compose: cannot read %s\nSTATUS compose: INVALID_INPUT\n", path);
+        arena_destroy(&arena);
+        return 2;
+    }
+    const char *prompt = NULL;
+    if (prompt_path) {
+        const unsigned char *pdata = NULL;
+        size_t psize = 0;
+        char *ptext = NULL;
+        if (fs_read_file_arena(&arena, prompt_path, &pdata, &psize) != FS_OK || !(ptext = arena_alloc(&arena, psize + 1))) {
+            printf("compose: cannot read the prompt %s\nSTATUS compose: INVALID_INPUT\n", prompt_path);
+            arena_destroy(&arena);
+            return 2;
+        }
+        memcpy(ptext, pdata, psize);
+        ptext[psize] = 0;
+        prompt = ptext;
+    }
+    ComposeInputs in = {blocks, refs, ncat, symbols, prompt};
+    ComposeReport r;
+    ComposeStatus st = compose_design(&arena, (const char *)data, size, &in, &r);
+    if (st == COMPOSE_ERR_ARGUMENT || st == COMPOSE_ERR_MEMORY) {
+        fprintf(stderr, "compose: %s\n", compose_status_name(st));
+        arena_destroy(&arena);
+        return 70;
+    }
+    for (size_t i = 0; i < r.value_count; ++i)
+        printf("  %-28s %-34s [%s] %s\n", r.values[i].where, r.values[i].value, r.values[i].origin, r.values[i].source);
+    for (size_t i = 0; i < r.finding_count; ++i)
+        printf("  %-15s %-24s %s: %s\n", compose_level_name(r.findings[i].level), r.findings[i].code, r.findings[i].where, r.findings[i].message);
+    size_t rlen = 0;
+    const char *report = compose_report_json(&arena, &r, &rlen);
+    bool ok = fs_create_directories(out_dir) == FS_OK && report && write_text_file(out_dir, "compose_report.json", report, rlen);
+    if (ok && st == COMPOSE_COMPOSED) ok = write_text_file(out_dir, "intent.json", r.intent_json, r.intent_len) &&
+                                           write_text_file(out_dir, "layout_hints.json", r.hints_json, r.hints_len);
+    if (!ok) { fprintf(stderr, "compose: cannot write into %s\n", out_dir); arena_destroy(&arena); return 70; }
+    printf("STATUS compose: %s (%zu blocks, %zu nets, %zu components)%s\n", compose_status_name(st), r.blocks, r.nets, r.components,
+           st == COMPOSE_COMPOSED ? "; intent.json written: run `copper design check-intent` on it next" : "; no intent written");
+    arena_destroy(&arena);
+    switch (st) {
+    case COMPOSE_COMPOSED: return 0;
+    case COMPOSE_NEEDS_INPUT: return 3;
+    case COMPOSE_NOT_IMPLEMENTED: return 4;
+    case COMPOSE_REFUSED: return 1;
+    case COMPOSE_INVALID_INPUT: return 2;
+    default: return 70;
+    }
+}
+
+/* copper design place-problem INTENT --hints H --rules R --footprint-root D --out PROBLEM
+ * copper design place-apply   INTENT --hints H --placer PLACER.json --out-intent I --out-routing R
+ * Placement of a composed intent with the C placer (place_intent.c); `copper-core place` runs in between.
+ * Exit 0 PLACED, 2 INVALID_INPUT, 5 NO_LEGAL_POSITION, 64 usage, 70 internal error. */
+static bool read_all(Arena *a, const char *path, const char **text, size_t *len) {
+    const unsigned char *d = NULL;
+    if (!path || fs_read_file_arena(a, path, &d, len) != FS_OK) return false;
+    *text = (const char *)d;
+    return true;
+}
+
+static bool write_file_path(const char *path, const char *text, size_t len) {
+    FILE *f = fopen(path, "wb");
+    bool ok = f && fwrite(text, 1, len, f) == len;
+    if (f && fclose(f) != 0) ok = false;
+    return ok;
+}
+
+static int place_exit(PlaceStatus st) {
+    return st == PLACE_OK ? 0 : st == PLACE_INVALID_INPUT ? 2 : st == PLACE_NO_LEGAL_POSITION ? 5 : 70;
+}
+
+static int command_design_place(int argc, char **argv, bool apply) {
+    const char *intent_path = argv[3], *hints = NULL, *rules = NULL, *fps = NULL, *out = NULL, *placer = NULL, *out_intent = NULL, *out_routing = NULL;
+    for (int i = 4; i < argc; i += 2) {
+        if (i + 1 >= argc) { fprintf(stderr, "place: %s needs a value\n", argv[i]); return 64; }
+        if (!strcmp(argv[i], "--hints")) hints = argv[i + 1];
+        else if (!apply && !strcmp(argv[i], "--rules")) rules = argv[i + 1];
+        else if (!apply && !strcmp(argv[i], "--footprint-root")) fps = argv[i + 1];
+        else if (!apply && !strcmp(argv[i], "--out")) out = argv[i + 1];
+        else if (apply && !strcmp(argv[i], "--placer")) placer = argv[i + 1];
+        else if (apply && !strcmp(argv[i], "--out-intent")) out_intent = argv[i + 1];
+        else if (apply && !strcmp(argv[i], "--out-routing")) out_routing = argv[i + 1];
+        else { fprintf(stderr, "place: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!hints || (!apply && (!rules || !fps || !out)) || (apply && (!placer || !out_intent || !out_routing))) {
+        fprintf(stderr, apply ? "place-apply needs --hints, --placer, --out-intent and --out-routing\n"
+                              : "place-problem needs --hints, --rules, --footprint-root and --out\n");
+        return 64;
+    }
+    Arena arena;
+    arena_init(&arena, 1u << 22);
+    const char *it = NULL, *ht = NULL, *rt = NULL, *pt = NULL;
+    size_t il = 0, hl = 0, rl = 0, ptl = 0;
+    if (!read_all(&arena, intent_path, &it, &il) || !read_all(&arena, hints, &ht, &hl) ||
+        (!apply && !read_all(&arena, rules, &rt, &rl)) || (apply && !read_all(&arena, placer, &pt, &ptl))) {
+        printf("STATUS place: INVALID_INPUT (an input file cannot be read)\n");
+        arena_destroy(&arena);
+        return 2;
+    }
+    PlaceReport r;
+    PlaceStatus st;
+    if (!apply) {
+        const char *problem = NULL;
+        size_t plen = 0;
+        st = place_problem(&arena, it, il, ht, hl, rt, rl, fps, &problem, &plen, &r);
+        if (st == PLACE_OK && !write_file_path(out, problem, plen)) { fprintf(stderr, "place: cannot write %s\n", out); arena_destroy(&arena); return 70; }
+        printf("STATUS place-problem: %s (%zu parts, %zu keep-outs, %zu decoupling pairs)%s%s\n", place_status_name(st), r.parts, r.keepouts,
+               r.decoupling, st == PLACE_OK ? "" : ": ", st == PLACE_OK ? "" : r.message);
+    } else {
+        const char *ni = NULL, *nr = NULL;
+        size_t nil = 0, nrl = 0;
+        st = place_apply(&arena, it, il, ht, hl, pt, ptl, &ni, &nil, &nr, &nrl, &r);
+        if (st == PLACE_OK && (!write_file_path(out_intent, ni, nil) || !write_file_path(out_routing, nr, nrl))) {
+            fprintf(stderr, "place: cannot write the outputs\n");
+            arena_destroy(&arena);
+            return 70;
+        }
+        printf("STATUS place-apply: %s (%zu parts placed from %s, %zu routing keep-outs)%s%s\n", place_status_name(st), r.parts,
+               r.seed ? r.seed : "-", r.keepouts, st == PLACE_OK ? "" : ": ", st == PLACE_OK ? "" : r.message);
+    }
+    arena_destroy(&arena);
+    return place_exit(st);
+}
+
+/* copper design schematic-rules PROJECT_DIR --symbol-root DIR [--hints layout_hints.json] (Step 3d, sch_rules.c):
+ * PWR_FLAGs on the nets the hints list (external supplies), then the project's library tables. A library table that
+ * Copper did not write is never overwritten. Exit 0 OK, 2 INVALID_INPUT, 1 I/O error, 64 usage. */
+static int command_design_schematic_rules(int argc, char **argv) {
+    const char *dir = argv[3], *symbols = NULL, *hints = NULL;
+    for (int i = 4; i < argc; i += 2) {
+        if (i + 1 >= argc) { fprintf(stderr, "schematic-rules: %s needs a value\n", argv[i]); return 64; }
+        if (!strcmp(argv[i], "--symbol-root")) symbols = argv[i + 1];
+        else if (!strcmp(argv[i], "--hints")) hints = argv[i + 1];
+        else { fprintf(stderr, "schematic-rules: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!symbols) { fprintf(stderr, "schematic-rules needs --symbol-root\n"); return 64; }
+    /* the project: the one .kicad_pro in the directory */
+    FsDirectoryListing ls;
+    memset(&ls, 0, sizeof ls);
+    if (fs_list_directory(dir, &ls) != FS_OK) { printf("STATUS schematic-rules: INVALID_INPUT (cannot list %s)\n", dir); return 2; }
+    char name[256] = "";
+    size_t pros = 0;
+    for (size_t i = 0; i < ls.count; i++) {
+        const char *n = ls.entries[i].name;
+        size_t nl = strlen(n);
+        if (ls.entries[i].is_regular_file && nl > 10 && !strcmp(n + nl - 10, ".kicad_pro") && nl - 10 < sizeof name) {
+            memcpy(name, n, nl - 10); name[nl - 10] = 0; pros++;
+        }
+    }
+    fs_free_directory_listing(&ls);
+    if (pros != 1) { printf("STATUS schematic-rules: INVALID_INPUT (%s holds %zu .kicad_pro files, not one)\n", dir, pros); return 2; }
+    Arena arena;
+    arena_init(&arena, 1u << 22);
+    char sch_path[FS_PATH_MAX], pcb_path[FS_PATH_MAX], file[300], sym_path[FS_PATH_MAX], fp_path[FS_PATH_MAX], power_path[FS_PATH_MAX];
+    snprintf(file, sizeof file, "%s.kicad_sch", name);
+    bool paths = fs_path_join(sch_path, sizeof sch_path, dir, file) == FS_OK;
+    snprintf(file, sizeof file, "%s.kicad_pcb", name);
+    paths = paths && fs_path_join(pcb_path, sizeof pcb_path, dir, file) == FS_OK &&
+            fs_path_join(sym_path, sizeof sym_path, dir, "sym-lib-table") == FS_OK &&
+            fs_path_join(fp_path, sizeof fp_path, dir, "fp-lib-table") == FS_OK &&
+            fs_path_join(power_path, sizeof power_path, symbols, "power.kicad_sym") == FS_OK;
+    const char *sch = NULL, *pcb = NULL, *ht = NULL, *power = NULL, *old = NULL;
+    size_t sl = 0, pl = 0, hl = 0, pwl = 0, ol = 0;
+    if (!paths || !read_all(&arena, sch_path, &sch, &sl) || !read_all(&arena, pcb_path, &pcb, &pl) ||
+        (hints && (!read_all(&arena, hints, &ht, &hl) || !read_all(&arena, power_path, &power, &pwl)))) {
+        printf("STATUS schematic-rules: INVALID_INPUT (cannot read the schematic, board, hints or %s)\n", power_path);
+        arena_destroy(&arena);
+        return 2;
+    }
+    /* never overwrite a library table Copper did not write: checked before anything is written */
+    const char *tables[2] = {sym_path, fp_path};
+    for (int k = 0; k < 2; k++)
+        if (read_all(&arena, tables[k], &old, &ol) && !sch_lib_table_is_copper(old, ol)) {
+            printf("STATUS schematic-rules: INVALID_INPUT (%s exists and was not written by Copper; it is never overwritten)\n", tables[k]);
+            arena_destroy(&arena);
+            return 2;
+        }
+    SchRulesReport r;
+    memset(&r, 0, sizeof r);
+    size_t added = 0, present = 0;
+    if (hints) {
+        const char *ns = NULL;
+        size_t nsl = 0;
+        if (sch_power_flags(&arena, sch, sl, ht, hl, power, pwl, &ns, &nsl, &r) != SCH_RULES_OK) {
+            printf("STATUS schematic-rules: %s (%s)\n", sch_rules_status_name(r.status), r.message);
+            arena_destroy(&arena);
+            return r.status == SCH_RULES_INVALID_INPUT ? 2 : 70;
+        }
+        added = r.flags_added; present = r.flags_present;
+        if (added && fs_write_file_atomic_replace(sch_path, ns, nsl) != FS_OK) { fprintf(stderr, "schematic-rules: cannot write %s\n", sch_path); arena_destroy(&arena); return 1; }
+        sch = ns; sl = nsl;
+    }
+    const char *st = NULL, *ft = NULL;
+    size_t stl = 0, ftl = 0;
+    if (sch_lib_tables(&arena, sch, sl, pcb, pl, &st, &stl, &ft, &ftl, &r) != SCH_RULES_OK) {
+        printf("STATUS schematic-rules: %s (%s)\n", sch_rules_status_name(r.status), r.message);
+        arena_destroy(&arena);
+        return r.status == SCH_RULES_INVALID_INPUT ? 2 : 70;
+    }
+    if (fs_write_file_atomic_replace(sym_path, st, stl) != FS_OK || fs_write_file_atomic_replace(fp_path, ft, ftl) != FS_OK) {
+        fprintf(stderr, "schematic-rules: cannot write the library tables\n");
+        arena_destroy(&arena);
+        return 1;
+    }
+    printf("STATUS schematic-rules: OK (%zu power flag(s) added, %zu already present; %zu symbol and %zu footprint libraries in the project tables)\n",
+           added, present, r.sym_libs, r.fp_libs);
+    arena_destroy(&arena);
+    return 0;
+}
+
 /* copper design generate: requirements (from the prompt analysis) -> design intent, by template (template_gen.c). */
 static int write_text_file(const char *dir, const char *name, const char *text, size_t len) {
     char path[FS_PATH_MAX];
@@ -2665,6 +3013,14 @@ static int command_design_route(int argc, char **argv) {
     r.via_cost = (uint32_t)via_cost;
     r.passes = (uint32_t)passes;
     r.max_cells = (size_t)max_cells;
+    /* Fine-pitch escapes (Step 3c, LAYOUT_RULES.md R5): optional, both or neither. */
+    bool has_fine = json_get(rules, "fine_pitch_clearance_mm") != NULL, has_neck = json_get(rules, "fine_pitch_neck_mm") != NULL;
+    if (has_fine != has_neck || (has_fine && (!rule_mm(rules, "fine_pitch_clearance_mm", &r.fine_clearance_nm) ||
+                                              !rule_mm(rules, "fine_pitch_neck_mm", &r.fine_neck_nm) || r.fine_clearance_nm <= 0 || r.fine_neck_nm <= 0))) {
+        fprintf(stderr, "route: give both fine_pitch_clearance_mm and fine_pitch_neck_mm (positive), or neither\n");
+        arena_destroy(&arena);
+        return 2;
+    }
     /* Per-net widths and keep-outs from the template (routing.json). */
     const JsonValue *widths = json_get(nj, "net_widths_mm"), *kos = json_get(nj, "keepouts");
     AutorouteNetWidth *nw = NULL;
@@ -2711,6 +3067,13 @@ static int command_design_route(int argc, char **argv) {
     if (fab_limit(fj, "via_hole_min_mm", &lim) && r.via_drill_nm < lim) { arena_destroy(&arena); return route_rule_below("via_drill_mm", r.via_drill_nm, "via_hole_min_mm", lim); }
     if (fab_limit(fj, "drill_min_mm", &lim) && r.via_drill_nm < lim) { arena_destroy(&arena); return route_rule_below("via_drill_mm", r.via_drill_nm, "drill_min_mm", lim); }
     if (fab_limit(fj, "via_diameter_over_hole_min_mm", &need) && r.via_size_nm - r.via_drill_nm < need) { arena_destroy(&arena); return route_rule_below("via_size_mm - via_drill_mm", r.via_size_nm - r.via_drill_nm, "via_diameter_over_hole_min_mm", need); }
+    if (has_fine) {
+        /* the escape stub is a track next to SMD pads: every limit that could apply to it, the SMD pad-to-pad one too */
+        static const char *const fine_limits[] = {"track_spacing_min_mm", "clearance_default_min_mm", "pad_to_track_min_mm", "smd_pad_to_pad_min_mm", NULL};
+        for (const char *const *k = fine_limits; *k; k++)
+            if (fab_limit(fj, *k, &lim) && r.fine_clearance_nm < lim) { arena_destroy(&arena); return route_rule_below("fine_pitch_clearance_mm", r.fine_clearance_nm, *k, lim); }
+        if (fab_limit(fj, "track_width_min_mm", &lim) && r.fine_neck_nm < lim) { arena_destroy(&arena); return route_rule_below("fine_pitch_neck_mm", r.fine_neck_nm, "track_width_min_mm", lim); }
+    }
 
     Board board;
     BoardDiag diag;
@@ -2801,6 +3164,14 @@ int main(int argc, char **argv) {
             return command_design_check_intent(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "generate") == 0)
             return command_design_generate(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "compose") == 0)
+            return command_design_compose(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "place-problem") == 0)
+            return command_design_place(argc, argv, false);
+        if (argc >= 4 && strcmp(argv[2], "place-apply") == 0)
+            return command_design_place(argc, argv, true);
+        if (argc >= 4 && strcmp(argv[2], "schematic-rules") == 0)
+            return command_design_schematic_rules(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "route") == 0)
             return command_design_route(argc, argv);
         print_usage(); return 64;
@@ -2866,6 +3237,8 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "block") == 0) {
         if (argc >= 4 && strcmp(argv[2], "check") == 0)
             return command_block_check(argc, argv);
+        if (argc >= 3 && strcmp(argv[2], "list") == 0)
+            return command_block_list(argc, argv);
         print_usage(); return 64;
     }
     if (strcmp(argv[1], "catalogue") == 0) {

@@ -1,0 +1,1 @@
+Make an ESP32-S3 board, 70 mm by 60 mm, powered from 5 V, with reset and boot buttons, one LED and a TMP102 temperature sensor on the I2C bus (bus capacitance 100 pF).

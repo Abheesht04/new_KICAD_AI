@@ -1,0 +1,55 @@
+{
+  "format": "copper.block/1",
+  "name": "i2c_sensor_tmp102",
+  "summary": "TI TMP102 I2C temperature sensor at address 0x48 (ADD0 to GND), with its 0.01 uF supply bypass and SCL/SDA pull-ups sized from the bus capacitance.",
+  "sources": [
+    {"id": "tmp102_rec", "document": "TI TMP102 datasheet SBOS397I, 5.3 Recommended Operating Conditions (V+ 1.4-3.6 V)",
+     "url": "https://www.ti.com/lit/ds/symlink/tmp102.pdf", "revision": "SBOS397I, revised June 2024 (retrieved 2026-11-21)", "page": 4},
+    {"id": "tmp102_iq", "document": "TI TMP102 datasheet SBOS397I, 5.5 Electrical Characteristics: average quiescent current 10 uA typical with the serial bus active at 400 kHz",
+     "url": "https://www.ti.com/lit/ds/symlink/tmp102.pdf", "revision": "SBOS397I, revised June 2024 (retrieved 2026-11-21)", "page": 5},
+    {"id": "tmp102_pins", "document": "TI TMP102 datasheet SBOS397I, table 4-1 Pin Functions (SDA and ALERT are open-drain and need pull-ups; ADD0 to GND or V+)",
+     "url": "https://www.ti.com/lit/ds/symlink/tmp102.pdf", "revision": "SBOS397I, revised June 2024 (retrieved 2026-11-21)", "page": 3},
+    {"id": "tmp102_addr", "document": "TI TMP102 datasheet SBOS397I, table 6-4 Address Pin and Target Addresses (ADD0 = ground: 1001000)",
+     "url": "https://www.ti.com/lit/ds/symlink/tmp102.pdf", "revision": "SBOS397I, revised June 2024 (retrieved 2026-11-21)", "page": 11},
+    {"id": "tmp102_bypass", "document": "TI TMP102 datasheet SBOS397I, power supply recommendations: a 0.01 uF supply bypass capacitor, as close as possible to the supply and ground pins",
+     "url": "https://www.ti.com/lit/ds/symlink/tmp102.pdf", "revision": "SBOS397I, revised June 2024 (retrieved 2026-11-21)", "page": 21},
+    {"id": "ti_pullup", "document": "TI application note SLVA689A, I2C Bus Pullup Resistor Calculation: Rp(min) = (VCC - VOL(max)) / IOL, Rp(max) = tr / (0.8473 x Cb); table 2-1 (fast mode tr 300 ns; VOL 0.4 V at 3 mA for VCC > 2 V)",
+     "url": "https://www.ti.com/lit/an/slva689/slva689.pdf", "revision": "SLVA689A, revised October 2026 (retrieved 2026-11-21)", "page": 3}
+  ],
+  "parameters": [
+    {"name": "bus_voltage", "unit": "uV", "required": true, "min": 2000001, "max": 3600000,
+     "from": {"port": "v3v3", "quantity": "voltage_max"}},
+    {"name": "bus_capacitance", "unit": "pF", "required": true, "min": 1, "max": 400},
+    {"name": "vol", "unit": "uV", "required": false, "default": 400000, "source": "ti_pullup"},
+    {"name": "iol", "unit": "uA", "required": false, "default": 3000, "source": "ti_pullup"},
+    {"name": "rise_time", "unit": "ns", "required": false, "default": 300, "source": "ti_pullup"}
+  ],
+  "ports": [
+    {"name": "v3v3", "kind": "power_in", "voltage_min": 1400000, "voltage_max": 3600000, "source": "tmp102_rec",
+     "current": 10, "current_source": "tmp102_iq",
+     "note": "10 uA is the typical supply current with the bus active at 400 kHz (no maximum is given); the pull-up current is not included"},
+    {"name": "gnd", "kind": "ground"},
+    {"name": "scl", "kind": "i2c_scl", "pullup": true, "level_port": "v3v3"},
+    {"name": "sda", "kind": "i2c_sda", "pullup": true, "level_port": "v3v3"}
+  ],
+  "parts": [
+    {"role": "sensor", "prefix": "U", "select": {"part_id": "sensor_temp_sot563_ti_tmp102"},
+     "pins": {"vplus": "v3v3", "gnd": "gnd", "scl": "scl", "sda": "sda", "add0": "gnd", "alert": "nc"}},
+    {"role": "bypass_capacitor", "prefix": "C", "select": {"part_id": "cap_0603_10n_50v_x7r_murata"},
+     "pins": {"terminal_1": "v3v3", "terminal_2": "gnd"}},
+    {"role": "scl_pullup", "prefix": "R", "select": {"kind": "R", "package": "0603", "value": {"formula": "r_pullup"}},
+     "pins": {"terminal_1": "v3v3", "terminal_2": "scl"}},
+    {"role": "sda_pullup", "prefix": "R", "select": {"kind": "R", "package": "0603", "value": {"formula": "r_pullup"}},
+     "pins": {"terminal_1": "v3v3", "terminal_2": "sda"}}
+  ],
+  "formulas": [
+    {"name": "r_pullup", "function": "i2c_pullup", "source": "ti_pullup",
+     "inputs": {"vdd": "bus_voltage", "vol": "vol", "iol": "iol", "rise_time": "rise_time", "bus_capacitance": "bus_capacitance"}}
+  ],
+  "notes": [
+    {"text": "Address 0x48: ADD0 is tied to GND.", "source": "tmp102_addr"},
+    {"text": "ALERT is open-drain and unused here, so it is left unconnected; it would need a pull-up if used.", "source": "tmp102_pins"},
+    {"text": "The bus capacitance is not assumed: it must be given (it depends on the trace length and every device on the bus). Fast mode (tr 300 ns) is the default; bus_voltage must be above 2 V for the VOL 0.4 V at 3 mA figure.", "source": "ti_pullup"},
+    {"text": "One pair of pull-ups per bus: when several I2C blocks share a bus, the composer must keep one pair (Phase 2c).", "source": "ti_pullup"}
+  ]
+}

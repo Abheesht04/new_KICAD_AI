@@ -39,6 +39,18 @@ exponents.
 | J | J |
 | S | SW |
 
+## Keys for composition (added in Step 2c)
+
+| Key | On | Meaning |
+|---|---|---|
+| `"from": {"port", "quantity"}` | a required parameter | the composer derives it from what the port is connected to: `voltage_min` / `voltage_max` of the net, or the `current` drawn from a power_out's net |
+| `current` + `current_source` | power_in port | the current the block draws (µA), with its source |
+| `current_follows` | power_in port | a regulator's input also carries whatever its output (a power_out port of the same block) delivers |
+| `current_max` + `current_source` | power_out port | what the source can deliver (µA), with its source |
+| `level_port` | signal ports (gpio, uart, i2c, analog, signal) | the power port whose voltage the signal swings to (an ESP32 GPIO swings to its 3V3 rail) |
+| `pullup: true` | i2c_scl / i2c_sda ports | the block puts pull-ups on this line; one pair per bus |
+| `external_supply: true` | power_out / ground ports | power enters the board here from outside (a connector or USB). The composer lists the port's net under `power_flags` in `layout_hints.json`, and `copper design schematic-rules` puts one KiCad PWR_FLAG on it (Step 3d). Only nets fed from outside get a flag: a power net no output drives stays an ERC error. |
+
 ## Formula functions (`block_functions()`)
 
 | Function | Output | Inputs | Formula and source |

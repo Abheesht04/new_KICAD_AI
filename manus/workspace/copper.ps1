@@ -14,6 +14,11 @@ Subcommands:
     context  -Prompt <text> -Out <ctx.json>  real KiCad pin numbers, pin names and pad numbers for the parts a task names
     generate -Requirements <requirements.json> -PromptFile <prompt.txt> -Out <dir>
                                              Copper's deterministic generator (C): the design from a prompt analysis
+    blocks                                   the circuit blocks Copper can compose (ports and parameters, JSON)
+    compose  -Design <design.compose.json> -PromptFile <prompt.txt> -Out <dir>
+                                             Copper's composer (C): checked blocks joined into intent.json, every stated
+                                             value checked against a quote in the prompt, the grounding gate, then the C
+                                             placer (positions + routing keep-outs) and the gate again; next: compile
     check    -Intent <intent.json>           grounding gate: every part, pin, pin name, pad and net checked against the
                                              installed KiCad libraries; anything invented is REJECTED (nothing compiled)
     compile  -Intent <intent.json> -Out <dir>  runs the grounding gate first; only a GROUNDED intent is compiled into a
@@ -29,10 +34,11 @@ Subcommands:
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [ValidateSet('doctor', 'context', 'generate', 'check', 'compile', 'inspect', 'dfm', 'topology', 'checks', 'report', 'claimcheck', 'workbench')]
+    [ValidateSet('doctor', 'context', 'generate', 'blocks', 'compose', 'check', 'compile', 'inspect', 'dfm', 'topology', 'checks', 'report', 'claimcheck', 'workbench')]
     [string]$Command,
     [string]$Prompt, [string]$Intent, [string]$Out, [string]$Board, [string]$Profile,
-    [string]$Schematic, [string]$Netlist, [string]$Project, [string]$Text, [string]$Requirements, [string]$PromptFile
+    [string]$Schematic, [string]$Netlist, [string]$Project, [string]$Text, [string]$Requirements, [string]$PromptFile,
+    [string]$Design
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -79,7 +85,7 @@ function KicadSummary([string]$projectDir) {
 switch ($Command) {
     'doctor' {
         $items = [ordered]@{}
-        foreach ($k in 'copper', 'copper_core', 'python', 'kicad_cli', 'symbols_root', 'footprints_root', 'compiler', 'asset_context', 'intent_schema', 'fab_profile', 'routing_rules', 'repo') {
+        foreach ($k in 'copper', 'copper_core', 'python', 'kicad_cli', 'symbols_root', 'footprints_root', 'compiler', 'asset_context', 'intent_schema', 'fab_profile', 'routing_rules', 'placement_rules', 'blocks_dir', 'parts_dir', 'repo') {
             $v = $cfg.$k
             $items[$k] = [ordered]@{ path = $v; present = [bool]($v -and (Test-Path -LiteralPath $v)) }
         }
@@ -112,6 +118,51 @@ switch ($Command) {
         $outcome = switch ($code) { 0 { 'GENERATED' } 2 { 'INVALID_INPUT' } 3 { 'NEEDS_INPUT' } 4 { 'NOT_IMPLEMENTED' } 5 { 'TEMPLATE_ERROR' } default { 'ERROR' } }
         Result 'generate' $code $outcome @{ intent = $(if ($code -eq 0) { Join-Path $outDir 'intent.json' } else { $null }); report = $gen; next = $(if ($code -eq 0) { 'compile -Intent <out>\intent.json' } else { 'answer the questions in generation.json by improving the prompt; Copper does not guess' }) }
     }
+    'blocks' {
+        $files = @(Get-ChildItem -LiteralPath $cfg.blocks_dir -Filter '*.block.json' | Sort-Object Name | ForEach-Object { $_.FullName })
+        if (-not $files.Count) { Result 'blocks' 3 'UNVERIFIED' @{ blocks_dir = $cfg.blocks_dir; note = 'no blocks found' } }
+        $code = Run $cfg.copper (@('block', 'list') + $files)
+        $outcome = if ($code -eq 0) { 'OK' } else { 'INVALID_BLOCK' }
+        Result 'blocks' $code $outcome @{ count = $files.Count; next = 'write designs\<name>\design.compose.json from these blocks (MANUS.md), then compose' }
+    }
+    'compose' {
+        Need 'Design' $Design; Need 'PromptFile' $PromptFile; Need 'Out' $Out
+        $outDir = Full $Out
+        $partsArgs = @(Get-ChildItem -LiteralPath $cfg.parts_dir -Filter '*.parts' | Sort-Object Name | ForEach-Object { '--parts'; $_.FullName })
+        $code = Run $cfg.copper (@('design', 'compose', (Full $Design), '--blocks', $cfg.blocks_dir) + $partsArgs +
+                                 @('--symbol-root', $cfg.symbols_root, '--prompt', (Full $PromptFile), '--out', $outDir))
+        $outcome = switch ($code) { 0 { 'COMPOSED' } 1 { 'REFUSED' } 2 { 'INVALID_INPUT' } 3 { 'NEEDS_INPUT' } 4 { 'NOT_IMPLEMENTED' } default { 'ERROR' } }
+        $extra = @{ report = (Join-Path $outDir 'compose_report.json') }
+        if ($code -eq 0) {
+            $ip = Join-Path $outDir 'intent.json'
+            $gate = Gate $ip (Join-Path $outDir 'intent_check.json')
+            $extra['intent'] = $ip
+            $extra['gate'] = $(if ($gate -eq 0) { 'GROUNDED' } else { 'REJECTED' })
+            if ($gate -ne 0) { Result 'compose' 2 'GATE_REJECTED' $extra }
+            # Placement (Step 2e): C problem -> C placer (copper-core) -> C apply, then the gate again on the placed intent.
+            $hints = Join-Path $outDir 'layout_hints.json'
+            $problem = Join-Path $outDir 'placement.problem'
+            $placer = Join-Path $outDir 'placer.json'
+            Copy-Item -Force -LiteralPath $ip -Destination (Join-Path $outDir 'intent_composed.json')
+            $pc = Run $cfg.copper @('design', 'place-problem', $ip, '--hints', $hints, '--rules', $cfg.placement_rules, '--footprint-root', $cfg.footprints_root, '--out', $problem)
+            if ($pc -ne 0) { Result 'compose' $pc 'PLACEMENT_INPUT_INVALID' $extra }
+            $pr = (Get-Content -Raw -Encoding UTF8 -LiteralPath $cfg.placement_rules | ConvertFrom-Json).rules
+            $seeds = (@($pr.seeds.value) | ForEach-Object { [string]$_ }) -join ','
+            $placed = & $cfg.copper_core @('place', $problem, [string]$pr.iterations.value, $seeds) 2>$null
+            $pcode = $LASTEXITCODE
+            [IO.File]::WriteAllText($placer, ($placed -join "`n"), (New-Object Text.UTF8Encoding($false)))
+            if ($pcode -ne 0 -and $pcode -ne 2) { Result 'compose' 70 'PLACER_ERROR' $extra }
+            $ac = Run $cfg.copper @('design', 'place-apply', (Join-Path $outDir 'intent_composed.json'), '--hints', $hints, '--placer', $placer, '--out-intent', $ip, '--out-routing', (Join-Path $outDir 'routing.json'))
+            if ($ac -ne 0) { Result 'compose' $ac $(if ($ac -eq 5) { 'NO_LEGAL_POSITION' } else { 'PLACEMENT_FAILED' }) $extra }
+            $gate = Gate $ip (Join-Path $outDir 'intent_check.json')
+            if ($gate -ne 0) { $extra['gate'] = 'REJECTED_AFTER_PLACEMENT'; Result 'compose' 2 'GATE_REJECTED' $extra }
+            $extra['placed'] = $true
+            $extra['next'] = 'compile -Intent <out>\intent.json -Out <out> (the placed intent; routing.json carries the keep-outs), then report'
+        } else {
+            $extra['next'] = 'read compose_report.json: answer NEEDS_INPUT questions by asking the user; never invent a value'
+        }
+        Result 'compose' $code $outcome $extra
+    }
     'check' {
         Need 'Intent' $Intent
         $rp = Join-Path (Split-Path -Parent (Full $Intent)) 'intent_check.json'
@@ -135,19 +186,35 @@ switch ($Command) {
         $projName = (Get-Content -Raw -Encoding UTF8 -LiteralPath (Full $Intent) | ConvertFrom-Json).project.name
         $proj = Join-Path $outDir $projName
         $pcbPath = Join-Path $proj "$projName.kicad_pcb"
+        # Step 3d: PWR_FLAGs on the nets the composer says are external supplies (layout_hints.json, composed designs
+        # only), and the project's library tables, in C, before routing.
+        $hintsPath = Join-Path (Split-Path -Parent (Full $Intent)) 'layout_hints.json'
+        $srArgs = @('design', 'schematic-rules', $proj, '--symbol-root', $cfg.symbols_root)
+        if (Test-Path -LiteralPath $hintsPath) { $srArgs += @('--hints', $hintsPath) }
+        $src = Run $cfg.copper $srArgs
+        $schematicRules = switch ($src) { 0 { 'WRITTEN' } 2 { 'INVALID_INPUT' } default { 'ERROR' } }
+        if ($src -eq 0) {   # ERC again on the final schematic, as the compiler ran it (its erc.json predates the flags and tables)
+            & $cfg.kicad_cli @('sch', 'erc', '--format', 'json', '--output', (Join-Path $proj 'validation\erc.json'), (Join-Path $proj "$projName.kicad_sch")) 2>&1 | Out-Null
+        }
         $rules = if ($cfg.routing_rules) { $cfg.routing_rules } else { Join-Path $cfg.repo 'routing_profiles\copper_2layer_default.json' }
         $routingData = Join-Path (Split-Path -Parent (Full $Intent)) 'routing.json'
         $validation = Join-Path $proj 'validation'
         $routeArgs = @('design', 'route', $pcbPath, '--rules', $rules, '--fab-profile', $cfg.fab_profile, '--out', $pcbPath, '--report', (Join-Path $validation 'routing.json'))
         if (Test-Path -LiteralPath $routingData) { $routeArgs += @('--routing', $routingData) }
         $rc = Run $cfg.copper $routeArgs
+        # Step 3b: the project's DRC rules from the target fab profile and the routing rules (never KiCad's defaults).
+        $prReport = Join-Path $validation 'project_rules.json'
+        $prOut = & $cfg.copper_core @('project-rules', $pcbPath, $cfg.fab_profile, $rules) 2>&1 | ForEach-Object { "$_" }
+        $prc = $LASTEXITCODE
+        [IO.File]::WriteAllText($prReport, ($prOut -join "`n") + "`n", (New-Object Text.UTF8Encoding($false)))
+        $projectRules = switch ($prc) { 0 { 'WRITTEN_PASS' } 3 { 'WRITTEN_FINE_PITCH_NOT_PASS' } 2 { 'INVALID_INPUT_KICAD_DEFAULTS_STAND' } default { 'ERROR_KICAD_DEFAULTS_STAND' } }
         if ($rc -eq 0 -or $rc -eq 6) {
             & $cfg.kicad_cli @('pcb', 'drc', '--format', 'json', '--severity-all', '--output', (Join-Path $validation 'drc.json'), $pcbPath) 2>&1 | Out-Null
             $imp = & $cfg.copper @('design', 'import', $proj, '--netlist', (Join-Path $validation 'design.kicad_net')) 2>&1 | ForEach-Object { "$_" }
             [IO.File]::WriteAllText((Join-Path $proj 'copper_import.stdout.log'), ($imp -join "`n") + "`n", (New-Object Text.UTF8Encoding($false)))
         }
         $meaning = switch ($rc) { 0 { 'GENERATED_ROUTED' } 6 { 'GENERATED_PARTIALLY_ROUTED' } default { 'GENERATED_NOT_ROUTED' } }
-        Result 'compile' 0 $meaning @{ out = $outDir; routing = (Join-Path $validation 'routing.json'); routing_exit = $rc; next = 'run: .\copper.ps1 report -Project <out>\<project.name>  (exit 0 here does NOT mean ERC/DRC are clean)' }
+        Result 'compile' 0 $meaning @{ out = $outDir; routing = (Join-Path $validation 'routing.json'); routing_exit = $rc; schematic_rules = $schematicRules; project_rules = $projectRules; project_rules_report = $prReport; next = 'run: .\copper.ps1 report -Project <out>\<project.name>  (exit 0 here does NOT mean ERC/DRC are clean)' }
     }
     'inspect' {
         Need 'Board' $Board

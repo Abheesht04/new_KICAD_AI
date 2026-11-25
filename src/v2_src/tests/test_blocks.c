@@ -136,6 +136,52 @@ static void test_formulas_and_values(void)
     expect("\"value\": {\"formula\": \"r_led\"}", "\"value\": {\"formula\": \"r_other\"}", "UNKNOWN_FORMULA");
 }
 
+/* Step 2c additions: parameters derived from a port, port currents, signal levels, I2C pull-up flags. */
+static void test_composition_keys(void)
+{
+    expect("\"from\": {\"port\": \"drive\"", "\"from\": {\"port\": \"nowhere\"", "UNKNOWN_PORT");
+    expect("\"quantity\": \"voltage_max\"", "\"quantity\": \"brightness\"", "BAD_KIND");
+    expect("\"required\": true, \"min\": 1000000", "\"required\": false, \"min\": 1000000", "CONFLICT");   /* derived => required */
+    expect("\"quantity\": \"voltage_max\"", "\"quantity\": \"current\"", "UNIT_MISMATCH");  /* uV parameter, current quantity */
+    expect("{\"name\": \"drive\", \"kind\": \"gpio\"}", "{\"name\": \"drive\", \"kind\": \"gpio\", \"current\": 5}", "CONFLICT");
+    expect("{\"name\": \"drive\", \"kind\": \"gpio\"}", "{\"name\": \"drive\", \"kind\": \"gpio\", \"level_port\": \"gnd\"}", "BAD_KIND");
+    expect("{\"name\": \"drive\", \"kind\": \"gpio\"}", "{\"name\": \"drive\", \"kind\": \"gpio\", \"level_port\": \"vcc\"}", "UNKNOWN_PORT");
+    expect("{\"name\": \"drive\", \"kind\": \"gpio\"}", "{\"name\": \"drive\", \"kind\": \"gpio\", \"pullup\": true}", "CONFLICT");
+    expect("{\"name\": \"drive\", \"kind\": \"gpio\"}", "{\"name\": \"drive\", \"kind\": \"gpio\", \"current_follows\": \"gnd\"}", "CONFLICT");
+    expect("{\"name\": \"gnd\", \"kind\": \"ground\"}",
+           "{\"name\": \"gnd\", \"kind\": \"ground\"}, {\"name\": \"vcc\", \"kind\": \"power_in\", \"voltage_min\": 1, \"voltage_max\": 2, \"source\": \"ohms_law\", \"current_follows\": \"gnd\"}",
+           "BAD_KIND");
+    expect("{\"name\": \"gnd\", \"kind\": \"ground\"}",
+           "{\"name\": \"gnd\", \"kind\": \"ground\"}, {\"name\": \"vcc\", \"kind\": \"power_in\", \"voltage_min\": 1, \"voltage_max\": 2, \"source\": \"ohms_law\", \"current\": 10}",
+           "NO_SOURCE");   /* a current without its own source; also UNUSED_PORT */
+}
+
+/* Step 2e: a part may declare keep-outs in its own footprint frame (um), each with a source. */
+static void test_part_keepouts(void)
+{
+    static const char *const ok = "\"role\": \"led\", \"prefix\": \"D\", \"keepouts\": [{\"x1_um\": -1000, \"y1_um\": -2000, \"x2_um\": 1000, \"y2_um\": -500, \"source\": \"kingbright_apt1608ec\"}],";
+    char *text = mutate("\"role\": \"led\", \"prefix\": \"D\",", ok);
+    BlockReport r = check(text, true);
+    if (r.verdict != BLOCK_VALID) dump(&r);
+    assert(r.verdict == BLOCK_VALID);
+    free(text);
+    expect("\"role\": \"led\", \"prefix\": \"D\",", "\"role\": \"led\", \"prefix\": \"D\", \"keepouts\": [{\"x1_um\": 1000, \"y1_um\": -2000, \"x2_um\": -1000, \"y2_um\": -500, \"source\": \"kingbright_apt1608ec\"}],", "BAD_RANGE");
+    expect("\"role\": \"led\", \"prefix\": \"D\",", "\"role\": \"led\", \"prefix\": \"D\", \"keepouts\": [{\"x1_um\": -1000, \"y1_um\": -2000, \"x2_um\": 1000, \"y2_um\": -500}],", "MISSING_KEY");
+    expect("\"role\": \"led\", \"prefix\": \"D\",", "\"role\": \"led\", \"prefix\": \"D\", \"keepouts\": [{\"x1_um\": -1, \"y1_um\": -2, \"x2_um\": 1, \"y2_um\": 2, \"source\": \"nobody\"}],", "UNKNOWN_SOURCE");
+}
+
+/* Step 3d: a power_out or ground port may say it is an external supply (KiCad needs a PWR_FLAG on its net). */
+static void test_external_supply(void)
+{
+    char *text = mutate("{\"name\": \"gnd\", \"kind\": \"ground\"}", "{\"name\": \"gnd\", \"kind\": \"ground\", \"external_supply\": true}");
+    BlockReport r = check(text, true);
+    if (r.verdict != BLOCK_VALID) dump(&r);
+    assert(r.verdict == BLOCK_VALID);
+    free(text);
+    expect("{\"name\": \"gnd\", \"kind\": \"ground\"}", "{\"name\": \"gnd\", \"kind\": \"ground\", \"external_supply\": 1}", "TYPE");
+    expect("{\"name\": \"drive\", \"kind\": \"gpio\"}", "{\"name\": \"drive\", \"kind\": \"gpio\", \"external_supply\": true}", "CONFLICT");
+}
+
 static void test_catalogue(void)
 {
     expect("\"part_id\": \"led_0603_red_kingbright_apt1608ec\"", "\"part_id\": \"led_that_does_not_exist\"", "UNKNOWN_PART");
@@ -182,6 +228,9 @@ int main(void)
     test_sources_and_parameters();
     test_ports_nets_pins();
     test_formulas_and_values();
+    test_composition_keys();
+    test_part_keepouts();
+    test_external_supply();
     test_catalogue();
     test_json_report_and_functions();
     free(fixture);

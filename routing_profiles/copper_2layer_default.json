@@ -12,6 +12,8 @@
     "via_drill_mm": {"value": 0.3, "why": "via hole: 2x the profile's 0.15 mm minimum via hole"},
     "via_cost": {"value": 8, "why": "a via costs as much as 8 grid steps, so the router changes layer only when it saves length or is needed"},
     "passes": {"value": 4, "why": "rip-up-and-reroute passes: nets that fail are routed first in the next pass"},
-    "max_cells": {"value": 4000000, "why": "grid cells per layer the router may use (a 500 mm x 500 mm board at 0.25 mm)"}
+    "max_cells": {"value": 4000000, "why": "grid cells per layer the router may use (a 500 mm x 500 mm board at 0.25 mm)"},
+    "fine_pitch_clearance_mm": {"value": 0.15, "why": "Step 3c, LAYOUT_RULES.md R5: only between a fine-pitch pad's escape stub and the other SMD pads of its own footprint (a footprint whose own pads are closer than clearance_mm, e.g. SOT-563 0.15 mm, USB-C 0.20 mm). Equal to the profile's SMD pad-to-pad minimum (0.15 mm), above its pad-to-track minimum (0.10 mm); copper design route refuses it below any of them"},
+    "fine_pitch_neck_mm": {"value": 0.2, "why": "escape stub width at fine-pitch pads: no wider than the narrowest fine-pitch pad in the library (0.30 mm, USB-C), and stubs of neighbouring pads at 0.5 mm pitch keep the full clearance_mm between them (0.5 - 0.2 = 0.3); 2x the profile's 0.10 mm minimum track"}
   }
 }

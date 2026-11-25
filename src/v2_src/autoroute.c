@@ -14,6 +14,7 @@ typedef struct Grid { G2Nm minx, miny, maxx, maxy, pitch; size_t nx, ny, cells; 
 
 typedef struct Items {
     BoardTrack *tracks; size_t nt, ct;
+    uint32_t *stub_fp;            /* per track: footprint + 1 of a fine-pitch escape stub, or 0 (Step 3c) */
     BoardVia *vias; size_t nv, cv;
 } Items;
 
@@ -31,6 +32,9 @@ typedef struct Router {
     int32_t *target;              /* per node: pad slot + 1 of an unconnected pad, or 0 */
     size_t *touched; size_t touched_n, touched_cap;
     Items items;                  /* everything routed in the current pass */
+    uint8_t *fine_fp;             /* per footprint: 1 = fine-pitch (Step 3c); NULL when the fine rules are off */
+    size_t *res_node;             /* per pad: its reserved escape end (layer * cells + cell), or NONE (Step 3c) */
+    G2Nm *res_w;                  /* per pad: the width of the net that continues from that end */
     bool oom;
     char why_buf[256];            /* the last exact-check failure, in words */
 } Router;
@@ -96,11 +100,18 @@ static void *grow(Router *R, void *old, size_t used, size_t *cap, size_t size)
     return n;
 }
 
-static bool add_track(Router *R, G2Point a, G2Point b, G2Nm w, int l, uint32_t net)
+static bool add_track(Router *R, G2Point a, G2Point b, G2Nm w, int l, uint32_t net, uint32_t stub_fp)
 {
     if (a.x == b.x && a.y == b.y) return true;
     Items *it = &R->items;
-    if (it->nt == it->ct) { BoardTrack *t = grow(R, it->tracks, it->nt, &it->ct, sizeof *t); if (!t) return false; it->tracks = t; }
+    if (it->nt == it->ct) {
+        size_t cs = it->ct;
+        BoardTrack *t = grow(R, it->tracks, it->nt, &it->ct, sizeof *t);
+        uint32_t *f = grow(R, it->stub_fp, it->nt, &cs, sizeof *f);
+        if (!t || !f) return false;
+        it->tracks = t; it->stub_fp = f;
+    }
+    it->stub_fp[it->nt] = stub_fp;
     BoardTrack *t = &it->tracks[it->nt++];
     memset(t, 0, sizeof *t);
     t->a = a; t->b = b; t->width = w; t->layer = l == 0 ? BOARD_LAYER_F_CU : BOARD_LAYER_B_CU; t->net = net;
@@ -208,6 +219,13 @@ static void build_obstacles(Router *R, uint32_t net, G2Nm w)
         G2Nm vr2 = half_up(v->size);
         mark_circle(R, v->pos, vr2 + hw + clr + s, vr2 + vr + clr);
     }
+    for (size_t i = 0; R->res_node && i < R->b->pad_count; i++) {
+        if (R->res_node[i] == NONE || R->b->pads[i].net == net) continue;
+        G2Point e = center(g, R->res_node[i] % g->cells);
+        G2Aabb pt = {e, e};
+        G2Nm he = half_up(R->res_w[i]);
+        mark_box(R, (int)(R->res_node[i] / g->cells), pt, he + hw + clr + s, he + vr + clr);
+    }
     for (size_t i = 0; i < r->keepout_count; i++) {
         const AutorouteKeepout *k = &r->keepouts[i];
         if (k->front) mark_box(R, 0, k->box, hw + s, k->back ? vr : -1);
@@ -236,8 +254,9 @@ static const char *pad_clash(Router *R, const BoardPad *p, G2Point a, G2Point b,
     return R->why_buf;
 }
 
-/* Is a track of `net`, width `w`, from a to b on layer l clear of all other copper, the edge and the keep-outs? */
-static bool segment_ok(Router *R, uint32_t net, G2Nm w, int l, G2Point a, G2Point b, const char **why)
+/* Is a track of `net`, width `w`, from a to b on layer l clear of all other copper, the edge and the keep-outs?
+ * stub_fp (footprint + 1, or 0): a fine-pitch escape stub keeps only fine_clearance_nm to that footprint's SMD pads. */
+static bool segment_ok(Router *R, uint32_t net, G2Nm w, int l, G2Point a, G2Point b, uint32_t stub_fp, const char **why)
 {
     const AutorouteRules *r = R->r;
     const Grid *g = &R->g;
@@ -248,8 +267,9 @@ static bool segment_ok(Router *R, uint32_t net, G2Nm w, int l, G2Point a, G2Poin
     for (size_t i = 0; i < R->b->pad_count; i++) {
         const BoardPad *p = &R->b->pads[i];
         if (p->net == net || !on_layer(p, l)) continue;
+        G2Nm c = stub_fp && p->footprint + 1 == stub_fp && p->type == BOARD_PAD_SMD ? r->fine_clearance_nm : clr;
         G2Aabb box;
-        if (board_pad_aabb(p, &box) != BOARD_OK || less(g2_compare_segment_aabb_distance(a, b, box, hw + clr, &o), &o)) { *why = pad_clash(R, p, a, b, l); return false; }
+        if (board_pad_aabb(p, &box) != BOARD_OK || less(g2_compare_segment_aabb_distance(a, b, box, hw + c, &o), &o)) { *why = pad_clash(R, p, a, b, l); return false; }
     }
     for (size_t i = 0; i < R->items.nt; i++) {
         const BoardTrack *t = &R->items.tracks[i];
@@ -332,11 +352,32 @@ static void touch(Router *R, size_t node)
     R->touched[R->touched_n++] = node;
 }
 
+/* Fine-pitch pads (Step 3c): their stubs are fine_neck_nm wide (or the net's width, if narrower). */
+static bool pad_fine(const Router *R, const BoardPad *p)
+{
+    return R->fine_fp && p->footprint < R->b->footprint_count && R->fine_fp[p->footprint];
+}
+
+static G2Nm stub_width(const Router *R, const BoardPad *p, G2Nm w)
+{
+    return pad_fine(R, p) && R->r->fine_neck_nm < w ? R->r->fine_neck_nm : w;
+}
+
 /* A pad's terminal nodes: free cells on its layers whose centres are inside the pad; otherwise the nearest free
- * cell (within 3 cells) whose straight stub from the pad centre passes the exact check. */
+ * cell (within 3 cells) whose straight stub from the pad centre passes the exact check. A fine-pitch pad looks
+ * further (its neighbours block every cell near it) and checks its stub as a fine-pitch escape. */
 
 static size_t terminals(Router *R, const BoardPad *p, uint32_t net, G2Nm w, size_t *out, size_t cap)
 {
+    size_t pi = (size_t)(p - R->b->pads);
+    if (R->res_node && R->res_node[pi] != NONE) { if (!cap) return 0; out[0] = R->res_node[pi]; return 1; }
+    bool fine = pad_fine(R, p);
+    G2Nm sw = stub_width(R, p, w), reach = 3 * R->g.pitch;
+    uint32_t sf = fine ? p->footprint + 1 : 0;
+    if (fine) {
+        G2Nm big = p->size.x > p->size.y ? p->size.x : p->size.y;
+        reach = big + half_up(w) + R->r->clearance_nm + R->slack + 2 * R->g.pitch;
+    }
     G2Aabb box;
     size_t n = 0, x0, x1, y0, y1;
     if (board_pad_aabb(p, &box) != BOARD_OK) return 0;
@@ -352,7 +393,7 @@ static size_t terminals(Router *R, const BoardPad *p, uint32_t net, G2Nm w, size
     if (n) return n;
     G2Aabb pt = {p->pos, p->pos};
     for (int l = 0; l < NL; l++) {
-        if (!on_layer(p, l) || !cell_range(&R->g, pt, 3 * R->g.pitch, &x0, &x1, &y0, &y1)) continue;
+        if (!on_layer(p, l) || !cell_range(&R->g, pt, reach, &x0, &x1, &y0, &y1)) continue;
         uint64_t best_d = INF;
         size_t best = NONE;
         for (size_t y = y0; y <= y1; y++)
@@ -362,7 +403,7 @@ static size_t terminals(Router *R, const BoardPad *p, uint32_t net, G2Nm w, size
                 uint64_t d2 = 0;
                 const char *why = NULL;
                 if (g2_distance_squared(p->pos, center(&R->g, c), &d2) != G2_OK || d2 >= best_d) continue;
-                if (!segment_ok(R, net, w, l, p->pos, center(&R->g, c), &why)) continue;
+                if (!segment_ok(R, net, sw, l, p->pos, center(&R->g, c), sf, &why)) continue;
                 best_d = d2;
                 best = c;
             }
@@ -445,6 +486,49 @@ static size_t search(Router *R, const G2Point *goals, size_t ngoals)
     return NONE;
 }
 
+/* ------------------------------------------------------------------------------------------------- fan-out */
+
+/* Step 3c: before any net is routed, every connected pad of a fine-pitch footprint gets its escape: the stub and its
+ * end cell, chosen as terminals() would, in board pad order, each seeing the escapes reserved before it. Later nets
+ * see the stubs as copper and the ends as a point of the owning net's width, so no path can wall a pin in. A pad
+ * whose escape cannot be found is left to route_net, which then reports it. */
+static void reserve_escapes(Router *R)
+{
+    const Board *b = R->b;
+    for (size_t i = 0; i < b->pad_count; i++) R->res_node[i] = NONE;
+    for (size_t i = 0; i < b->pad_count && !R->oom; i++) {
+        const BoardPad *p = &b->pads[i];
+        if (!p->net || !pad_fine(R, p)) continue;
+        size_t same = 0;
+        for (size_t k = 0; k < b->pad_count && same < 2; k++) if (b->pads[k].net == p->net) same++;
+        if (same < 2) continue;
+        G2Nm w = net_width(R->r, b, p->net);
+        build_obstacles(R, p->net, w);
+        size_t node;
+        if (!terminals(R, p, p->net, w, &node, 1)) continue;
+        if (!add_track(R, p->pos, center(&R->g, node % R->g.cells), stub_width(R, p, w), (int)(node / R->g.cells), p->net, p->footprint + 1)) return;
+        R->res_node[i] = node;
+        R->res_w[i] = w;
+    }
+}
+
+/* At the end of a pass: the stubs of nets that failed are taken out, so no copper is written for them. */
+static void drop_failed_escapes(Router *R, const AutorouteNetResult *trial, size_t ntrial)
+{
+    Items *it = &R->items;
+    size_t keep = 0;
+    for (size_t i = 0; i < it->nt; i++) {
+        bool drop = false;
+        if (it->stub_fp[i])
+            for (size_t k = 0; k < ntrial; k++)
+                if (trial[k].net == it->tracks[i].net) { drop = trial[k].status == AUTOROUTE_NET_FAILED; break; }
+        if (drop) continue;
+        it->tracks[keep] = it->tracks[i];
+        it->stub_fp[keep++] = it->stub_fp[i];
+    }
+    it->nt = keep;
+}
+
 /* ------------------------------------------------------------------------------------------------- one net */
 
 typedef struct Path { size_t *nodes; size_t n; } Path;
@@ -499,7 +583,14 @@ static bool route_net(Router *R, uint32_t net, const size_t *pads, size_t npads,
             owner[u * cap + nterm[u]++] = pads[i];
         }
     }
-    for (size_t u = 0; u < nunits; u++) if (!nterm[u]) { *why = "a pad has no free grid cell to connect to"; return false; }
+    for (size_t u = 0; u < nunits; u++)
+        if (!nterm[u]) {   /* name the pad (Step 3c), so a failure says where */
+            const BoardPad *pd = &R->b->pads[unit_pad[u]];
+            const char *ref = pd->footprint < R->b->footprint_count && R->b->footprints[pd->footprint].reference ? R->b->footprints[pd->footprint].reference : "?";
+            snprintf(R->why_buf, sizeof R->why_buf, "a pad has no free grid cell to connect to (pad %s.%s)", ref, pd->number ? pd->number : "?");
+            *why = R->why_buf;
+            return false;
+        }
     npads = nunits;
     size_t npaths = 0, nstubs = 0;
     done[0] = true;
@@ -547,7 +638,7 @@ static bool route_net(Router *R, uint32_t net, const size_t *pads, size_t npads,
             if (!end) {
                 size_t a = P->nodes[m - 1], b = P->nodes[m];
                 if (a / g->cells != b / g->cells) {       /* via */
-                    if (!add_track(R, center(g, P->nodes[run] % g->cells), center(g, a % g->cells), w, (int)(a / g->cells), net) ||
+                    if (!add_track(R, center(g, P->nodes[run] % g->cells), center(g, a % g->cells), w, (int)(a / g->cells), net, 0) ||
                         !add_via(R, center(g, a % g->cells), net)) { *why = "out of memory"; return false; }
                     run = m;
                     continue;
@@ -560,7 +651,7 @@ static bool route_net(Router *R, uint32_t net, const size_t *pads, size_t npads,
             size_t last = end ? P->nodes[P->n - 1] : P->nodes[m];
             size_t first = P->nodes[run];
             if (first / g->cells == last / g->cells &&
-                !add_track(R, center(g, first % g->cells), center(g, last % g->cells), w, (int)(last / g->cells), net)) { *why = "out of memory"; return false; }
+                !add_track(R, center(g, first % g->cells), center(g, last % g->cells), w, (int)(last / g->cells), net, 0)) { *why = "out of memory"; return false; }
             run = m;
         }
     }
@@ -569,12 +660,14 @@ static bool route_net(Router *R, uint32_t net, const size_t *pads, size_t npads,
         for (size_t q = 0; q < s && !seen; q++) seen = stub_pad[q] == stub_pad[s] && stub_node[q] == stub_node[s];
         if (seen) continue;
         const BoardPad *pd = &R->b->pads[stub_pad[s]];   /* stub_pad holds board pad indices */
-        if (!add_track(R, pd->pos, center(g, stub_node[s] % g->cells), w, (int)(stub_node[s] / g->cells), net)) { *why = "out of memory"; return false; }
+        if (R->res_node && R->res_node[stub_pad[s]] != NONE) continue;   /* reserved: its stub is already copper */
+        if (!add_track(R, pd->pos, center(g, stub_node[s] % g->cells), stub_width(R, pd, w), (int)(stub_node[s] / g->cells), net,
+                       pad_fine(R, pd) ? pd->footprint + 1 : 0)) { *why = "out of memory"; return false; }
     }
     /* Exact verification of everything this net added; a single failure removes the whole net. */
     for (size_t i = keep_t; i < R->items.nt; i++) {
         const BoardTrack *t = &R->items.tracks[i];
-        if (!segment_ok(R, net, t->width, t->layer == BOARD_LAYER_F_CU ? 0 : 1, t->a, t->b, why)) {
+        if (!segment_ok(R, net, t->width, t->layer == BOARD_LAYER_F_CU ? 0 : 1, t->a, t->b, R->items.stub_fp[i], why)) {
             R->items.nt = keep_t; R->items.nv = keep_v;
             return false;
         }
@@ -604,6 +697,9 @@ AutorouteStatus autoroute_board(Arena *arena, const Board *b, const AutorouteRul
         return fail(out, AUTOROUTE_INVALID_INPUT, "routing rules out of range");
     for (size_t i = 0; i < r->width_count; i++)
         if (r->widths[i].width_nm <= 0) return fail(out, AUTOROUTE_INVALID_INPUT, "a net width is not positive");
+    if (r->fine_clearance_nm < 0 || r->fine_neck_nm < 0 || (r->fine_clearance_nm > 0) != (r->fine_neck_nm > 0) ||
+        r->fine_clearance_nm > r->clearance_nm)
+        return fail(out, AUTOROUTE_INVALID_INPUT, "fine-pitch rules: give both the fine clearance and the neck width, the fine clearance at most the clearance");
     if (b->track_count || b->via_count || b->arc_track_count) return fail(out, AUTOROUTE_INVALID_INPUT, "the board already has tracks or vias; Copper routes only unrouted boards");
     if (b->zone_count) return fail(out, AUTOROUTE_UNSUPPORTED, "the board has zones, which the router does not model yet");
     if (b->edge_count != 1 || b->edges[0].kind != BOARD_EDGE_RECT) return fail(out, AUTOROUTE_UNSUPPORTED, "the router needs exactly one rectangular board outline");
@@ -643,6 +739,36 @@ AutorouteStatus autoroute_board(Arena *arena, const Board *b, const AutorouteRul
     if (!R.blocked[0] || !R.blocked[1] || !R.via_blocked || !R.in_tree || !R.dist || !R.h || !R.parent || !R.heap || !R.heap_pos || !R.target)
         return fail(out, AUTOROUTE_ERR_MEMORY, "out of memory for the routing grid");
     for (size_t v = 0; v < nodes; v++) { R.dist[v] = INF; R.h[v] = INF; R.parent[v] = NONE; R.heap_pos[v] = NONE; }
+
+    /* Fine-pitch footprints (Step 3c): two of their own pads on different nets (or without a net) are closer than the
+     * clearance. Pad boxes give the gap (a lower bound for diagonal pairs and round pads, so a footprint may be
+     * counted as fine-pitch when it is not; its stubs then keep the fine clearance, still at or above the fab's). */
+    if (r->fine_clearance_nm > 0) {
+        R.fine_fp = arena_alloc(arena, b->footprint_count + 1);
+        if (!R.fine_fp) return fail(out, AUTOROUTE_ERR_MEMORY, "out of memory");
+        memset(R.fine_fp, 0, b->footprint_count + 1);
+        for (size_t i = 0; i < b->pad_count; i++) {
+            const BoardPad *p = &b->pads[i];
+            G2Aabb pb, qb;
+            if (p->type == BOARD_PAD_NPTH || p->footprint >= b->footprint_count || R.fine_fp[p->footprint] || board_pad_aabb(p, &pb) != BOARD_OK) continue;
+            for (size_t j = i + 1; j < b->pad_count; j++) {
+                const BoardPad *q = &b->pads[j];
+                if (q->footprint != p->footprint || q->type == BOARD_PAD_NPTH) continue;
+                if (p->net && p->net == q->net) continue;
+                if (p->number && q->number && *p->number && !strcmp(p->number, q->number)) continue;
+                bool shared = (on_layer(p, 0) && on_layer(q, 0)) || (on_layer(p, 1) && on_layer(q, 1));   /* copper only */
+                if (!shared || board_pad_aabb(q, &qb) != BOARD_OK) continue;
+                G2Nm gx = pb.min.x > qb.max.x ? pb.min.x - qb.max.x : qb.min.x - pb.max.x;
+                G2Nm gy = pb.min.y > qb.max.y ? pb.min.y - qb.max.y : qb.min.y - pb.max.y;
+                G2Nm gap = gx > gy ? gx : gy;
+                if (gap < r->clearance_nm) { R.fine_fp[p->footprint] = 1; break; }
+            }
+        }
+        R.res_node = arena_alloc_array(arena, sizeof *R.res_node, b->pad_count + 1);
+        R.res_w = arena_alloc_array(arena, sizeof *R.res_w, b->pad_count + 1);
+        if (!R.res_node || !R.res_w) return fail(out, AUTOROUTE_ERR_MEMORY, "out of memory");
+        for (size_t i = 0; i < b->pad_count; i++) { R.res_node[i] = NONE; R.res_w[i] = 0; }
+    }
 
     /* Nets with pads, shortest (pad bounding box half-perimeter) first. */
     size_t nn = 0;
@@ -687,6 +813,7 @@ AutorouteStatus autoroute_board(Arena *arena, const Board *b, const AutorouteRul
     if (!trial || !next) return fail(out, AUTOROUTE_ERR_MEMORY, "out of memory");
     for (uint32_t pass = 0; pass < r->passes; pass++) {
         R.items.nt = R.items.nv = 0;
+        if (R.res_node) { reserve_escapes(&R); if (R.oom) return fail(out, AUTOROUTE_ERR_MEMORY, "out of memory"); }
         memcpy(trial, out->nets, out->net_count * sizeof *trial);
         size_t routed = 0, nf = 0, ns = 0;
         for (size_t oi = 0; oi < nn; oi++) {
@@ -710,6 +837,7 @@ AutorouteStatus autoroute_board(Arena *arena, const Board *b, const AutorouteRul
             }
             if (ok) routed++;
         }
+        if (R.res_node) drop_failed_escapes(&R, trial, out->net_count);
         /* failed nets first for the next pass, keeping their relative order */
         for (size_t oi = 0; oi < nn; oi++) for (size_t k = 0; k < out->net_count; k++)
             if (trial[k].net == order[oi] && trial[k].status == AUTOROUTE_NET_FAILED) next[nf++] = order[oi];

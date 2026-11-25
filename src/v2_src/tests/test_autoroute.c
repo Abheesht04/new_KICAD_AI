@@ -247,9 +247,134 @@ static void test_fail_closed(void)
     assert(autoroute_board(&arena, &b, &r, &res) == AUTOROUTE_INVALID_INPUT);
 }
 
+/* KiCad writes a pad's angle in a .kicad_pcb as its absolute angle (footprint + pad's own),
+   e.g. KiCad 10.0.5 demos/cm5_minima: a SOT-23-5 at 180 has pads at 180, a JST at 90 has pads at 90.
+   The fixture is Copper-written following that convention, not KiCad-exported. */
+static void test_pad_angle_is_absolute(void)
+{
+    Board b;
+    load(FIX "rotated_pads.kicad_pcb", &b);
+    assert(b.footprint_count == 3 && b.pad_count == 3);
+    const int32_t want_rot[3] = {90000, 270000, 90000};
+    const G2Point want_pos[3] = {{10000000, 9000000}, {20000000, 11000000}, {30000000, 10000000}};
+    for (size_t i = 0; i < 3; ++i) {
+        const BoardPad *p = &b.pads[b.footprints[i].first_pad];
+        assert(p->rot_mdeg == want_rot[i]);
+        assert(p->pos.x == want_pos[i].x && p->pos.y == want_pos[i].y);
+        G2Aabb box;
+        assert(board_pad_aabb(p, &box) == BOARD_OK);
+        /* a 2 x 1 mm pad at 90 or 270 is 1 mm wide and 2 mm tall on the board */
+        assert(box.max.x - box.min.x == 1000000 && box.max.y - box.min.y == 2000000);
+    }
+}
+
+/* R5 (LAYOUT_RULES.md, Step 3c): a SOT-563 (pads copied from KiCad 10.0.5's SOT-563.kicad_mod: 0.675 x 0.35 mm at
+   0.5 mm pitch, 0.15 mm apart; the fixture board is Copper-written) cannot be reached with a 0.3 mm clearance. With
+   the fine-pitch rules, each of its pads escapes with a narrow stub that keeps the fine clearance to the other pads of
+   its own footprint only; every other pair keeps the normal clearance. Checked independently below. */
+static bool is_u3_stub(const Board *b, const BoardTrack *t, size_t *fp)
+{
+    for (size_t i = 0; i < b->pad_count; i++) {
+        const BoardPad *p = &b->pads[i];
+        const char *ref = b->footprints[p->footprint].reference;
+        if (!ref || strcmp(ref, "U3") || p->net != t->net) continue;
+        if ((t->a.x == p->pos.x && t->a.y == p->pos.y) || (t->b.x == p->pos.x && t->b.y == p->pos.y)) { *fp = p->footprint; return true; }
+    }
+    return false;
+}
+
+static void assert_clear_fine(const Board *b, const AutorouteResult *res, G2Nm clr, G2Nm fine, G2Nm neck)
+{
+    G2Order o;
+    size_t stubs = 0;
+    for (size_t t = 0; t < res->track_count; t++) {
+        const BoardTrack *a = &res->tracks[t];
+        size_t fp = SIZE_MAX;
+        bool stub = is_u3_stub(b, a, &fp);
+        if (stub) { stubs++; assert(a->width == neck); }
+        else assert(a->width == 250000);
+        G2Nm ha = hup(a->width);
+        for (size_t i = 0; i < b->pad_count; i++) {
+            const BoardPad *p = &b->pads[i];
+            G2Aabb box;
+            if (p->net == a->net || !layer_has(p, a->layer)) continue;
+            assert(board_pad_aabb(p, &box) == BOARD_OK);
+            G2Nm c = stub && p->footprint == fp && p->type == BOARD_PAD_SMD ? fine : clr;
+            assert(g2_compare_segment_aabb_distance(a->a, a->b, box, ha + c, &o) == G2_OK && o != G2_ORDER_LESS);
+        }
+        for (size_t k = 0; k < t; k++) {
+            const BoardTrack *c = &res->tracks[k];
+            if (c->net == a->net || c->layer != a->layer) continue;
+            assert(g2_compare_segment_segment_distance(a->a, a->b, c->a, c->b, ha + hup(c->width) + clr, &o) == G2_OK && o != G2_ORDER_LESS);
+        }
+        for (size_t v = 0; v < res->via_count; v++) {
+            G2Circle c = {res->vias[v].pos, hup(res->vias[v].size)};
+            if (res->vias[v].net == a->net) continue;
+            assert(g2_compare_segment_circle_distance(a->a, a->b, c, ha + clr, &o) == G2_OK && o != G2_ORDER_LESS);
+        }
+    }
+    assert(stubs >= 5);   /* U3 pads 1, 2, 4, 5, 6 (pad 3 has no net) */
+    for (size_t v = 0; v < res->via_count; v++)
+        for (size_t i = 0; i < b->pad_count; i++) {
+            G2Aabb box;
+            if (b->pads[i].net == res->vias[v].net) continue;
+            assert(board_pad_aabb(&b->pads[i], &box) == BOARD_OK);
+            assert(g2_compare_point_aabb_distance(res->vias[v].pos, box, hup(res->vias[v].size) + clr, &o) == G2_OK && o != G2_ORDER_LESS);
+        }
+}
+
+static void test_fine_pitch(void)
+{
+    Board b;
+    load(FIX "fine_pitch.kicad_pcb", &b);
+    AutorouteRules r = default_rules();
+    AutorouteResult res;
+    /* without the fine-pitch rules: the four nets that reach U3 fail, with the reason */
+    assert(autoroute_board(&arena, &b, &r, &res) == AUTOROUTE_PARTIAL);
+    assert(res.nets_routed == 0);
+    for (size_t i = 0; i < res.net_count; i++)
+        if (res.nets[i].status == AUTOROUTE_NET_FAILED) assert(strstr(res.nets[i].message, "no free grid cell"));
+
+    /* with them (routing_profiles/copper_2layer_default.json values): routed, and independently clear */
+    r.fine_clearance_nm = 150000;
+    r.fine_neck_nm = 200000;
+    AutorouteStatus st = autoroute_board(&arena, &b, &r, &res);
+    if (st != AUTOROUTE_ROUTED)
+        for (size_t i = 0; i < res.net_count; i++) fprintf(stderr, "  %s %s %s\n", res.nets[i].name, autoroute_net_status_name(res.nets[i].status), res.nets[i].message);
+    assert(st == AUTOROUTE_ROUTED && res.nets_routed == 4 && res.nets_failed == 0);
+    assert_connected(&b, &res);
+    assert_clear_fine(&b, &res, r.clearance_nm, r.fine_clearance_nm, r.fine_neck_nm);
+
+    /* deterministic */
+    AutorouteResult res2;
+    assert(autoroute_board(&arena, &b, &r, &res2) == AUTOROUTE_ROUTED);
+    assert(res2.track_count == res.track_count && res2.via_count == res.via_count);
+    assert(!memcmp(res2.tracks, res.tracks, res.track_count * sizeof *res.tracks));
+
+    /* the fine rules never apply away from fine-pitch footprints: the LED board routes byte-identically with them */
+    Board led;
+    load(FIX "led_indicator.kicad_pcb", &led);
+    AutorouteRules plain = default_rules();
+    AutorouteResult a, c;
+    assert(autoroute_board(&arena, &led, &plain, &a) == AUTOROUTE_ROUTED);
+    assert(autoroute_board(&arena, &led, &r, &c) == AUTOROUTE_ROUTED);
+    assert(a.track_count == c.track_count && !memcmp(a.tracks, c.tracks, a.track_count * sizeof *a.tracks));
+
+    /* refused: only one of the two set, a fine clearance above the normal one */
+    AutorouteRules bad = r;
+    bad.fine_neck_nm = 0;
+    assert(autoroute_board(&arena, &b, &bad, &res) == AUTOROUTE_INVALID_INPUT);
+    bad = r; bad.fine_clearance_nm = 0;
+    assert(autoroute_board(&arena, &b, &bad, &res) == AUTOROUTE_INVALID_INPUT);
+    bad = r; bad.fine_clearance_nm = r.clearance_nm + 1;
+    assert(autoroute_board(&arena, &b, &bad, &res) == AUTOROUTE_INVALID_INPUT);
+}
+
 int main(void)
 {
     arena_init(&arena, 1u << 24);
+    test_fine_pitch();
+    test_pad_angle_is_absolute();
     test_led_board();
     test_esp32_board_with_keepout_and_widths();
     test_fail_closed();

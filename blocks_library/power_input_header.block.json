@@ -1,0 +1,32 @@
+{
+  "format": "copper.block/1",
+  "name": "power_input_header",
+  "summary": "DC power input on a 2-pin 2.54 mm header, with the bulk capacitor Espressif recommends at the main power entrance.",
+  "sources": [
+    {"id": "esp32s3_hdg", "document": "Espressif ESP32-S3 Hardware Design Guidelines, section 1.3.2 Power Supply",
+     "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/esp-hardware-design-guidelines-en-master-esp32s3.pdf",
+     "revision": "release master, Nov 12, 2026 (retrieved 2026-11-21)", "page": 8},
+    {"id": "murata_grm21", "document": "Murata reference sheet GRM21BR61E106KA73-01A (10 uF 25 V X5R 0805)",
+     "url": "https://pim.murata.com/asset/pim4/ceramicCapacitorSMD/GRM21BR61E106KA73-01A-EN_PDF_CERAMICCAPACITORSMD",
+     "revision": "specifications as of Jun.25,2026 (retrieved 2026-11-21)", "page": 2}
+  ],
+  "parameters": [
+    {"name": "supply_voltage", "unit": "uV", "required": true, "min": 1, "max": 25000000}
+  ],
+  "ports": [
+    {"name": "vout", "external_supply": true, "kind": "power_out", "voltage_parameter": "supply_voltage",
+     "note": "the voltage the user states for the external supply; max 25 V because of the capacitor's rating"},
+    {"name": "gnd", "external_supply": true, "kind": "ground"}
+  ],
+  "parts": [
+    {"role": "connector", "prefix": "J", "select": {"part_id": "header_1x02_2p54_samtec_tsw_102_07_t_s"},
+     "pins": {"pin_1": "vout", "pin_2": "gnd"}},
+    {"role": "bulk_capacitor", "prefix": "C", "select": {"part_id": "cap_0805_10u_25v_x5r_murata"},
+     "pins": {"terminal_1": "vout", "terminal_2": "gnd"}}
+  ],
+  "notes": [
+    {"text": "Espressif suggests at least 10 uF at the main power entrance: included (10 uF 25 V X5R).", "source": "esp32s3_hdg"},
+    {"text": "Espressif also suggests an ESD protection diode at the power entrance. NOT included: the parts library has no ESD diode yet (reported, not dropped).", "source": "esp32s3_hdg"},
+    {"text": "The capacitor is rated 25 V DC; X5R capacitance falls under DC bias, so the effective value at the supply voltage is less than 10 uF.", "source": "murata_grm21"}
+  ]
+}

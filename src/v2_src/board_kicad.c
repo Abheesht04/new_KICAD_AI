@@ -337,8 +337,9 @@ static bool parse_pad(const IRNode *node, Board *b, BoardFootprint *fp,
   if (!transform_local(local, fp->pos, fp->rot_mdeg, fp->on_back, &out->pos, &exact)) return false;
   out->rotation_exact = exact;
   if (!exact && diag) ++diag->inexact_rotations;
-  int32_t angle = fp->rot_mdeg + (fp->on_back ? -local_angle : local_angle);
-  angle %= 360000; if (angle < 0) angle += 360000;
+  /* A .kicad_pcb stores the pad's absolute angle (footprint rotation already included), as
+     KiCad's own boards show (G-075); adding fp->rot_mdeg again rotated 90/270 parts' pads twice. */
+  int32_t angle = local_angle % 360000; if (angle < 0) angle += 360000;
   out->rot_mdeg = angle;
   G2Point offset_abs;
   exact = true;

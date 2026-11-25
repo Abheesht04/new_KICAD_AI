@@ -1,0 +1,52 @@
+(kicad_pcb
+  (version 20241229)
+  (generator "copper")
+  (generator_version "9.0")
+  (general
+    (thickness 1.6))
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (2 "B.Cu" signal)
+    (25 "Edge.Cuts" user)
+    (31 "F.CrtYd" user))
+  (setup
+    (pad_to_mask_clearance 0.05))
+  (net 0 "")
+  (net 1 "SCL")
+  (net 2 "GND")
+  (net 3 "VCC")
+  (net 4 "SDA")
+  (footprint "Package_TO_SOT_SMD:SOT-563"
+    (at 15 10 0)
+    (layer "F.Cu")
+    (property "Reference" "U3"
+      (at 0 -2 0)
+      (layer "F.Fab"))
+    (pad "1" smd roundrect (at -0.7125 -0.5) (size 0.675 0.35) (layers "F.Cu") (roundrect_rratio 0.25) (net 1 "SCL"))
+    (pad "2" smd roundrect (at -0.7125 0) (size 0.675 0.35) (layers "F.Cu") (roundrect_rratio 0.25) (net 2 "GND"))
+    (pad "3" smd roundrect (at -0.7125 0.5) (size 0.675 0.35) (layers "F.Cu") (roundrect_rratio 0.25))
+    (pad "4" smd roundrect (at 0.7125 0.5) (size 0.675 0.35) (layers "F.Cu") (roundrect_rratio 0.25) (net 2 "GND"))
+    (pad "5" smd roundrect (at 0.7125 0) (size 0.675 0.35) (layers "F.Cu") (roundrect_rratio 0.25) (net 3 "VCC"))
+    (pad "6" smd roundrect (at 0.7125 -0.5) (size 0.675 0.35) (layers "F.Cu") (roundrect_rratio 0.25) (net 4 "SDA")))
+  (footprint "Test:TwoPads"
+    (at 5 10 0)
+    (layer "F.Cu")
+    (property "Reference" "J1"
+      (at 0 -5 0)
+      (layer "F.Fab"))
+    (pad "1" smd rect (at 0 -3) (size 1 1) (layers "F.Cu") (net 1 "SCL"))
+    (pad "2" smd rect (at 0 3) (size 1 1) (layers "F.Cu") (net 2 "GND")))
+  (footprint "Test:TwoPads"
+    (at 25 10 0)
+    (layer "F.Cu")
+    (property "Reference" "J2"
+      (at 0 -5 0)
+      (layer "F.Fab"))
+    (pad "1" smd rect (at 0 3) (size 1 1) (layers "F.Cu") (net 3 "VCC"))
+    (pad "2" smd rect (at 0 -3) (size 1 1) (layers "F.Cu") (net 4 "SDA")))
+  (gr_rect
+    (start 0 0)
+    (end 30 20)
+    (layer "Edge.Cuts")
+    (stroke (width 0.1) (type solid))))

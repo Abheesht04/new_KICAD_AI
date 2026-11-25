@@ -271,11 +271,9 @@ def load_symbol(symbol_root: Path, lib_id: str) -> tuple[list[Any], dict[str, tu
         pin_positions[number] = pos
     if not pin_positions:
         raise CompileError(f"symbol {lib_id} has no extractable physical pins")
-    # Make library defaults explicit for generated instances.
-    if not child(embedded, 'pin_numbers'):
-        embedded.insert(2, ['pin_numbers', ['hide', 'yes']])
-    if not child(embedded, 'pin_names'):
-        embedded.insert(3, ['pin_names', ['offset', '1.016']])
+    # Make library defaults explicit for generated instances. (pin_numbers and pin_names are NOT added: when a library
+    # symbol omits them KiCad shows pin numbers, so adding "hide" changed the symbol and KiCad ERC reported
+    # lib_symbol_mismatch, Step 3d, 2026-11-25. The three below equal KiCad's own defaults.)
     if not child(embedded, 'exclude_from_sim'):
         embedded.insert(4, ['exclude_from_sim', 'no'])
     if not child(embedded, 'in_bom'):
@@ -299,6 +297,8 @@ def load_footprint(footprint_root: Path, lib_id: str) -> tuple[list[Any], set[st
     for p in children(root, 'pad'):
         if len(p) < 2:
             continue
+        if str(p[1]) == '':
+            continue   # unnumbered: a paste aperture or a mechanical pad, never electrical (the C gate skips them too)
         pad_numbers.add(str(p[1]))
     if not pad_numbers:
         raise CompileError(f"footprint {lib_id} contains no pads")
@@ -598,11 +598,31 @@ def make_board(name: str, seed: str, normalized: dict[str, Any],
         # Footprint property positions are RELATIVE to the footprint in a .kicad_pcb: keep the library's own label
         # positions (fallback: 2 mm above/below the origin). Writing board coordinates here put every label far away.
         label_at: dict[str, tuple[float, float, float]] = {'Reference': (0.0, -2.0, 0.0), 'Value': (0.0, 2.0, 0.0)}
+        label_unlocked: set[str] = set()   # the library's (unlocked yes) is kept: dropping it is a KiCad lib mismatch
         for n in fp:
             if is_list(n, 'property') and len(n) > 1 and str(n[1]) in label_at:
                 at = child(n, 'at')
                 if at and len(at) >= 3:
                     label_at[str(n[1])] = (float(at[1]), float(at[2]), float(at[3]) if len(at) > 3 else 0.0)
+                unlocked = child(n, 'unlocked')
+                if unlocked and len(unlocked) > 1 and str(unlocked[1]) == 'yes':
+                    label_unlocked.add(str(n[1]))
+        # The library's other properties (Datasheet, Description, ...) are kept: dropping them made KiCad DRC report
+        # lib_footprint_mismatch (Step 3d, 2026-11-25). Their angle is absolute like every footprint text's.
+        kept_props = []
+        for n in fp:
+            if is_list(n, 'property') and len(n) > 1 and str(n[1]) not in ('Reference', 'Value'):
+                prop = copy.deepcopy(n)
+                pat = child(prop, 'at')
+                if angle % 360 and pat and len(pat) >= 3:
+                    own = float(pat[3]) if len(pat) > 3 else 0.0
+                    if len(pat) > 3:
+                        pat[3] = fmt_mm((own + angle) % 360)
+                    else:
+                        pat.append(fmt_mm((own + angle) % 360))
+                prop[:] = [x for x in prop if not is_list(x, 'uuid')]
+                prop.append(['uuid', Quoted(deterministic_uuid(seed, f"fp-prop:{comp['reference']}:{n[1]}"))])
+                kept_props.append(prop)
         fp[:] = [n for n in fp if not (is_list(n, 'version') or is_list(n, 'generator') or is_list(n, 'at') or is_list(n, 'uuid') or is_list(n, 'property') or is_list(n, 'path') or is_list(n, 'sheetname') or is_list(n, 'sheetfile') or is_list(n, 'attr'))]
         # Keep original layer and descriptions/tags; add board placement and identity.
         insert_at = 2
@@ -610,10 +630,19 @@ def make_board(name: str, seed: str, normalized: dict[str, Any],
         fp.insert(insert_at + 1, ['uuid', Quoted(deterministic_uuid(seed, f"footprint:{comp['reference']}"))])
         rx, ry, ra = label_at['Reference']
         vx, vy, va = label_at['Value']
-        fp.insert(insert_at + 2, make_property('Reference', comp['reference'], rx, ry, ra,
-                                                layer='F.SilkS', include_uuid=deterministic_uuid(seed, f"fp-ref:{comp['reference']}")))
-        fp.insert(insert_at + 3, make_property('Value', comp['value'], vx, vy, va,
-                                                layer='F.Fab', include_uuid=deterministic_uuid(seed, f"fp-value:{comp['reference']}")))
+        ra, va = (ra + angle) % 360, (va + angle) % 360   # property angles are absolute in a .kicad_pcb, like pads
+        ref_prop = make_property('Reference', comp['reference'], rx, ry, ra,
+                                 layer='F.SilkS', include_uuid=deterministic_uuid(seed, f"fp-ref:{comp['reference']}"))
+        value_prop = make_property('Value', comp['value'], vx, vy, va,
+                                   layer='F.Fab', include_uuid=deterministic_uuid(seed, f"fp-value:{comp['reference']}"))
+        for prop in (ref_prop, value_prop):
+            if str(prop[1]) in label_unlocked:
+                prop.insert(4, ['unlocked', 'yes'])   # after (at ...), where KiCad writes it
+        fp.insert(insert_at + 2, ref_prop)
+        fp.insert(insert_at + 3, value_prop)
+        for k, prop in enumerate(kept_props):
+            fp.insert(insert_at + 4 + k, prop)
+        insert_at += len(kept_props)
         fp.insert(insert_at + 4, ['path', Quoted('/' + deterministic_uuid(seed, f"symbol:{comp['reference']}"))])
         fp.insert(insert_at + 5, ['sheetname', Quoted('/')])
         fp.insert(insert_at + 6, ['sheetfile', Quoted(name + '.kicad_sch')])
@@ -624,7 +653,19 @@ def make_board(name: str, seed: str, normalized: dict[str, Any],
         repeats: dict[str, int] = {}
         for pad in children(fp, 'pad'):
             pad_no = str(pad[1])
-            net_name = pin_to_pad[pad_no]
+            # In a .kicad_pcb a pad's (at x y angle) keeps x, y in the footprint's own frame but its angle is ABSOLUTE:
+            # the footprint's rotation plus the pad's own. Copying the library angle left the pads of a rotated part
+            # unrotated (overlapping pads on a SOT-563 placed at 90 degrees, 2026-11-21).
+            if angle % 360:
+                pat = child(pad, 'at')
+                if pat and len(pat) >= 3:
+                    own = float(pat[3]) if len(pat) > 3 else 0.0
+                    total = (own + angle) % 360
+                    if len(pat) > 3:
+                        pat[3] = fmt_mm(total)
+                    else:
+                        pat.append(fmt_mm(total))
+            net_name = pin_to_pad.get(pad_no) if pad_no == '' else pin_to_pad[pad_no]   # unnumbered: no net
             net_id = net_ids[net_name] if net_name else 0
             pad.append(['net', str(net_id), Quoted(net_name)])
             k = repeats.get(pad_no, 0)

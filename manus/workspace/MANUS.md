@@ -19,6 +19,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\copper.ps1 <command> [opti
 |---|---|
 | `doctor` | Shows which tools are installed and the KiCad version. Run it first. |
 | `generate -Requirements designs\<name>\requirements.json -PromptFile designs\<name>\prompt.txt -Out designs\<name>` | **Copper designs the board** from your analysis. It writes `intent.json` and `generation.json` (every value with its source, the checks, and any questions). |
+| `blocks` | The circuit blocks Copper can compose: each block's ports (kind, voltage range) and parameters (unit; required, derived or default). |
+| `compose -Design designs\<name>\design.compose.json -PromptFile designs\<name>\prompt.txt -Out designs\<name>` | **Copper composes the design from blocks**: checks every connection, voltage, current and stated value, writes `compose_report.json`, and on success `intent.json`, which then passes the grounding gate. Composed designs are **not yet placed, compiled or routed** (Step 2e). |
 | `compile -Intent designs\<name>\intent.json -Out designs\<name>` | Grounding gate, then the KiCad project, netlist, ERC, DRC and Copper import. |
 | `checks -Project designs\<name>\<ProjectName>` | Summary of the ERC and DRC reports. |
 | `inspect -Board <file.kicad_pcb>` / `dfm -Board <file.kicad_pcb>` | Board summary; manufacturability against JLCPCB's published limits. |
@@ -53,6 +55,22 @@ Every command ends with one line `COPPER_RESULT {...}`. Read `exit` and `outcome
    - `NOT_IMPLEMENTED`: tell the user Copper cannot generate this circuit yet. Do not design it yourself.
    - `INVALID_INPUT`: report Copper's message.
    - An `ignored_requirements` entry means your analysis contained a value the request does not state. Remove it.
+   **No template covers the request?** Run `blocks`. If the request can be built from those blocks, write
+   `designs\<name>\design.compose.json` (format `copper.compose/1`, see `src/v2_src/compose.h` in the repository):
+   - `project`: `name`, and `board` {`width_mm`, `height_mm`} **only if the user stated the board size**;
+   - `blocks`: `[{id, block, parameters}]`, where `parameters` holds only values the user stated, as integers in the
+     parameter's unit (5 V → 5000000 uV). Never give a parameter marked derived;
+   - `nets`: `[{name, ports}]` with ports as `"id.port"`. Put every ground port in one net, connect each power input
+     to exactly one power output, and connect each LED or sensor to a free GPIO;
+   - `evidence`: `[{field, quote}]` for every value, with the quote copied verbatim from the request
+     (`field` is `"id.parameter"` or `"project.board.width_mm"` / `"project.board.height_mm"`).
+
+   You choose which blocks and which ports join. You never choose parts, pins or values: each block brings its own.
+   Run `compose`:
+   - `COMPOSED` with gate `GROUNDED`: report the composition's values and findings. Do not compile it yet.
+   - `NEEDS_INPUT`: ask the user the questions in `compose_report.json`. Do not answer them yourself.
+   - `REFUSED`: report Copper's reasons, for example a voltage outside a block's range or a current budget exceeded.
+   - `IGNORED_VALUE`: your value had no quote from the request that contains it. Remove it.
 5. **Compile and check.** Run `compile`, then `checks`, `inspect` and `dfm`, then `report`.
 6. **Answer.** Write `designs\<name>\answer.txt`:
    - start with `REPORT.md`, unchanged;
@@ -62,8 +80,9 @@ Every command ends with one line `COPPER_RESULT {...}`. Read `exit` and `outcome
 
 ## Honesty rules (these override everything above)
 
-- **Never design.** Never invent or change a part, pin, net, value or position. Never edit `intent.json`, the KiCad
-  files, `REPORT.md` or `generation.json`.
+- **Never design.** Never invent or change a part, pin, value or position. The only design choice you may make is
+  which of Copper's blocks to use and which of their ports to join, in a `design.compose.json` that Copper then checks.
+  Never edit `intent.json`, the KiCad files, `REPORT.md`, `generation.json` or `compose_report.json`.
 - **Report only tool results.** Never say a design "passes", is "valid", "verified", "routed", "manufacturable" or
   "ready". The results you report are the ones in `REPORT.md`, `generation.json` and the `COPPER_RESULT` lines.
 - **Unknown is unknown.** `UNVERIFIED` means not checked. If a tool did not run, say "NOT RUN". Never estimate what it
@@ -74,6 +93,9 @@ Every command ends with one line `COPPER_RESULT {...}`. Read `exit` and `outcome
 
 - Work only inside this folder. Do not modify the Copper repository, run git, or install or upgrade software.
 - Do not start servers other than `workbench`, and never expose them beyond this PC.
-- Copper currently generates three circuits: the low-side MOSFET switch, the LED indicator and the ESP32 board with
-  an LED. `compile` places and routes them (Copper's C router). Report the routing exactly as REPORT.md states it
-  (ROUTED, PARTIALLY ROUTED or NOT ROUTED); never call a board manufacturing-ready.
+- Copper currently generates three circuits from templates: the low-side MOSFET switch, the LED indicator and the
+  ESP32 board with an LED. `compile` places and routes them (Copper's C router). Report the routing exactly as REPORT.md
+  states it (ROUTED, PARTIALLY ROUTED or NOT ROUTED); never call a board manufacturing-ready.
+- Copper also composes designs from its blocks (an ESP32-S3-WROOM-1 module, a 3.3 V regulator, a 5 V header or USB-C
+  input, reset/boot buttons, LEDs, a TMP102 sensor). A composed design is checked and grounded, but **not yet placed,
+  compiled or routed**: say so.

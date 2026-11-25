@@ -10,7 +10,8 @@
      "standard": "Copper design choice (2026-11-21)"}
   ],
   "parameters": [
-    {"name": "drive_voltage", "unit": "uV", "required": true, "min": 1000000, "max": 24000000},
+    {"name": "drive_voltage", "unit": "uV", "required": true, "min": 1000000, "max": 24000000,
+     "from": {"port": "drive", "quantity": "voltage_max"}},
     {"name": "led_vf", "unit": "uV", "required": false, "default": 2000000, "source": "kingbright_apt1608ec"},
     {"name": "led_current", "unit": "uA", "required": false, "default": 2000, "source": "copper_default",
      "min": 100, "max": 30000}

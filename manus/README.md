@@ -56,6 +56,10 @@ Start each task with: **"Read MANUS.md in this folder first and follow it."** Th
   against the fab profile. Each net's copper is checked with exact integer geometry before it is written; a net that
   fails is left out and reported, and the facts sheet says **ROUTED** only when the router routed every net and
   KiCad's DRC lists 0 unconnected items. Track widths are template choices, not computed from current.
+- **Designs from blocks.** When no template covers a request, Manus may answer with a composition of Copper's
+  circuit blocks: it chooses blocks and which ports join, never parts, pins or values. `copper design compose` (C)
+  checks every connection, voltage, current and stated value, every value against its quote in the prompt, and then
+  the grounding gate. Composed designs are not yet placed, compiled or routed (Phase 2e).
 - **Read all three results.** Compile success, clean ERC/DRC and DFM are separate results. The agent is told to
   report each one and never to call a board manufacturing-ready.
 - **KiCad version.** With a KiCad other than 9.x, ERC and DRC results are a development check, and `doctor` says so.

@@ -1,0 +1,38 @@
+{
+  "format": "copper.block/1",
+  "name": "led_indicator",
+  "summary": "A red 0603 LED driven from a pin (GPIO or supply) through a series resistor sized for the chosen current.",
+  "sources": [
+    {"id": "kingbright", "document": "Kingbright APT1608EC, spec DSAD0924 / 1203001652: VF 2.0 V typ (2.5 V max) at IF 20 mA; DC forward current 30 mA max",
+     "url": "https://www.kingbrightusa.com/images/catalog/SPEC/APT1608EC.pdf", "revision": "V.18A, 02/19/2022 (retrieved 2026-11-21)", "page": 2},
+    {"id": "ohms_law", "document": "Ohm's law: R = (V_drive - V_F) / I_F, rounded up to the next E24 value so the current does not exceed the target",
+     "standard": "circuit theory"},
+    {"id": "copper_default", "document": "Copper design default: 2 mA, a modest indicator current that most GPIOs can source",
+     "standard": "Copper design choice (2026-11-21), not a datasheet value"}
+  ],
+  "parameters": [
+    {"name": "drive_voltage", "unit": "uV", "required": true, "min": 2500000, "max": 24000000,
+     "from": {"port": "drive", "quantity": "voltage_max"}},
+    {"name": "led_vf", "unit": "uV", "required": false, "default": 2000000, "source": "kingbright"},
+    {"name": "led_current", "unit": "uA", "required": false, "default": 2000, "source": "copper_default", "min": 100, "max": 30000}
+  ],
+  "ports": [
+    {"name": "drive", "kind": "gpio", "note": "a GPIO (high = on) or a supply rail"},
+    {"name": "gnd", "kind": "ground"}
+  ],
+  "nets": ["led_anode"],
+  "parts": [
+    {"role": "series_resistor", "prefix": "R", "select": {"kind": "R", "package": "0603", "value": {"formula": "r_led"}},
+     "pins": {"terminal_1": "drive", "terminal_2": "led_anode"}},
+    {"role": "led", "prefix": "D", "select": {"part_id": "led_0603_red_kingbright_apt1608ec"},
+     "pins": {"anode": "led_anode", "cathode": "gnd"}}
+  ],
+  "formulas": [
+    {"name": "r_led", "function": "led_series_resistor", "source": "ohms_law",
+     "inputs": {"v_drive": "drive_voltage", "v_forward": "led_vf", "current": "led_current"}}
+  ],
+  "notes": [
+    {"text": "VF is the typical value at 20 mA; at 2 mA the real VF is lower, so the real current is somewhat higher than the target. The current maximum is 30 mA.", "source": "kingbright"},
+    {"text": "drive_voltage starts at 2.5 V: the LED's maximum VF at 20 mA.", "source": "kingbright"}
+  ]
+}

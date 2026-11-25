@@ -43,8 +43,8 @@ PASS, never FAIL or INVALID_INPUT.
 
 | File | Parts |
 |---|---|
-| `resistors.parts` | Vishay CRCW0603 thick-film, 1 %: 100 Ω, 620 Ω, 680 Ω, 1 kΩ, 10 kΩ |
-| `capacitors.parts` | Murata GRM: 100 nF 50 V X7R 0603, 1 µF 25 V X5R 0603, 10 µF 25 V X5R 0805, 22 µF 25 V X5R 1206 |
+| `resistors.parts` | Vishay CRCW0603 thick-film, 1 %: 22 Ω, 100 Ω, 620 Ω, 680 Ω, 1 kΩ, 5.1 kΩ, 10 kΩ |
+| `capacitors.parts` | Murata GRM: 10 nF 50 V X7R 0603, 100 nF 50 V X7R 0603, 1 µF 25 V X5R 0603, 10 µF 25 V X5R 0805, 22 µF 25 V X5R 1206; Vishay 293D 22 µF 10 V solid tantalum (B case) |
 | `semiconductors.parts` | Kingbright APT1608EC red LED 0603, Vishay SS14 Schottky (SMA), Alpha & Omega AO3400A N-MOSFET (SOT-23) |
-| `ics.parts` | AMS1117-3.3 LDO (SOT-223), Espressif ESP32-WROOM-32E-N4, TI TMP102 temperature sensor (SOT-563) |
+| `ics.parts` | AMS1117-3.3 LDO (SOT-223), Espressif ESP32-S3-WROOM-1-N8 (recommended; used by the blocks), Espressif ESP32-WROOM-32E-N4, TI TMP102 temperature sensor (SOT-563) |
 | `electromechanical.parts` | E-Switch TL3342F160QG tactile switch, Samtec TSW-102/103-07-T-S headers, GCT USB4105-GF-A USB-C receptacle |

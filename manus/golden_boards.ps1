@@ -1,6 +1,7 @@
 <#
 T5 of the testing loop (docs/engineering/PIPELINE_HARD_RULES.md): regenerate the golden boards twice from
-manus/golden/<board>/{prompt.txt,requirements.json} and compare them with manus/golden/baseline.json.
+manus/golden/<board>/{prompt.txt,requirements.json} (template path) or {prompt.txt,design.compose.json} (blocks path:
+compose -> C placer -> compile) and compare them with manus/golden/baseline.json.
 
     .\manus\golden_boards.ps1 -Workspace <configured Copper workspace> -Out <new folder> [-Baseline <file>]
 
@@ -41,8 +42,17 @@ foreach ($prop in $base.boards.PSObject.Properties) {
     foreach ($run in 1, 2) {
         $d = Join-Path $Out "${name}_run$run"
         New-Item -ItemType Directory $d | Out-Null
-        Copy-Item (Join-Path $golden "$name\prompt.txt"), (Join-Path $golden "$name\requirements.json") $d
-        $null = Invoke-Copper @('generate', '-Requirements', "$d\requirements.json", '-PromptFile', "$d\prompt.txt", '-Out', $d)
+        Copy-Item (Join-Path $golden "$name\prompt.txt") $d
+        $composed = Test-Path (Join-Path $golden "$name\design.compose.json")
+        if ($composed) {
+            # blocks path (Step 2e): compose -> C placer -> placed intent.json + routing.json
+            Copy-Item (Join-Path $golden "$name\design.compose.json") $d
+            $c = Invoke-Copper @('compose', '-Design', "$d\design.compose.json", '-PromptFile', "$d\prompt.txt", '-Out', $d)
+            if ($c.outcome -ne 'COMPOSED' -or -not $c.placed) { throw "compose of $name gave $($c.outcome) (placed=$($c.placed))" }
+        } else {
+            Copy-Item (Join-Path $golden "$name\requirements.json") $d
+            $null = Invoke-Copper @('generate', '-Requirements', "$d\requirements.json", '-PromptFile', "$d\prompt.txt", '-Out', $d)
+        }
         $null = Invoke-Copper @('compile', '-Intent', "$d\intent.json", '-Out', $d)
         $p = Join-Path $d $b.project
         $null = Invoke-Copper @('report', '-Project', $p)

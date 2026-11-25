@@ -39,7 +39,9 @@ const BlockFunction *block_functions(size_t *count)
 
 /* ---------------------------------------------------------------------------------------------- context */
 
-typedef struct Name { const char *name; const char *unit; size_t uses; } Name;
+/* `unit` holds a parameter's unit or a port's kind; `ref`/`what` hold a parameter's "from" port and quantity, or a
+ * port's "level_port", checked once every port is known. */
+typedef struct Name { const char *name; const char *unit; size_t uses; const char *ref; const char *what; } Name;
 typedef struct Names { Name *items; size_t count, capacity; } Names;
 
 typedef struct Ctx {
@@ -115,6 +117,8 @@ static Name *put(Ctx *c, Names *n, const char *name, const char *unit)
     x->name = name;
     x->unit = unit;
     x->uses = 0;
+    x->ref = NULL;
+    x->what = NULL;
     return x;
 }
 
@@ -203,8 +207,10 @@ static void check_sources(Ctx *c, const JsonValue *arr)
 
 static void check_parameters(Ctx *c, const JsonValue *arr)
 {
-    static const char *const allowed[] = {"name", "unit", "required", "default", "source", "min", "max"};
+    static const char *const allowed[] = {"name", "unit", "required", "default", "source", "min", "max", "from"};
     static const char *const required[] = {"name", "unit", "required"};
+    static const char *const from_keys[] = {"port", "quantity"};
+    static const char *const quantities[] = {"voltage_min", "voltage_max", "current"};
     if (!arr) return;
     if (arr->kind != JSON_ARRAY) { add(c, "TYPE", "parameters", "must be an array"); return; }
     for (size_t i = 0; i < arr->count; i++) {
@@ -231,14 +237,68 @@ static void check_parameters(Ctx *c, const JsonValue *arr)
             source_ref(c, json_get(v, "source"), p);
             if (has_def && ((has_lo && def < lo) || (has_hi && def > hi))) add(c, "BAD_RANGE", p, "'default' is outside 'min'..'max'");
         }
-        put(c, &c->params, name, unit);
+        Name *par = put(c, &c->params, name, unit);
+        /* "from": the composer derives the value from what a port is connected to (checked against the ports later) */
+        const JsonValue *from = json_get(v, "from");
+        if (from && object_keys(c, from, p, from_keys, N(from_keys), from_keys, N(from_keys))) {
+            const char *port = str(json_get(from, "port")), *qty = str(json_get(from, "quantity"));
+            if (!is_required) add(c, "CONFLICT", p, "a parameter derived with 'from' must be required (the composer fills it in)");
+            if (!in(qty, quantities, N(quantities))) {
+                addf(c, "BAD_KIND", p, "'from.quantity' '%s' is not voltage_min, voltage_max or current", qty, NULL);
+            } else if ((!strcmp(qty, "current") && (!unit || strcmp(unit, "uA"))) || (strcmp(qty, "current") && (!unit || strcmp(unit, "uV")))) {
+                addf(c, "UNIT_MISMATCH", p, "a parameter derived from a port's %s must be in %s", qty, strcmp(qty, "current") ? "uV" : "uA");
+            }
+            if (par && port) { par->ref = port; par->what = qty; }
+        }
+    }
+}
+
+/* After all ports are known: a parameter's "from" port and a port's "level_port" must exist and be of a fitting kind. */
+static void check_references(Ctx *c)
+{
+    for (size_t i = 0; i < c->params.count; i++) {
+        const Name *par = &c->params.items[i];
+        if (!par->ref) continue;
+        char where[160];
+        snprintf(where, sizeof where, "parameters.%s.from", par->name);
+        const char *p = dup_text(c->a, where);
+        if (!p) { c->oom = true; return; }
+        const Name *port = find(&c->ports, par->ref);
+        if (!port) { addf(c, "UNKNOWN_PORT", p, "'from' names port '%s', which is not declared", par->ref, NULL); continue; }
+        if (port->unit && !strcmp(port->unit, "ground")) addf(c, "BAD_KIND", p, "a ground port '%s' carries no voltage or current", par->ref, NULL);
+        else if (par->what && !strcmp(par->what, "current") && (!port->unit || strcmp(port->unit, "power_out")))
+            addf(c, "CONFLICT", p, "the current drawn from a net is read on a power_out port; '%s' is not one", par->ref, NULL);
+    }
+    for (size_t i = 0; i < c->ports.count; i++) {
+        const Name *port = &c->ports.items[i];
+        if (port->what) {
+            char where[160];
+            snprintf(where, sizeof where, "ports.%s.current_follows", port->name);
+            const char *p = dup_text(c->a, where);
+            if (!p) { c->oom = true; return; }
+            const Name *out = find(&c->ports, port->what);
+            if (!out) addf(c, "UNKNOWN_PORT", p, "current_follows '%s' is not declared", port->what, NULL);
+            else if (!out->unit || strcmp(out->unit, "power_out")) addf(c, "BAD_KIND", p, "current_follows '%s' must be a power_out port", port->what, NULL);
+        }
+        if (!port->ref) continue;
+        char where[160];
+        snprintf(where, sizeof where, "ports.%s.level_port", port->name);
+        const char *p = dup_text(c->a, where);
+        if (!p) { c->oom = true; return; }
+        const Name *level = find(&c->ports, port->ref);
+        if (!level) addf(c, "UNKNOWN_PORT", p, "level_port '%s' is not declared", port->ref, NULL);
+        else if (!level->unit || (strcmp(level->unit, "power_in") && strcmp(level->unit, "power_out")))
+            addf(c, "BAD_KIND", p, "level_port '%s' must be a power_in or power_out port", port->ref, NULL);
     }
 }
 
 static void check_ports(Ctx *c, const JsonValue *arr)
 {
-    static const char *const allowed[] = {"name", "kind", "voltage_min", "voltage_max", "voltage_parameter", "source", "note"};
+    static const char *const allowed[] = {"name", "kind", "voltage_min", "voltage_max", "voltage_parameter", "source", "note",
+                                          "current", "current_max", "current_source", "level_port", "pullup",
+                                          "current_follows", "external_supply"};
     static const char *const required[] = {"name", "kind"};
+    static const char *const signal_kinds[] = {"gpio", "signal", "i2c_scl", "i2c_sda", "uart_tx", "uart_rx", "analog"};
     if (!arr || arr->kind != JSON_ARRAY || arr->count == 0) { add(c, "MISSING_KEY", "ports", "at least one port is required"); return; }
     for (size_t i = 0; i < arr->count; i++) {
         const JsonValue *v = arr->items[i];
@@ -247,8 +307,43 @@ static void check_ports(Ctx *c, const JsonValue *arr)
         const char *name = str(json_get(v, "name")), *kind = str(json_get(v, "kind"));
         if (!identifier(name) || !strcmp(name, "nc")) { add(c, "BAD_NAME", p, "port name must match [a-z][a-z0-9_]* and not be 'nc'"); continue; }
         if (find(&c->ports, name)) { addf(c, "DUPLICATE", p, "port '%s' is declared twice", name, NULL); continue; }
-        put(c, &c->ports, name, kind);
+        Name *self = put(c, &c->ports, name, kind);
         if (!in(kind, PORT_KINDS, N(PORT_KINDS))) { addf(c, "BAD_KIND", p, "port kind '%s' is not a known kind", kind, NULL); continue; }
+        /* current demand (power_in) or capacity (power_out), each with its own source */
+        const JsonValue *cur = json_get(v, "current"), *cmax = json_get(v, "current_max");
+        int64_t amps = 0;
+        if (cur && strcmp(kind, "power_in")) add(c, "CONFLICT", p, "'current' (the current a block draws) belongs on a power_in port");
+        if (cmax && strcmp(kind, "power_out")) add(c, "CONFLICT", p, "'current_max' (what a source can deliver) belongs on a power_out port");
+        if (cur && integer(c, cur, p, &amps) && amps < 0) add(c, "BAD_RANGE", p, "'current' must not be negative");
+        if (cmax && integer(c, cmax, p, &amps) && amps <= 0) add(c, "BAD_RANGE", p, "'current_max' must be positive");
+        if (cur || cmax) source_ref(c, json_get(v, "current_source"), p);
+        else if (json_get(v, "current_source")) add(c, "CONFLICT", p, "'current_source' without 'current' or 'current_max'");
+        /* a regulator's input carries what its output carries (plus its own 'current', e.g. quiescent) */
+        const JsonValue *follows = json_get(v, "current_follows");
+        if (follows) {
+            if (strcmp(kind, "power_in")) add(c, "CONFLICT", p, "'current_follows' belongs on a power_in port");
+            else if (!str(follows)) add(c, "TYPE", p, "'current_follows' must be a port name");
+            else if (self) self->what = str(follows);
+        }
+        /* the supply a signal swings to */
+        const JsonValue *level = json_get(v, "level_port");
+        if (level) {
+            if (!in(kind, signal_kinds, N(signal_kinds))) add(c, "CONFLICT", p, "'level_port' belongs on a signal port");
+            else if (!str(level)) add(c, "TYPE", p, "'level_port' must be a port name");
+            else if (self) self->ref = str(level);
+        }
+        /* Step 3d: power that comes from outside the board (KiCad ERC needs a PWR_FLAG on its net) */
+        const JsonValue *ext = json_get(v, "external_supply");
+        if (ext) {
+            if (ext->kind != JSON_TRUE && ext->kind != JSON_FALSE) add(c, "TYPE", p, "'external_supply' must be true or false");
+            else if (strcmp(kind, "power_out") && strcmp(kind, "ground")) add(c, "CONFLICT", p, "'external_supply' belongs on a power_out or ground port");
+        }
+        /* the I2C pull-ups this block contributes to a bus */
+        const JsonValue *pull = json_get(v, "pullup");
+        if (pull) {
+            if (pull->kind != JSON_TRUE && pull->kind != JSON_FALSE) add(c, "TYPE", p, "'pullup' must be true or false");
+            else if (strcmp(kind, "i2c_scl") && strcmp(kind, "i2c_sda")) add(c, "CONFLICT", p, "'pullup' belongs on an i2c_scl or i2c_sda port");
+        }
         const JsonValue *vmin = json_get(v, "voltage_min"), *vmax = json_get(v, "voltage_max"), *vpar = json_get(v, "voltage_parameter");
         int64_t lo = 0, hi = 0;
         bool has_lo = vmin && integer(c, vmin, p, &lo), has_hi = vmax && integer(c, vmax, p, &hi);
@@ -363,7 +458,8 @@ static const char *prefix_for(const char *kind)
 
 static void check_parts(Ctx *c, const JsonValue *arr)
 {
-    static const char *const allowed[] = {"role", "prefix", "select", "pins", "note"};
+    static const char *const allowed[] = {"role", "prefix", "select", "pins", "note", "keepouts"};
+    static const char *const ko_keys[] = {"x1_um", "y1_um", "x2_um", "y2_um", "source"};
     static const char *const required[] = {"role", "prefix", "select", "pins"};
     if (!arr || arr->kind != JSON_ARRAY || arr->count == 0) { add(c, "MISSING_KEY", "parts", "at least one part is required"); return; }
     for (size_t i = 0; i < arr->count; i++) {
@@ -375,6 +471,19 @@ static void check_parts(Ctx *c, const JsonValue *arr)
         else if (find(&c->roles, role)) addf(c, "DUPLICATE", p, "role '%s' is used twice", role, NULL);
         else put(c, &c->roles, role, NULL);
         if (!prefix_ok(prefix)) add(c, "BAD_NAME", p, "prefix must be 1 to 3 capital letters (R, C, D, Q, U, J, SW...)");
+        /* keep-outs in the part's own footprint frame, um: no other part and no copper there (Step 2e) */
+        const JsonValue *kos = json_get(v, "keepouts");
+        if (kos && kos->kind != JSON_ARRAY) add(c, "TYPE", p, "'keepouts' must be an array");
+        for (size_t k = 0; kos && kos->kind == JSON_ARRAY && k < kos->count; k++) {
+            const char *kp = pathf(c, "parts[%zu].keepouts%s", i, NULL);
+            if (!object_keys(c, kos->items[k], kp, ko_keys, N(ko_keys), ko_keys, N(ko_keys))) continue;
+            int64_t x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+            bool nums = integer(c, json_get(kos->items[k], "x1_um"), kp, &x1) & integer(c, json_get(kos->items[k], "y1_um"), kp, &y1) &
+                        integer(c, json_get(kos->items[k], "x2_um"), kp, &x2) & integer(c, json_get(kos->items[k], "y2_um"), kp, &y2);
+            if (nums && (x1 >= x2 || y1 >= y2)) add(c, "BAD_RANGE", kp, "a keep-out needs x1 < x2 and y1 < y2");
+            if (nums && (x1 < -1000000 || x2 > 1000000 || y1 < -1000000 || y2 > 1000000)) add(c, "BAD_RANGE", kp, "a keep-out lies within 1 m of the part");
+            source_ref(c, json_get(kos->items[k], "source"), kp);
+        }
 
         /* the pins: every target is a port, an internal net or "nc" */
         const JsonValue *pins = json_get(v, "pins");
@@ -485,6 +594,7 @@ static BlockStatus run(Ctx *c, const char *text, size_t length)
             check_sources(c, json_get(root, "sources"));
             check_parameters(c, json_get(root, "parameters"));
             check_ports(c, json_get(root, "ports"));
+            check_references(c);
             check_nets(c, json_get(root, "nets"));
             check_formulas(c, json_get(root, "formulas"));
             check_parts(c, json_get(root, "parts"));

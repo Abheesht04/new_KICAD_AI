@@ -376,3 +376,342 @@ maximum. The "minimum in the description only" notes were removed.
 | T5 | golden boards PASS, identical to the baseline |
 | T6 | `blocks.c`: no `malloc`, `printf` or `exit`; no float (CMake lint) |
 | T7 | G-066 note, G-070; this entry |
+
+## Lab branch: Step 2b, the first blocks (2026-11-21, owner approved; ESP32-S3-WROOM-1)
+
+**Sources retrieved (all from the publishers):**
+- ESP32-S3-WROOM-1 datasheet v1.8;
+- ESP32-S3 Hardware Design Guidelines (release master, Nov 12, 2026);
+- USB Type-C specification R2.0 (Aug 2019);
+- TI SLVA689A (I2C pull-up calculation; NXP's site returned "page not available" for UM10204);
+- Vishay 293D (KEMET's datasheet server presented an expired TLS certificate, so it was not used);
+- Murata GRM188R71H103KA01.
+
+Key tables were read as rendered page images.
+
+**Corrections made while checking:**
+- The USB-C VBUS range is from §4.8.1.2 (chargers with captive cables), not a general rule, and the block says so.
+- The module datasheet's strapping section is "4 Boot Configurations".
+- The AMS1117 datasheet asks for a **solid tantalum** 22 uF output capacitor, so a tantalum part was added rather than
+  using a ceramic one.
+- The AMS1117 datasheet gives no input capacitor value, so the 10 uF at the entrance comes from Espressif's guide.
+
+**Added:**
+- `blocks_library/` (7 blocks and a README);
+- 5 parts in `parts_library/` (all unverified; KiCad PASS against the 10.0.5 libraries);
+- `tests/blocks_library_check.cmake`, run as ctest `blocks_library_valid`.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | **88/88 passed** (82 run, 6 skipped: KiCad 9.x ×5, GPU ×1), UBSan build |
+| T3 | 7/7 blocks VALID against the 5 parts files. With a block copy carrying an unknown key, `blocks_library_check.cmake` fails (UNKNOWN_KEY) |
+| T4 | self-test 23/23 |
+| T5 | golden boards PASS, identical to the baseline |
+| T6 | no C code changed |
+| T7 | G-066 note 2, G-071 (no ESD part), G-072 (AMS1117 headroom on USB 5 V) |
+
+## Lab branch: Step 2c, the composer (2026-11-21, owner approved; no low-dropout regulator added)
+
+**Added:**
+- `src/v2_src/compose.{c,h}` (copper_design; on the no-float lint list);
+- `copper design compose` in `apps/copper_cli.c`;
+- `src/v2_src/tests/test_compose.c` with the fixture `tests/fixtures/compose/esp32s3_led_sensor.compose.json` and
+  `tests/fixtures/compose/kicad/`: 7 symbol libraries' needed symbols and 12 footprints, copied unchanged from KiCad
+  10.0.5.
+
+**Block format additions** (blocks.c and its test; 7 new single-change cases): `from` on parameters,
+`current`/`current_max`/`current_source`, `current_follows`, `level_port`, `pullup`. All 7 blocks were updated, with a
+source for every new value:
+- ESP32-S3 needs 0.5 A (datasheet table 6-2);
+- AMS1117 quiescent current 11 mA, and an output limit of 0.8 A because dropout is specified only up to 0.8 A;
+- USB default 500 mA (USB-C R2.0, page 34);
+- TMP102 10 uA typical (no maximum given);
+- GPIO0 pull-up 360 uA worst case (Ohm's law).
+
+**Example result:**
+- 21 components; the grounding gate says GROUNDED;
+- LED resistor: at least 650 ohm, so 680 ohm (CRCW0603680RFKEA);
+- I2C pull-ups: 966.7 ohm to 3540.7 ohm at Cb 100 pF, so 1 kohm;
+- LDO load: 500.37 mA; LDO dissipation: 850.6 mW (UNVERIFIED: no thermal check);
+- +5V source capacity: unknown (UNVERIFIED).
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | **89/89 passed** (83 run, 6 skipped: KiCad 9.x ×5, GPU ×1), UBSan build |
+| T3 | `copper_compose_tests`: COMPOSED and GROUNDED, deterministic; USB-C → AMS1117 REFUSED (VOLTAGE_RANGE and CURRENT_BUDGET); 17 single-change cases (NEEDS_INPUT for a missing supply voltage or bus capacitance, NO_VALID_PULLUP, UNDERIVABLE, SAME_BLOCK_SHORT, DUPLICATE_CONNECTION, UNCONNECTED_POWER, SINGLE_PORT_NET, UNKNOWN_BLOCK, UNKNOWN_PARAMETER, PARAMETER_RANGE, VOLTAGE_RANGE...); DUPLICATE_PULLUP. Mutation check: with the voltage check disabled, the test fails (the first mutant attempt did not compile and was redone). The CLI on the real KiCad 10 libraries: COMPOSED, then `check-intent` GROUNDED |
+| T4 | self-test 23/23 |
+| T5 | golden boards PASS, identical to the baseline |
+| T6 | `compose.c` and `blocks.c`: no `malloc`, `printf` or `exit`; no float |
+| T7 | G-066 note 3, G-072 update, G-073, G-074 |
+
+**Not committed** (the owner said not to).
+
+## Lab branch: Step 2d, the Manus side of composition (2026-11-21, owner approved)
+
+**C:**
+- `compose.c`: evidence. With a prompt, every stated value (block parameters, board size) needs a quote in the
+  prompt that contains it (the template_gen.c rule; its static helpers are mirrored, and that file is unchanged).
+  Unbacked values are IGNORED_VALUE, then a default or a question. A missing board size is now a question
+  (NEEDS_INPUT), never invented. The evidence state lives in the call's context, not in globals.
+- `copper design compose --prompt FILE`.
+- `copper block list FILE...` (copper.block-list/1).
+
+**Manus workspace:**
+- `copper.ps1 blocks` and `copper.ps1 compose`, which runs the gate after COMPOSED;
+- config keys `blocks_dir` and `parts_dir` (setup script, and the owner's `D:\copper-manus`, which doctor reports
+  READY);
+- `copper-prompt.ps1`: the block list goes into Manus's instructions; for `circuit: "compose"` it writes
+  `design.compose.json` (a plain mapping) and runs compose. Composed designs are reported as "not yet placed, compiled
+  or routed";
+- `manus_requirements.schema.json`: `compose` and `composition`;
+- MANUS.md: Manus may choose blocks and port connections only;
+- `manus/tests/compose_requirements.json` (a mock analysis with one value the prompt never states).
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 89/89 passed (6 skipped: KiCad 9.x ×5, GPU ×1), UBSan build |
+| T3 | `test_evidence`: backed values compose; a wrong value, a quote not in the prompt, or a missing board quote each give IGNORED_VALUE and NEEDS_INPUT; no board gives NEEDS_INPUT; without a prompt, 12 V composes with 4.35 W dissipation reported UNVERIFIED |
+| T4 | **self-test 27/27**, 4 new steps: `blocks` (7); unstated values give NEEDS_INPUT and nothing is written; USB-C → AMS1117 REFUSED; prompt → mock Manus composition → COMPOSED, GROUNDED, the unstated LED current ignored, the real key never sent |
+| T5 | golden boards PASS, identical to the baseline |
+| T6 | `compose.c`: no `malloc`, `printf` or `exit` |
+
+**Not run:** a live Manus run of a composition (it spends credits; run it only when the owner asks).
+**Not committed** (the owner's instruction).
+
+## Lab branch: Step 2e, placing and routing composed designs (2026-11-21, owner approved; live test first)
+
+**New (beside the base, H10):**
+- `src/v2_src/place_intent.{c,h}`:
+  - `place_problem` turns a composed intent and `layout_hints.json` into a `placement.h` problem. Bodies come from the
+    KiCad courtyards, with 4 orientations per part. It adds block keep-outs, board edge strips and decoupling pairs.
+  - `place_apply` takes the lowest-cost legal placer result (NO_LEGAL_POSITION if there is none) and writes the
+    positions and `routing.json` keep-outs.
+- `copper design place-problem` and `copper design place-apply` (exit codes 0 PLACED, 2 INVALID, 5 NO_LEGAL_POSITION).
+- `routing_profiles/copper_placement_default.json`, each value with its reason.
+- Block parts may carry `keepouts` (checked); `esp32s3_core` has the module's antenna keep-out from the KiCad footprint.
+- `copper.ps1 compose` now runs: compose, gate, place-problem, `copper-core place`, place-apply, gate.
+  `copper-prompt.ps1` compiles and reports a placed composition.
+- `manus/golden/esp32s3_leds/{prompt.txt,design.compose.json}`. `golden_boards.ps1` accepts compose inputs.
+
+**Fixed:**
+- Legacy compiler (fixed, not extended): unnumbered pads are skipped, and rotated parts get absolute pad and text
+  angles.
+- `board_kicad.c` (base module, G-075 note): pad angles are absolute. Before this, 90°/270° parts were modelled with
+  turned pads and the router left vias 0.05 mm from a real pad.
+
+**Live results (KiCad 10.0.5, a development check, not KiCad 9 evidence):**
+
+| Board | Placement | Routing | KiCad DRC | DFM |
+|---|---|---|---|---|
+| ESP32-S3 + 2 LEDs + reset/boot (70 × 60 mm) | PLACED, GROUNDED | ROUTED, 189 segments, 13 vias | 0 unconnected; errors 12, all drill_out_of_range from the module footprint's thermal vias (the same as template golden `esp32`); 0 clearance | UNVERIFIED (hole_to_edge) |
+| ESP32-S3 + LED + TMP102 | PLACED, GROUNDED | PARTIALLY_ROUTED, 7/11 nets | not reported as a pass | — (G-076, fine pitch) |
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 84 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed; UBSan build; includes `copper_place_intent_tests` |
+| T3 | `test_place_intent`; `test_part_keepouts`; `test_pad_angle_is_absolute` failed before the `board_kicad.c` fix and passes after |
+| T4 | self-test 27/27 |
+| T5 | golden boards 4/4 PASS; the three template boards are byte-identical to the baseline; the new `esp32s3_leds` (blocks path) is deterministic over two runs and recorded |
+| T6 | `place_intent.c` is on the no-float lint list: no `malloc`, `printf` or `exit` |
+
+**Open:** G-076 (fine pitch, the owner's choice), G-077 (dangling USB resistors), and comparing the blocks and template paths.
+**Not committed** (the owner's instruction).
+
+## Lab branch: Step 3a, fab profiles and the global profile (2026-11-25, owner approved)
+
+**Decision (owner):** the target fab is a parameter, and the default is JLCPCB. "Global" (the strictest of all
+profiles) is reported next to it, not used as the gate. Adding a fab is adding a data file. Rules:
+docs/engineering/LAYOUT_RULES.md.
+
+**Data (Copper-written from the fabs' pages; not KiCad exports):**
+- `fab_profiles/pcbway_2layer.json` (pcbway.com/capabilities.html, standard table only) and
+  `fab_profiles/oshpark_2layer.json` (docs.oshpark.com/services/two-layer). Both read 2026-11-25. Every limit is
+  present, quoted, and null where the page gives none.
+- A `mask_silk_limits` section in all three profiles: solder mask web, silkscreen line width, text height, pad to
+  silk. JLCPCB's values are from its capabilities page, read 2026-11-25.
+
+**New C (beside the base; `dfm.c` unchanged):**
+- `src/v2_src/fab_global.{c,h}` (in copper_v2; on the no-float lint list) reads `mask_silk_limits` as strictly as
+  `dfm.c` reads `limits`, and builds the strictest profile:
+  - a minimum takes the largest value; a maximum board size takes the smallest;
+  - ties go to the earlier profile;
+  - each limit names its deciding fab and the fabs that publish no value.
+- `copper-core fab-global OUT PROFILE...` writes the global `copper.fab_profile/1`, which `copper-core dfm` accepts.
+
+**Global values:**
+- track and spacing 0.1524 mm (OSH Park);
+- drill and via hole 0.254 mm (OSH Park);
+- copper to edge 0.381 mm (OSH Park);
+- PTH ring 0.18 mm (JLCPCB);
+- via ring 0.15 mm (PCBWay);
+- solder mask web 0.1016 mm (OSH Park);
+- silkscreen 0.15 mm line and 1.0 mm text (JLCPCB);
+- hole to edge: null (no fab publishes it).
+
+**DFM of golden board `esp32s3_leds`:**
+
+| Profile | Verdict |
+|---|---|
+| JLCPCB | UNVERIFIED (hole_to_edge) |
+| PCBWay | UNVERIFIED (6 unpublished rules) |
+| OSH Park | FAIL (drill ×12, the module's 0.2 mm vias; G-078) |
+| global | FAIL (drill ×12) |
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 85 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed (new: `fab_global`) |
+| T3 | `fab_global_test`: real profiles give the section 2 values; direction, ties, missing fabs and none-published; the output re-parses through `dfm_profile_parse` with equal values; deterministic; strict `mask_silk_limits` parsing (misspelt key, missing key, no quote, no row, negative value, no date). Mutants: "maximum treated as minimum" and "ties to the later profile" both compile and both are caught. |
+| T4 | self-test 27/27 |
+| T5 | golden boards 4/4 PASS, byte-identical (adding `mask_silk_limits` to the JLCPCB profile changes no verdict) |
+| T6 | `fab_global.c` on the no-float lint list; no `malloc`, `printf` or `exit` in it |
+
+**CLI fix found in testing:** `fab-global` with no profile used to fall through to the project parser
+("PROJECT ERROR", exit 2). It now prints a usage message and exits 64.
+**Not committed** (the owner's instruction).
+
+## Lab branch: Step 3b, KiCad project rules from the fab profile (2026-11-25, owner approved)
+
+**Problem:** the generated `.kicad_pro` had no rules, so KiCad DRC checked KiCad's defaults (min hole 0.3 mm,
+clearance 0.2 mm), not the fab's limits or Copper's design rules (G-080).
+
+**New C (beside the base):**
+- `src/v2_src/project_rules.{c,h}` (copper_v2; on the no-float lint list). It was first named `kicad_rules`; that name
+  is taken by an existing ctest, so the new module was renamed rather than touching the old test.
+- `copper-core project-rules BOARD FAB RULES` writes `.kicad_pro` and `.kicad_dru`:
+  - board minimums come from the fab profile;
+  - the `Default` net class comes from the routing rules;
+  - one fine-pitch rule per footprint whose own pads are closer than the Default clearance, at the fab's pad limit;
+  - all other `.kicad_pro` members are kept;
+  - a `.kicad_dru` without Copper's header is never overwritten;
+  - rules below the fab's limits are refused.
+- The report goes to `validation/project_rules.json`.
+- `copper.ps1 compile` runs it after routing and before DRC (`project_rules` in COPPER_RESULT).
+
+**KiCad facts, checked by hand with kicad-cli 10.0.5** (key names from the real KiCad 9.0 project
+`sample_resistor_lol`):
+- the rules apply with the compiler's `meta.version 1`;
+- `min_silk_clearance` is silkscreen to silkscreen, so the fab's pad-to-silk limit is not mapped to it;
+- `memberOfFootprint` on both items relaxes only the footprint's own pads;
+- a broken rule file is ignored silently (G-082; this fails closed).
+
+**Results (JLCPCB target, KiCad 10.0.5 development check):**
+
+| Board | DRC errors before | after |
+|---|---|---|
+| `esp32` (template) | 12 drill_out_of_range | 0 |
+| `esp32s3_leds` (composed) | 12 drill_out_of_range | 0 (0 unconnected) |
+| LED + TMP102 (composed, partly routed) | 4 clearance (U3's own pads) + 12 drill | 0 (33 unconnected remain: routing, Step 3c) |
+
+Not carried into KiCad, and reported (G-081): pad hole to hole, solder mask web, pad to silkscreen, hole to edge.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 87 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed, of 93 (new: `project_rules`, and `project_rules_drc`, which says SKIPPED without KICAD_CLI) |
+| T3 | `project_rules_test`: the real KiCad 9.0 project merges with every other member kept; JLCPCB/OSH Park/PCBWay values; SOT-563 at 0° and 90° (gap 0.15 mm); same-net pads ignored; JLCPCB PASS, OSH Park FAIL, PCBWay PASS; an unquotable reference stays UNVERIFIED; odd via ring rounded up; rules below the fab refused; deterministic. Mutants "same-net pads counted" and "default clearance before pad limit" both compile and both are caught. `project_rules_drc` (kicad-cli): JLCPCB 0 violations; OSH Park exactly 4, under `copper_fine_pitch_U3`. |
+| T4 | self-test 27/27 |
+| T5 | golden boards 4/4 PASS; no file hash changed. The baseline `drc_error` for `esp32` and `esp32s3_leds` was lowered from 12 to 0, which tightens the gate. |
+| T6 | `project_rules.c`: no float, `malloc`, `printf` or `exit` |
+
+The owner's `D:\copper-manus` workspace was refreshed and doctor reports READY. **Not committed** (the owner's instruction).
+
+## Lab branch: Step 3c, fine-pitch routing (2026-11-25, owner approved; G-076 option a)
+
+**Problem:** the router inflates every other-net pad by half a track, plus 0.3 mm clearance, plus grid slack, so the
+pads of a SOT-563 (0.15 mm apart) had no free grid cell. The TMP102 board routed 7 of 11 nets.
+
+**Changes:**
+- **Router (`autoroute.c`/`.h`, base modules; note in G-076):**
+  - optional `fine_clearance_nm` and `fine_neck_nm` (0 = off, the old behaviour);
+  - a footprint whose own pads are closer than the clearance is fine-pitch;
+  - **fan-out first:** before any net is routed, each of its connected pads reserves an escape stub (0.2 mm wide) to
+    a free cell; the stub keeps 0.15 mm to its own footprint's SMD pads and 0.3 mm to everything else;
+  - later nets avoid the stubs and their end cells; a failed net's stubs are removed (no dangling copper);
+  - the "no free grid cell" failure names the pad.
+- **Routing profile:** `fine_pitch_clearance_mm` 0.15 and `fine_pitch_neck_mm` 0.2, each with its reason.
+  `copper design route` refuses them below the fab's copper limits or minimum track width.
+- **Placement (`place_intent.c`):** a fine-pitch part's body grows by `fine_pitch_escape_mm` (1.0). Measured reason:
+  the placer had put pull-up R6 1.2 mm from the SOT-563, which walled in pin 2. Paste-only and unnumbered pads are
+  ignored, so the module is not fine-pitch.
+- **`project_rules.c`:** a second KiCad rule per fine-pitch footprint, `copper_fine_pitch_<REF>_escape`
+  (`A.memberOfFootprint(REF) && B.Type == 'Track' && B.intersectsCourtyard(REF)`, at the routing rules' 0.15 mm).
+  Checked by hand with kicad-cli 10.0.5: both A/B orders are evaluated; a 0.23 mm control flags all 5 stubs.
+- **New golden board** `manus/golden/esp32s3_sensor`: the prompt states every value, including bus capacitance 100 pF.
+
+**Results (JLCPCB, KiCad 10.0.5 development check):**
+
+| Board | Before | After |
+|---|---|---|
+| ESP32-S3 + LED + TMP102 | PARTIALLY_ROUTED 7/11; 4 clearance + 12 drill DRC errors | **ROUTED 11/11**, 226 segments, 15 vias, **0 unconnected, 0 DRC errors**; ERC 2 (power_pin_not_driven, as on every ESP32 board) |
+| the 4 existing golden boards | — | byte-identical |
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 87 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed, of 93 |
+| T3 | `test_fine_pitch` (`copper_autoroute_tests`) on a Copper-written board whose SOT-563 pads are copied from KiCad 10.0.5: without the rules, 4 nets FAILED "no free grid cell"; with them, ROUTED; checked independently (stubs 0.2 mm, 0.15 mm to own pads only, 0.3 mm everywhere else); connected; deterministic; the LED board byte-identical with the rules on; bad rules refused. Mutants "never fine-pitch" and "no neck-down" both compile and are caught. `place_intent`: U3 body ±2.2 × ±1.95 mm, R6 unchanged, the module not fine-pitch, both-or-neither keys. `project_rules`: escape rule written; refused for OSH Park with the default rules. `project_rules_drc`: JLCPCB 0, OSH Park + default rules refused, OSH Park without fine keys 4. |
+| T4 | self-test 27/27 |
+| T5 | golden boards 5/5 PASS; `esp32s3_sensor` added (deterministic over two runs) |
+| T6 | `autoroute.c`, `place_intent.c`, `project_rules.c` on the no-float lint list; no `malloc`, `printf` or `exit` |
+
+**Open:** G-083 (straight stubs only), G-084 (the default routing profile is refused for OSH Park, by design).
+**Not committed** (the owner's instruction).
+
+## Lab branch: Step 3d, schematic rules (2026-11-25, owner approved)
+
+**Changes:**
+- **Block format:** `external_supply: true` (power_out or ground ports only, checked by `blocks.c`), set on the
+  header's `vout`/`gnd` and USB-C's `vbus`/`gnd`. The composer lists those nets under `power_flags` in
+  `layout_hints.json`.
+- **G-077:** the composer reports UNVERIFIED `UNCONNECTED_PORT_PARTS` when an unused port leaves a two-terminal part
+  with a floating pin (the two 22 Ω USB resistors).
+- **New C `src/v2_src/sch_rules.{c,h}` and `copper design schematic-rules`:**
+  - one `power:PWR_FLAG` per external-supply net, copied verbatim from KiCad's power library, in KiCad 9's instance
+    form (from the real KiCad 9 sample), with a label at its pin; idempotent;
+  - `sym-lib-table`/`fp-lib-table` in KiCad 9's standard form; never overwrites a table Copper did not write.
+  - `copper.ps1 compile` runs it after the compiler and then runs ERC again (the compiler's `erc.json` predated it).
+- **Legacy compiler (fixed, not extended), found once KiCad could compare against its libraries:**
+  - no invented `pin_numbers`/`pin_names` on symbols (`lib_symbol_mismatch` U1/U2/U3);
+  - library footprint properties (Datasheet, Description) and the labels' `unlocked` are kept.
+
+**KiCad findings (10.0.5, development check), errors/warnings:**
+
+| Golden board | ERC before → after | DRC before → after |
+|---|---|---|
+| led | 0/6 → **0/0** | 0/3 → **0/0** |
+| mosfet | 0/12 → **0/0** | 0/6 → **0/0** |
+| esp32 (template) | 2/26 → 2/0 (power flags: G-086) | 0/13 → 0/1 (G-085) |
+| esp32s3_leds | 2/38 → **0/0** | 0/38 → 0/20 (silkscreen, Step 3e) |
+| esp32s3_sensor | 2/42 → **0/0** | 0/53 → 0/33 (silkscreen 32, G-085 1) |
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 88 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed, of 94 (new: `copper_sch_rules_tests`) |
+| T3 | `test_sch_rules` (a Copper-written schematic, the real KiCad 9.0 sample, PWR_FLAG copied verbatim from KiCad 10.0.5): flags placed, labelled, unique deterministic UUIDs, idempotent, refusals; exact library tables; foreign tables protected. `test_blocks` and `test_compose` cover `external_supply`, `power_flags` and `UNCONNECTED_PORT_PARTS`. Mutants "no idempotence guard" and "any library name" both compile and are caught. |
+| T4 | self-test 28/28. The claimcheck step was stale: it expected "ERC is clean"/"DRC passed" to be flagged on the LED board, which is now truly clean. It now follows the facts both ways (true claims must not be flagged), and a new step flags both claims on a facts variant with findings. |
+| T5 | golden boards: all 5 ROUTED and deterministic; every ERC/DRC count is equal or lower. All 5 are **CHANGED** (pcb and sch hashes) by the two compiler fixes and the composed boards' power flags. **The baseline hashes are not updated: H9 needs the owner's approval.** |
+| T6 | `sch_rules.c` on the no-float lint list; no `malloc`, `printf` or `exit` |
+
+**Not committed** (the owner's instruction).

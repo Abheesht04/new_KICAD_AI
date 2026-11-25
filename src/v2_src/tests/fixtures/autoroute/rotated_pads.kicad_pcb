@@ -1,0 +1,44 @@
+(kicad_pcb
+  (version 20241229)
+  (generator "copper")
+  (generator_version "9.0")
+  (general
+    (thickness 1.6))
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (2 "B.Cu" signal)
+    (25 "Edge.Cuts" user))
+  (setup
+    (pad_to_mask_clearance 0.05))
+  (net 0 "")
+  (net 1 "A")
+  (footprint "Test:Rot90"
+    (at 10 10 90)
+    (layer "F.Cu")
+    (pad "1" smd rect
+      (at 1 0 90)
+      (size 2 1)
+      (layers "F.Cu")
+      (net 1 "A")))
+  (footprint "Test:Rot270"
+    (at 20 10 270)
+    (layer "F.Cu")
+    (pad "1" smd rect
+      (at 1 0 270)
+      (size 2 1)
+      (layers "F.Cu")
+      (net 1 "A")))
+  (footprint "Test:Rot0PadRot90"
+    (at 30 10 0)
+    (layer "F.Cu")
+    (pad "1" smd rect
+      (at 0 0 90)
+      (size 2 1)
+      (layers "F.Cu")
+      (net 1 "A")))
+  (gr_rect
+    (start 0 0)
+    (end 40 20)
+    (layer "Edge.Cuts")
+    (stroke (width 0.1) (type solid))))
