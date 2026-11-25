@@ -711,7 +711,7 @@ pads of a SOT-563 (0.15 mm apart) had no free grid cell. The TMP102 board routed
 | T2 | 88 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed, of 94 (new: `copper_sch_rules_tests`) |
 | T3 | `test_sch_rules` (a Copper-written schematic, the real KiCad 9.0 sample, PWR_FLAG copied verbatim from KiCad 10.0.5): flags placed, labelled, unique deterministic UUIDs, idempotent, refusals; exact library tables; foreign tables protected. `test_blocks` and `test_compose` cover `external_supply`, `power_flags` and `UNCONNECTED_PORT_PARTS`. Mutants "no idempotence guard" and "any library name" both compile and are caught. |
 | T4 | self-test 28/28. The claimcheck step was stale: it expected "ERC is clean"/"DRC passed" to be flagged on the LED board, which is now truly clean. It now follows the facts both ways (true claims must not be flagged), and a new step flags both claims on a facts variant with findings. |
-| T5 | golden boards: all 5 ROUTED and deterministic; every ERC/DRC count is equal or lower. All 5 are **CHANGED** (pcb and sch hashes) by the two compiler fixes and the composed boards' power flags. **The baseline hashes are not updated: H9 needs the owner's approval.** |
+| T5 | golden boards: all 5 ROUTED and deterministic; every ERC/DRC count is equal or lower. The two compiler fixes and the composed boards' power flags changed all 5 pcb and sch hashes; **the owner approved them (H9) and the baseline records them: 5/5 PASS**. |
 | T6 | `sch_rules.c` on the no-float lint list; no `malloc`, `printf` or `exit` |
 
 **Not committed** (the owner's instruction).

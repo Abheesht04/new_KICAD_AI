@@ -1,39 +1,69 @@
 {
-  "schema": "copper.golden_baseline",
-  "schema_version": 1,
-  "recorded": "2026-11-21",
-  "kicad": "10.0.5 (development check, not KiCad 9 evidence)",
-  "note": "PIPELINE_HARD_RULES.md H9: no count may rise; a changed hash needs a stated reason and the owner's approval. Inputs are manus/golden/<board>/{prompt.txt,requirements.json}; mosfet's requirements were written by the mock Manus and contain one value the prompt does not state (board_width_mm), which Copper must ignore. esp32s3_leds (added in Step 2e) is the blocks path: manus/golden/esp32s3_leds/{prompt.txt,design.compose.json} -> compose -> C placer -> compile; its ERC 2 errors (power_pin_not_driven) and DRC 12 errors (drill_out_of_range, the module footprint's thermal vias) are the same classes as esp32's. Step 3b (2026-11-25): the KiCad project now carries the target fab's rules (copper-core project-rules), so the 12 drill_out_of_range errors on esp32 and esp32s3_leds (KiCad's default 0.3 mm minimum hole against the modules' 0.2 mm vias, which JLCPCB makes) are gone; drc_error lowered from 12 to 0 for both. No file hash changed. esp32s3_sensor (added in Step 3c) is the blocks path with a fine-pitch part (TMP102, SOT-563): it routes through the fine-pitch escapes; its ERC 2 errors are power_pin_not_driven, as on the other ESP32 boards.",
-  "boards": {
-    "led": {
-      "project": "LedIndicator", "routing": "ROUTED", "drc_unconnected": 0,
-      "erc_error": 0, "erc_warning": 6, "drc_error": 0, "drc_warning": 3, "dfm": "UNVERIFIED",
-      "pcb_sha256": "8E63A3D50202531FDB8096A35E4905F2FD7A8C39C10D264B99DF326CC6871E96",
-      "sch_sha256": "353B1183C12499CAAF7E0CF8CCA5DB4747788E443DCDFC423B5375C9B71BBF30"
-    },
-    "mosfet": {
-      "project": "LowSideSwitch", "routing": "ROUTED", "drc_unconnected": 0,
-      "erc_error": 0, "erc_warning": 12, "drc_error": 0, "drc_warning": 6, "dfm": "UNVERIFIED",
-      "pcb_sha256": "DD0E519DF49C4B116B5F035B2273F2EB0EBC6D30FB03166C3EF9C47F5FE72BDD",
-      "sch_sha256": "292D101151E44FE75F23CCBE09CF87BD7C06DFFE63246662FA2B4515974CC2EF"
-    },
-    "esp32": {
-      "project": "Esp32Led", "routing": "ROUTED", "drc_unconnected": 0,
-      "erc_error": 2, "erc_warning": 26, "drc_error": 0, "drc_warning": 13, "dfm": "UNVERIFIED",
-      "pcb_sha256": "9BA034E620D7E33BE270B9672BC3E39B7CC8FD30F38CD9285B6478C84CCC1291",
-      "sch_sha256": "D3271B511420461AF54F75864B0E29547756C449BB899F8FE9EFA28B40ABD44B"
-    },
-    "esp32s3_leds": {
-      "project": "Esp32S3Leds", "routing": "ROUTED", "drc_unconnected": 0,
-      "erc_error": 2, "erc_warning": 38, "drc_error": 0, "drc_warning": 38, "dfm": "UNVERIFIED",
-      "pcb_sha256": "7A74CE3261287C537FFFA9FCC73BB86CBE5313956E635536F63F7976D3F74FD8",
-      "sch_sha256": "00C9755403974CB78EC6F64721B83F1B4E8ADE1CFF72705EFFFF6E5D4ACDF57F"
-    },
-    "esp32s3_sensor": {
-      "project": "Esp32S3LedSensor", "routing": "ROUTED", "drc_unconnected": 0,
-      "erc_error": 2, "erc_warning": 42, "drc_error": 0, "drc_warning": 53, "dfm": "UNVERIFIED",
-      "pcb_sha256": "C8DDB89A9C7F27122972E05D1BEC9E995F32BEDE07A6C96109551C7A2177EBDE",
-      "sch_sha256": "8D0A1607672CC6EB5E57C3338549900C091AE2F1170D7E10EE45F7882B4F539B"
-    }
-  }
+    "schema":  "copper.golden_baseline",
+    "schema_version":  1,
+    "recorded":  "2026-11-25",
+    "kicad":  "10.0.5 (development check, not KiCad 9 evidence)",
+    "note":  "PIPELINE_HARD_RULES.md H9: no count may rise; a changed hash needs a stated reason and the owner\u0027s approval. Inputs are manus/golden/\u003cboard\u003e/{prompt.txt,requirements.json}; mosfet\u0027s requirements were written by the mock Manus and contain one value the prompt does not state (board_width_mm), which Copper must ignore. esp32s3_leds (added in Step 2e) is the blocks path: manus/golden/esp32s3_leds/{prompt.txt,design.compose.json} -\u003e compose -\u003e C placer -\u003e compile; its ERC 2 errors (power_pin_not_driven) and DRC 12 errors (drill_out_of_range, the module footprint\u0027s thermal vias) are the same classes as esp32\u0027s. Step 3b (2026-11-25): the KiCad project now carries the target fab\u0027s rules (copper-core project-rules), so the 12 drill_out_of_range errors on esp32 and esp32s3_leds (KiCad\u0027s default 0.3 mm minimum hole against the modules\u0027 0.2 mm vias, which JLCPCB makes) are gone; drc_error lowered from 12 to 0 for both. No file hash changed. esp32s3_sensor (added in Step 3c) is the blocks path with a fine-pitch part (TMP102, SOT-563): it routes through the fine-pitch escapes; its ERC 2 errors are power_pin_not_driven, as on the other ESP32 boards. Step 3d (2026-11-25, owner approved): every board\u0027s pcb and sch hash changed (compiler fixes: library footprint properties and unlocked flags kept, no invented pin_numbers/pin_names; PWR_FLAGs on the composed boards); every ERC/DRC count is equal or lower, and the counts here are the new ones.",
+    "boards":  {
+                   "led":  {
+                               "project":  "LedIndicator",
+                               "routing":  "ROUTED",
+                               "drc_unconnected":  0,
+                               "erc_error":  0,
+                               "erc_warning":  0,
+                               "drc_error":  0,
+                               "drc_warning":  0,
+                               "dfm":  "UNVERIFIED",
+                               "pcb_sha256":  "39A8A9ADD04F1430BCB531D0B7E762634DE11FD137D98FB35D2094B8ACA851BA",
+                               "sch_sha256":  "47FD5519B9B087360688D5991FFB56E0D8C973F73A29BCA57B59B8D8B633DED8"
+                           },
+                   "mosfet":  {
+                                  "project":  "LowSideSwitch",
+                                  "routing":  "ROUTED",
+                                  "drc_unconnected":  0,
+                                  "erc_error":  0,
+                                  "erc_warning":  0,
+                                  "drc_error":  0,
+                                  "drc_warning":  0,
+                                  "dfm":  "UNVERIFIED",
+                                  "pcb_sha256":  "3D8DA32C6D6C35D77D32C6050A91994CF3F5215D0FD84EB46D8ED0699D446536",
+                                  "sch_sha256":  "E3D031FA21B47BD71F3852B121B266DB8954EB21E99613BF674427732CEA1EA2"
+                              },
+                   "esp32":  {
+                                 "project":  "Esp32Led",
+                                 "routing":  "ROUTED",
+                                 "drc_unconnected":  0,
+                                 "erc_error":  2,
+                                 "erc_warning":  0,
+                                 "drc_error":  0,
+                                 "drc_warning":  1,
+                                 "dfm":  "UNVERIFIED",
+                                 "pcb_sha256":  "574465F674D927ACFC70100902E2A75BE1748291AB39AB504AFF68D386BF9110",
+                                 "sch_sha256":  "9D6C817909A4A0471C4598DF98FD2ADB8EB823E164E5A39AFD5420FA5283B6F6"
+                             },
+                   "esp32s3_leds":  {
+                                        "project":  "Esp32S3Leds",
+                                        "routing":  "ROUTED",
+                                        "drc_unconnected":  0,
+                                        "erc_error":  0,
+                                        "erc_warning":  0,
+                                        "drc_error":  0,
+                                        "drc_warning":  20,
+                                        "dfm":  "UNVERIFIED",
+                                        "pcb_sha256":  "23F11F3C7377F14A5DEC7DBEC8CF38989E42BFE8A2A2F4DF471BEF90ABBABF3A",
+                                        "sch_sha256":  "2EC5E74F5C2EA84B188357C2741CAB1CF464F544A908898657C94279F5841E59"
+                                    },
+                   "esp32s3_sensor":  {
+                                          "project":  "Esp32S3LedSensor",
+                                          "routing":  "ROUTED",
+                                          "drc_unconnected":  0,
+                                          "erc_error":  0,
+                                          "erc_warning":  0,
+                                          "drc_error":  0,
+                                          "drc_warning":  33,
+                                          "dfm":  "UNVERIFIED",
+                                          "pcb_sha256":  "28BC9F4E33F8351F015B87FAC4BF4763224A6C17FEA4194ADD016F10042185F9",
+                                          "sch_sha256":  "7E87E77B87281637AA4EB7648EABA17968734245FF46A87E1F59559001C60585"
+                                      }
+               }
 }
