@@ -1,7 +1,7 @@
 # Copper layout rules: schematic, placement, routing, DFM and DRC
 
 Status: **PROPOSED** (2026-11-25). Nothing here is enforced until the owner approves each step in section 8.
-Steps 3a to 3d are done (owner approved, 2026-11-25).
+Steps 3a to 3e are done (owner approved, 2026-11-25/26).
 
 **Target fab (owner decision, 2026-11-25):** the target is a parameter, and the default is **JLCPCB**. "Global" (the
 strictest of all profiles) is always reported next to the target as a per-fab verdict, never used as the default gate.
@@ -96,8 +96,8 @@ never lowers anything below the fab profile.
 | P2 keep-outs | Block keep-outs (antenna) and edge strips (already). |
 | P2a escape room (Step 3c) | A fine-pitch part (own pads closer than `fine_pitch_gap_mm`, 0.3) has its placement body grown by `fine_pitch_escape_mm` (1.0) on every side. Without it, the placer put a pull-up 1.2 mm from the SOT-563 and its middle pin could not escape. |
 | P3 decoupling | Decoupling capacitor next to its IC pin (already a placer cost). |
-| P4 silkscreen box | Each part's reference text box is placed with the part. It must be ≥ 0.15 mm from every pad (fab pad-to-silk limit) and must not overlap another part's silk or text. If it cannot fit, the reference goes on the Fab layer only and this is reported. |
-| P5 text size | Reference text ≥ 1.0 mm high, stroke ≥ 0.15 mm (global). |
+| P4 silkscreen box (Step 3e) | Each part's silkscreen envelope in the placement problem holds its drawn silkscreen and its Reference label. The label box is sized from the real reference text and the library's label position, angle and font: width at most `silk_char_width_ratio` (1.15) × characters × font size, height at most `silk_text_height_ratio` (1.3) × font size, each plus the stroke, from glyphs measured with kicad-cli 10.0.5. The envelope then grows by `silk_to_pad_mm` (0.15, JLCPCB pad to silkscreen), and the placer keeps it off other parts' pads and silkscreen. A label within 0.15 mm of its own part's drawn silkscreen takes the smallest move up, down, left or right that clears it, the same move in the placement problem and in the board (`copper design place-labels`). A label not at its library position was moved by someone and is kept. Composed designs only; template boards keep their library labels. |
+| P5 text size | Already met: the compiler writes labels 1.0 mm high with a 0.15 mm stroke, at JLCPCB's minimum, and Step 3b made KiCad check `min_text_height`/`min_text_thickness`. |
 
 ## 6. DRC rules carried in the KiCad project
 
@@ -138,6 +138,6 @@ would be a new block with its own datasheet data).
 | 3b | KiCad project rules: new C module writes `.kicad_pro` design settings and `.kicad_dru` from the fab profile and the routing rules. `copper.ps1 compile` runs it after the compiler. | **DONE**: `drill_out_of_range` 12 → 0 on `esp32` and `esp32s3_leds` (JLCPCB); the LED + TMP102 board's 4 SOT-563 clearance errors → 0 (rule at JLCPCB's 0.15 mm). The global/OSH Park FAIL stays in Copper's DFM (Step 3a). |
 | 3c | Router R5 fine-pitch escapes (fan-out first) in `autoroute.c` (base module; note in G-076), escape room in placement (`place_intent.c`), and the escape rule in `project_rules.c`. Data in both profiles. | **DONE**: golden board `esp32s3_sensor` (ESP32-S3 + LED + TMP102) ROUTED, 0 unconnected, 0 DRC errors; the other golden boards are byte-identical |
 | 3d | Schematic S1–S4: `external_supply` ports (data), power flags and library tables written by C (`sch_rules.c`, `copper design schematic-rules`), ERC re-run on the final schematic, G-077 reporting, two legacy compiler fixes. | **DONE**: golden board `esp32s3_sensor` ERC 0 findings; DRC 0 errors (warnings: silkscreen, which is Step 3e, plus G-085) |
-| 3e | Silkscreen P4–P5 in the placer problem and apply step. | DRC `silk_overlap` 0; `silk_over_copper` 0 or each reported |
+| 3e | Silkscreen P4–P5: the label in the placement envelope, grown by the pad-to-silk clearance; labels moved off their own silkscreen (`place_labels`, `copper design place-labels`, run by `copper.ps1 compile` for composed designs). | **DONE**: `silk_over_copper` and `silk_overlap` 0 on both composed golden boards (33 → 0 and 20 → 0); each board's only DRC finding is the G-085 warning |
 
 The legacy Python compiler is fixed only if a step cannot be done in C beside it. Where that happens, the step says so.

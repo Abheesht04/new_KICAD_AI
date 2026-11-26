@@ -12,6 +12,9 @@
     "keepout_edge_weight_per_mm": {"value": 0.5, "why": "tools/layout.py WEIGHTS keepout_edge_mm: a part keep-out (the ESP32-S3 antenna zone) is pulled toward the board edge"},
     "fine_pitch_gap_mm": {"value": 0.3, "why": "Step 3c, LAYOUT_RULES.md R5: a part whose own pads (different nets) are closer than this is fine-pitch; equal to the router's clearance_mm (routing_profiles/copper_2layer_default.json), the same test the router uses"},
     "fine_pitch_escape_mm": {"value": 1.0, "why": "room for a fine-pitch part's escape stubs: an escape end cell needs half a track + clearance + the router's grid slack (0.125 + 0.3 + 0.1875 = 0.6125 mm) from every other-net pad, about 1.5 mm from the pad row to the next part's pad; a SOT-563 courtyard is only 0.15 mm beyond its pads and gap_mm adds 0.5 mm, so the body grows by 1.0 mm (about 0.7 mm is the least that works)"},
+    "silk_char_width_ratio": {"value": 1.15, "why": "Step 3e (P4): a Reference label is at most this many font widths per character wide (plus its stroke). Measured with kicad-cli 10.0.5 (pcb export svg of 1 mm text, 0.15 mm stroke): W 1.114, # 0.981, 8 0.914 mm per character; U3 1.571 mm, SW12 3.619 mm"},
+    "silk_text_height_ratio": {"value": 1.3, "why": "a label is at most this many font heights tall (plus its stroke): the same plot gave 1.0 mm for letters and digits and 1.286 mm for #"},
+    "silk_to_pad_mm": {"value": 0.15, "why": "the silkscreen envelope (graphics and label) grows by this before the placer keeps it off other parts' pads and silkscreen: JLCPCB 'Pad To Silkscreen' 0.15 mm (fab_profiles/jlcpcb_2layer.json mask_silk_limits)"},
     "iterations": {"value": 4000, "why": "annealing moves per seed; seconds for boards of tens of parts"},
     "seeds": {"value": [1, 2, 3, 4], "why": "independent annealing runs; the lowest-cost legal one is kept, so the result is deterministic"}
   }

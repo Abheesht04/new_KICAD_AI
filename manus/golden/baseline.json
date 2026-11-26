@@ -1,9 +1,9 @@
 {
     "schema":  "copper.golden_baseline",
     "schema_version":  1,
-    "recorded":  "2026-11-25",
+    "recorded":  "2026-11-26",
     "kicad":  "10.0.5 (development check, not KiCad 9 evidence)",
-    "note":  "PIPELINE_HARD_RULES.md H9: no count may rise; a changed hash needs a stated reason and the owner\u0027s approval. Inputs are manus/golden/\u003cboard\u003e/{prompt.txt,requirements.json}; mosfet\u0027s requirements were written by the mock Manus and contain one value the prompt does not state (board_width_mm), which Copper must ignore. esp32s3_leds (added in Step 2e) is the blocks path: manus/golden/esp32s3_leds/{prompt.txt,design.compose.json} -\u003e compose -\u003e C placer -\u003e compile; its ERC 2 errors (power_pin_not_driven) and DRC 12 errors (drill_out_of_range, the module footprint\u0027s thermal vias) are the same classes as esp32\u0027s. Step 3b (2026-11-25): the KiCad project now carries the target fab\u0027s rules (copper-core project-rules), so the 12 drill_out_of_range errors on esp32 and esp32s3_leds (KiCad\u0027s default 0.3 mm minimum hole against the modules\u0027 0.2 mm vias, which JLCPCB makes) are gone; drc_error lowered from 12 to 0 for both. No file hash changed. esp32s3_sensor (added in Step 3c) is the blocks path with a fine-pitch part (TMP102, SOT-563): it routes through the fine-pitch escapes; its ERC 2 errors are power_pin_not_driven, as on the other ESP32 boards. Step 3d (2026-11-25, owner approved): every board\u0027s pcb and sch hash changed (compiler fixes: library footprint properties and unlocked flags kept, no invented pin_numbers/pin_names; PWR_FLAGs on the composed boards); every ERC/DRC count is equal or lower, and the counts here are the new ones.",
+    "note":  "PIPELINE_HARD_RULES.md H9: no count may rise; a changed hash needs a stated reason and the owner\u0027s approval. Inputs are manus/golden/\u003cboard\u003e/{prompt.txt,requirements.json}; mosfet\u0027s requirements were written by the mock Manus and contain one value the prompt does not state (board_width_mm), which Copper must ignore. esp32s3_leds (added in Step 2e) is the blocks path: manus/golden/esp32s3_leds/{prompt.txt,design.compose.json} -\u003e compose -\u003e C placer -\u003e compile; its ERC 2 errors (power_pin_not_driven) and DRC 12 errors (drill_out_of_range, the module footprint\u0027s thermal vias) are the same classes as esp32\u0027s. Step 3b (2026-11-25): the KiCad project now carries the target fab\u0027s rules (copper-core project-rules), so the 12 drill_out_of_range errors on esp32 and esp32s3_leds (KiCad\u0027s default 0.3 mm minimum hole against the modules\u0027 0.2 mm vias, which JLCPCB makes) are gone; drc_error lowered from 12 to 0 for both. No file hash changed. esp32s3_sensor (added in Step 3c) is the blocks path with a fine-pitch part (TMP102, SOT-563): it routes through the fine-pitch escapes; its ERC 2 errors are power_pin_not_driven, as on the other ESP32 boards. Step 3d (2026-11-25, owner approved): every board\u0027s pcb and sch hash changed (compiler fixes: library footprint properties and unlocked flags kept, no invented pin_numbers/pin_names; PWR_FLAGs on the composed boards); every ERC/DRC count is equal or lower, and the counts here are the new ones. Step 3e (2026-11-26, owner approved): esp32s3_leds and esp32s3_sensor were placed with their Reference labels in the silkscreen envelope and their labels moved off their own silkscreen, so their hashes changed; DRC warnings 20 -\u003e 1 and 33 -\u003e 1 (the one left on each is G-085). The template boards are unchanged.",
     "boards":  {
                    "led":  {
                                "project":  "LedIndicator",
@@ -48,10 +48,10 @@
                                         "erc_error":  0,
                                         "erc_warning":  0,
                                         "drc_error":  0,
-                                        "drc_warning":  20,
+                                        "drc_warning":  1,
                                         "dfm":  "UNVERIFIED",
-                                        "pcb_sha256":  "23F11F3C7377F14A5DEC7DBEC8CF38989E42BFE8A2A2F4DF471BEF90ABBABF3A",
-                                        "sch_sha256":  "2EC5E74F5C2EA84B188357C2741CAB1CF464F544A908898657C94279F5841E59"
+                                        "pcb_sha256":  "40281E5C40D71C9190C46CA3D8BCC9100C62BB9401B05833B7FFD5F876B72AC4",
+                                        "sch_sha256":  "8ACCF28AA468995F539B1A6CDBE17C79D9546A968FABB63415ED2EEF781DA8BE"
                                     },
                    "esp32s3_sensor":  {
                                           "project":  "Esp32S3LedSensor",
@@ -60,10 +60,10 @@
                                           "erc_error":  0,
                                           "erc_warning":  0,
                                           "drc_error":  0,
-                                          "drc_warning":  33,
+                                          "drc_warning":  1,
                                           "dfm":  "UNVERIFIED",
-                                          "pcb_sha256":  "28BC9F4E33F8351F015B87FAC4BF4763224A6C17FEA4194ADD016F10042185F9",
-                                          "sch_sha256":  "7E87E77B87281637AA4EB7648EABA17968734245FF46A87E1F59559001C60585"
+                                          "pcb_sha256":  "F4CD2D0D439CC13B7EB856453BD4F6DCF8CB434D4AFD2B3281A40BB23A7CA185",
+                                          "sch_sha256":  "DD089870E5985838F1FBABD3AA973338287A1057C099F32AE1F787F682B4198B"
                                       }
                }
 }

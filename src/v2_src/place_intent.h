@@ -41,12 +41,20 @@ typedef struct PlaceReport {
     char message[400];
     size_t parts, keepouts, decoupling;
     size_t fine_pitch;           /* place_problem: parts given escape room (Step 3c, rules fine_pitch_*) */
+    size_t labels_moved;         /* Step 3e: Reference labels moved off their own part's silkscreen */
     const char *seed;            /* place_apply: which result was used ("seed 3", "constructive") */
 } PlaceReport;
 
 PlaceStatus place_problem(Arena *arena, const char *intent, size_t intent_len, const char *hints, size_t hints_len,
                           const char *rules, size_t rules_len, const char *footprints_root,
                           const char **problem, size_t *problem_len, PlaceReport *report);
+
+/* Step 3e (P4): in a compiled .kicad_pcb, move each Reference label that is still at its library position and lies
+ * closer than silk_to_pad_mm to its own part's silkscreen by the same smallest move place_problem used (up, down,
+ * left or right, in the footprint frame). A label not at its library position was moved by someone: it is kept.
+ * Without the three silk_* rules nothing changes. Only the two numbers of a moved label's (at) are rewritten. */
+PlaceStatus place_labels(Arena *arena, const char *pcb, size_t pcb_len, const char *rules, size_t rules_len,
+                         const char *footprints_root, const char **pcb_out, size_t *pcb_out_len, PlaceReport *report);
 
 PlaceStatus place_apply(Arena *arena, const char *intent, size_t intent_len, const char *hints, size_t hints_len,
                         const char *placer_json, size_t placer_len,

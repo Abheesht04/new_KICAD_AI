@@ -88,6 +88,8 @@ static void print_usage(void) {
     puts("  copper design place-problem <intent.json> --hints layout_hints.json --rules FILE --footprint-root DIR --out PROBLEM");
     puts("  copper design place-apply <intent.json> --hints layout_hints.json --placer PLACER.json --out-intent FILE --out-routing FILE");
     puts("      placement with the C placer (`copper-core place PROBLEM ITERATIONS SEEDS` in between); exit 5 NO_LEGAL_POSITION");
+    puts("  copper design place-labels <board.kicad_pcb> --rules FILE --footprint-root DIR");
+    puts("      move Reference labels off their own part's silkscreen, as the placement problem assumed (Step 3e)");
     puts("  copper design schematic-rules <project dir> --symbol-root DIR [--hints layout_hints.json]");
     puts("      PWR_FLAGs on the hints' external-supply nets, and the project's sym-lib-table and fp-lib-table (Step 3d)");
     puts("      deterministic design from analysed requirements (circuit templates): writes DIR/intent.json and DIR/generation.json;");
@@ -2800,6 +2802,39 @@ static int command_design_place(int argc, char **argv, bool apply) {
     return place_exit(st);
 }
 
+/* copper design place-labels BOARD --rules R --footprint-root D (Step 3e, place_intent.c): Reference labels moved off
+ * their own part's silkscreen, in place. Exit 0 OK, 2 INVALID_INPUT, 1 I/O error, 64 usage. */
+static int command_design_place_labels(int argc, char **argv) {
+    const char *board = argv[3], *rules = NULL, *fps = NULL;
+    for (int i = 4; i < argc; i += 2) {
+        if (i + 1 >= argc) { fprintf(stderr, "place-labels: %s needs a value\n", argv[i]); return 64; }
+        if (!strcmp(argv[i], "--rules")) rules = argv[i + 1];
+        else if (!strcmp(argv[i], "--footprint-root")) fps = argv[i + 1];
+        else { fprintf(stderr, "place-labels: unknown option %s\n", argv[i]); return 64; }
+    }
+    if (!rules || !fps) { fprintf(stderr, "place-labels needs --rules and --footprint-root\n"); return 64; }
+    Arena arena;
+    arena_init(&arena, 1u << 22);
+    const char *bt = NULL, *rt = NULL, *nb = NULL;
+    size_t bl = 0, rl = 0, nl = 0;
+    if (!read_all(&arena, board, &bt, &bl) || !read_all(&arena, rules, &rt, &rl)) {
+        printf("STATUS place-labels: INVALID_INPUT (cannot read the board or the rules)\n");
+        arena_destroy(&arena);
+        return 2;
+    }
+    PlaceReport r;
+    PlaceStatus st = place_labels(&arena, bt, bl, rt, rl, fps, &nb, &nl, &r);
+    if (st == PLACE_OK && r.labels_moved && fs_write_file_atomic_replace(board, nb, nl) != FS_OK) {
+        fprintf(stderr, "place-labels: cannot write %s\n", board);
+        arena_destroy(&arena);
+        return 1;
+    }
+    printf("STATUS place-labels: %s (%zu label(s) moved)%s%s\n", st == PLACE_OK ? "OK" : place_status_name(st), r.labels_moved,
+           st == PLACE_OK ? "" : ": ", st == PLACE_OK ? "" : r.message);
+    arena_destroy(&arena);
+    return st == PLACE_OK ? 0 : st == PLACE_INVALID_INPUT ? 2 : 70;
+}
+
 /* copper design schematic-rules PROJECT_DIR --symbol-root DIR [--hints layout_hints.json] (Step 3d, sch_rules.c):
  * PWR_FLAGs on the nets the hints list (external supplies), then the project's library tables. A library table that
  * Copper did not write is never overwritten. Exit 0 OK, 2 INVALID_INPUT, 1 I/O error, 64 usage. */
@@ -3172,6 +3207,8 @@ int main(int argc, char **argv) {
             return command_design_place(argc, argv, true);
         if (argc >= 4 && strcmp(argv[2], "schematic-rules") == 0)
             return command_design_schematic_rules(argc, argv);
+        if (argc >= 4 && strcmp(argv[2], "place-labels") == 0)
+            return command_design_place_labels(argc, argv);
         if (argc >= 4 && strcmp(argv[2], "route") == 0)
             return command_design_route(argc, argv);
         print_usage(); return 64;

@@ -217,6 +217,11 @@ composed intent. It contains:
 pads on different nets closer than `fine_pitch_gap_mm`) has its body grown by `fine_pitch_escape_mm` on every
 side. That keeps room for the router's escape stubs (Step 3c). These two keys are optional, both or neither.
 
+Each part's silkscreen envelope also holds its Reference label (Step 3e): rules `silk_char_width_ratio`,
+`silk_text_height_ratio` and `silk_to_pad_mm`, all three or none. The label box comes from the real reference text and
+the library's label position, angle and font, moved off the part's own silkscreen if needed (`place-labels` repeats
+that move in the board). The envelope then grows by `silk_to_pad_mm`.
+
 `copper-core place PROBLEM ITERATIONS SEEDS` places the parts. Then
 `copper design place-apply INTENT --hints H --placer PLACER.json --out-intent FILE --out-routing FILE` writes:
 - the lowest-cost legal placement into the intent, or NO_LEGAL_POSITION naming the parts it could not place;
@@ -226,6 +231,20 @@ side. That keeps room for the router's escape stubs (Step 3c). These two keys ar
 - 0: PLACED;
 - 2: INVALID_INPUT;
 - 5: NO_LEGAL_POSITION;
+- 64: usage.
+
+## copper design place-labels
+
+`copper design place-labels BOARD.kicad_pcb --rules FILE --footprint-root DIR` (Step 3e, `place_labels` in
+`src/v2_src/place_intent.c`) moves each Reference label that is still at its library position, and is closer than
+`silk_to_pad_mm` to its own part's drawn silkscreen, by the smallest move up, down, left or right that clears it. That
+is the same move the placement problem assumed when it put the label in the part's silkscreen envelope (rules
+`silk_char_width_ratio`, `silk_text_height_ratio`, `silk_to_pad_mm`, all three or none). A label at any other position
+was moved by someone and is kept; only the two numbers of a moved label's `(at)` change. `copper.ps1 compile` runs it
+for composed designs. Exit codes:
+- 0: OK;
+- 2: INVALID_INPUT (a footprint missing from the library, bad rules);
+- 1: I/O error;
 - 64: usage.
 
 ## copper design schematic-rules

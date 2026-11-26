@@ -37,6 +37,23 @@ static void put(Buf *b, const char *f, ...)
     b->len += (size_t)n;
 }
 
+static void put_raw(Buf *b, const char *s, size_t n)
+{
+    if (b->oom) return;
+    if (b->len + n + 1 > b->cap) {
+        size_t cap = b->cap ? b->cap * 2 : 4096;
+        while (cap < b->len + n + 1) cap *= 2;
+        char *more = arena_alloc(b->a, cap);
+        if (!more) { b->oom = true; return; }
+        if (b->len) memcpy(more, b->s, b->len);
+        b->s = more;
+        b->cap = cap;
+    }
+    memcpy(b->s + b->len, s, n);
+    b->len += n;
+    b->s[b->len] = 0;
+}
+
 /* nm -> "12.345" mm (exact, trailing zeros dropped) */
 static const char *mm_text(char *out, size_t cap, int64_t nm)
 {
@@ -152,7 +169,39 @@ typedef struct Fp {
     Rect body, silk;
     const KicadFootprintPad *pads;
     size_t pad_count;
+    /* Step 3e: the library's Reference label (position and angle in the footprint frame, font), when shown */
+    bool label;
+    int64_t lx, ly, langle;      /* nm; the angle as written (degrees x 1e6) */
+    int64_t lsx, lsy, lthick;    /* font size and stroke, nm */
+    bool ljustified;             /* any justify other than the default centre */
 } Fp;
+
+/* The Reference property of a footprint: its (at), font and whether it is hidden. */
+static void read_label(const IRNode *tree, Fp *out)
+{
+    out->label = false;
+    for (const IRNode *g = tree ? tree->first_child : NULL; g; g = g->next) {
+        const IRNode *h = g->kind == IR_NODE_LIST ? ir_list_head(g) : NULL;
+        if (!h || h->kind != IR_NODE_ATOM || strcmp(h->text, "property")) continue;
+        const IRNode *name = ir_child_at(g, 1);
+        if (!name || !name->text || strcmp(name->text, "Reference")) continue;
+        const IRNode *at = ir_list_find(g, "at"), *eff = ir_list_find(g, "effects");
+        const IRNode *font = eff ? ir_list_find(eff, "font") : NULL, *size = font ? ir_list_find(font, "size") : NULL;
+        const IRNode *th = font ? ir_list_find(font, "thickness") : NULL;
+        const IRNode *hide = ir_list_find(g, "hide");
+        if (!hide && eff) hide = ir_list_find(eff, "hide");
+        const IRNode *hv = hide ? ir_child_at(hide, 1) : NULL;
+        if (hide && (!hv || (hv->text && !strcmp(hv->text, "yes")))) return;   /* hidden: no label on the board */
+        if (!at || !nm_of(ir_child_at(at, 1), &out->lx) || !nm_of(ir_child_at(at, 2), &out->ly)) return;
+        if (!ir_child_at(at, 3) || !nm_of(ir_child_at(at, 3), &out->langle)) out->langle = 0;
+        if (!size || !nm_of(ir_child_at(size, 1), &out->lsy) || !nm_of(ir_child_at(size, 2), &out->lsx)) return;
+        if (!th || !nm_of(ir_child_at(th, 1), &out->lthick)) out->lthick = 0;
+        const IRNode *j = eff ? ir_list_find(eff, "justify") : NULL;
+        out->ljustified = j != NULL;
+        out->label = true;
+        return;
+    }
+}
 
 static bool load_fp(Arena *a, const char *root, const char *id, Fp *out)
 {
@@ -181,6 +230,7 @@ static bool load_fp(Arena *a, const char *root, const char *id, Fp *out)
     out->pad_count = fa.pad_count;
     out->body = layer_box(tree, "F.CrtYd", false);
     out->silk = layer_box(tree, "F.SilkS", true);
+    read_label(tree, out);
     if (!out->body.set) {                       /* no courtyard: the pads' envelope plus 0.25 mm */
         for (size_t i = 0; i < fa.pad_count; i++) {
             grow(&out->body, fa.pads[i].x_nm - fa.pads[i].size_x_nm / 2 - 250000, fa.pads[i].y_nm - fa.pads[i].size_y_nm / 2 - 250000);
@@ -188,6 +238,40 @@ static bool load_fp(Arena *a, const char *root, const char *id, Fp *out)
         }
     }
     return out->body.set;
+}
+
+/* Step 3e: the three silk rules, all or none (has = false when none). */
+static bool silk_rules(const JsonValue *ru, int64_t *char_w, int64_t *text_h, int64_t *gap, bool *has);
+
+/* Step 3e: a part's Reference label box in the footprint frame, and the move (dx, dy) that takes it off the part's own
+ * drawn silkscreen grown by `gap`: the smallest of up, down, left and right (ties in that order). False: no label. */
+static bool label_box(const Fp *fp, const char *ref, int64_t char_w, int64_t text_h, int64_t gap, Rect *box, int64_t *dx, int64_t *dy)
+{
+    *dx = *dy = 0;
+    if (!fp->label || !ref) return false;
+    int64_t n = (int64_t)strlen(ref);
+    int64_t w = n * fp->lsx * char_w / 1000000 + fp->lthick;   /* <= 10 chars x 1e6 x 1.2e6: well inside int64 */
+    int64_t h = fp->lsy * text_h / 1000000 + fp->lthick;
+    int64_t a = ((fp->langle % 360000000) + 360000000) % 360000000;
+    int64_t hx = w / 2 + w % 2, hy = h / 2 + h % 2;
+    if (a == 90000000 || a == 270000000) { int64_t s = hx; hx = hy; hy = s; }
+    else if (a % 180000000) { int64_t m = hx > hy ? hx : hy; hx = hy = m; }   /* not a multiple of 90: the square */
+    if (fp->ljustified) { int64_t m = hx > hy ? hx : hy; hx = hy = 2 * m; }   /* anchored at an end: both sides */
+    Rect lb = {fp->lx - hx, fp->ly - hy, fp->lx + hx, fp->ly + hy, true};
+    if (fp->silk.set) {
+        Rect g = {fp->silk.x1 - gap, fp->silk.y1 - gap, fp->silk.x2 + gap, fp->silk.y2 + gap, true};
+        if (lb.x1 < g.x2 && g.x1 < lb.x2 && lb.y1 < g.y2 && g.y1 < lb.y2) {
+            int64_t up = g.y1 - lb.y2, down = g.y2 - lb.y1, left = g.x1 - lb.x2, right = g.x2 - lb.x1;
+            int64_t best = -up;
+            *dy = up;
+            if (down < best) { best = down; *dx = 0; *dy = down; }
+            if (-left < best) { best = -left; *dx = left; *dy = 0; }
+            if (right < best) { *dx = right; *dy = 0; }
+        }
+    }
+    lb.x1 += *dx; lb.x2 += *dx; lb.y1 += *dy; lb.y2 += *dy;
+    *box = lb;
+    return true;
 }
 
 /* A pad's rectangle in the footprint frame (rotation 0). */
@@ -255,6 +339,18 @@ static bool fine_pitch(const Fp *fp, const JsonValue *pins, int64_t gap)
     return false;
 }
 
+static bool silk_rules(const JsonValue *ru, int64_t *char_w, int64_t *text_h, int64_t *gap, bool *has)
+{
+    const JsonValue *rr = json_get(ru, "rules");
+    bool a = json_get(rr, "silk_char_width_ratio") != NULL, b = json_get(rr, "silk_text_height_ratio") != NULL,
+         c = json_get(rr, "silk_to_pad_mm") != NULL;
+    *has = a;
+    if (a != b || a != c) return false;
+    if (!a) return true;
+    return rule_nm(ru, "silk_char_width_ratio", char_w) && rule_nm(ru, "silk_text_height_ratio", text_h) &&
+           rule_nm(ru, "silk_to_pad_mm", gap) && *char_w > 0 && *text_h > 0 && *gap >= 0;
+}
+
 /* ---------------------------------------------------------------------------------------------- problem */
 
 PlaceStatus place_problem(Arena *a, const char *intent, size_t intent_len, const char *hints, size_t hints_len,
@@ -288,6 +384,13 @@ PlaceStatus place_problem(Arena *a, const char *intent, size_t intent_len, const
     if (has_gap != has_escape || (has_gap && (!rule_nm(ru, "fine_pitch_gap_mm", &fine_gap) || !rule_nm(ru, "fine_pitch_escape_mm", &escape) ||
                                               fine_gap <= 0 || escape < 0))) {
         fail(rep, PLACE_INVALID_INPUT, "the placement rules need both fine_pitch_gap_mm (> 0) and fine_pitch_escape_mm (>= 0), or neither", NULL, NULL);
+        return rep->status;
+    }
+    /* Step 3e: Reference labels in the silkscreen envelope, all three keys or none */
+    int64_t char_w = 0, text_h = 0, silk_pad = 0;
+    bool has_cw = false;
+    if (!silk_rules(ru, &char_w, &text_h, &silk_pad, &has_cw)) {
+        fail(rep, PLACE_INVALID_INPUT, "the placement rules need silk_char_width_ratio, silk_text_height_ratio and silk_to_pad_mm together, or none", NULL, NULL);
         return rep->status;
     }
     const JsonValue *comps = json_get(in, "components");
@@ -331,6 +434,16 @@ PlaceStatus place_problem(Arena *a, const char *intent, size_t intent_len, const
         if (fine_gap > 0 && fine_pitch(&fp, pins, fine_gap)) {
             fp.body.x1 -= escape; fp.body.y1 -= escape; fp.body.x2 += escape; fp.body.y2 += escape;
             rep->fine_pitch++;
+        }
+        if (has_cw) {   /* Step 3e: the Reference label's box joins the silkscreen envelope, which then keeps silk_to_pad */
+            Rect lb;
+            int64_t mdx, mdy;
+            if (label_box(&fp, ref, char_w, text_h, silk_pad, &lb, &mdx, &mdy)) {   /* ratios are mm values x 1e6 */
+                if (mdx || mdy) rep->labels_moved++;
+                if (!fp.silk.set) fp.silk = lb;
+                else { grow(&fp.silk, lb.x1, lb.y1); grow(&fp.silk, lb.x2, lb.y2); }
+            }
+            if (fp.silk.set) { fp.silk.x1 -= silk_pad; fp.silk.y1 -= silk_pad; fp.silk.x2 += silk_pad; fp.silk.y2 += silk_pad; }
         }
         put(&b, "  (part "); put_quoted(&b, ref); put(&b, "\n");
         for (int rot = 0; rot < 360; rot += 90) {
@@ -554,4 +667,110 @@ const char *place_status_name(PlaceStatus s)
     case PLACE_ERR_MEMORY: return "ERR_MEMORY";
     }
     return "UNKNOWN";
+}
+
+/* ---------------------------------------------------------------------------------------------- labels (Step 3e) */
+
+/* index of the ')' closing the '(' at `open`, skipping strings; SIZE_MAX when unbalanced */
+static size_t close_of(const char *t, size_t len, size_t open)
+{
+    int depth = 0;
+    for (size_t i = open; i < len; i++) {
+        char c = t[i];
+        if (c == '"') {
+            for (i++; i < len && t[i] != '"'; i++) if (t[i] == '\\') i++;
+            continue;
+        }
+        if (c == '(') depth++;
+        else if (c == ')' && --depth == 0) return i;
+    }
+    return SIZE_MAX;
+}
+
+static const char *find_in(const char *t, size_t from, size_t to, const char *what)
+{
+    size_t n = strlen(what);
+    for (size_t i = from; i + n <= to; i++) if (!memcmp(t + i, what, n)) return t + i;
+    return NULL;
+}
+
+/* a decimal in mm at t[i..] (at most 6 decimals) to nm; *end is set after it */
+static bool dec_nm(const char *t, size_t len, size_t i, int64_t *out, size_t *end)
+{
+    bool neg = false;
+    if (i < len && t[i] == '-') { neg = true; i++; }
+    int64_t whole = 0, frac = 0;
+    int digits = 0, fd = 0;
+    while (i < len && t[i] >= '0' && t[i] <= '9') { if (whole > 1000000000LL) return false; whole = whole * 10 + (t[i++] - '0'); digits++; }
+    if (i < len && t[i] == '.') {
+        i++;
+        while (i < len && t[i] >= '0' && t[i] <= '9') { if (fd == 6) return false; frac = frac * 10 + (t[i++] - '0'); fd++; }
+    }
+    if (!digits && !fd) return false;
+    while (fd < 6) { frac *= 10; fd++; }
+    *out = (whole * 1000000 + frac) * (neg ? -1 : 1);
+    *end = i;
+    return true;
+}
+
+PlaceStatus place_labels(Arena *a, const char *pcb, size_t len, const char *rules, size_t rules_len,
+                         const char *footprints_root, const char **out, size_t *out_len, PlaceReport *rep)
+{
+    if (!rep) return PLACE_ERR_ARGUMENT;
+    memset(rep, 0, sizeof *rep);
+    if (!a || !pcb || !rules || !footprints_root || !out || !out_len) return rep->status = PLACE_ERR_ARGUMENT;
+    *out = pcb; *out_len = len;
+    JsonValue *ru = NULL;
+    JsonError je;
+    if (json_parse(a, rules, rules_len, &ru, &je) != JSON_OK) { fail(rep, PLACE_INVALID_INPUT, "the placement rules do not parse", NULL, NULL); return rep->status; }
+    int64_t char_w = 0, text_h = 0, gap = 0;
+    bool has = false;
+    if (!silk_rules(ru, &char_w, &text_h, &gap, &has)) {
+        fail(rep, PLACE_INVALID_INPUT, "the placement rules need silk_char_width_ratio, silk_text_height_ratio and silk_to_pad_mm together, or none", NULL, NULL);
+        return rep->status;
+    }
+    if (!has) return rep->status = PLACE_OK;
+    Buf o = {a, NULL, 0, 0, false};
+    size_t copied = 0;
+    static const char FP[] = "(footprint \"";
+    for (const char *f = find_in(pcb, 0, len, FP); f; ) {
+        size_t start = (size_t)(f - pcb), end = close_of(pcb, len, start);
+        if (end == SIZE_MAX) { fail(rep, PLACE_INVALID_INPUT, "the board's brackets do not balance", NULL, NULL); return rep->status; }
+        /* the library id, and the Reference property's text and (at X Y [A]) */
+        size_t id0 = start + sizeof FP - 1, id1 = id0;
+        while (id1 < end && pcb[id1] != '"') id1++;
+        char id[300];
+        if (id1 - id0 >= sizeof id) { fail(rep, PLACE_INVALID_INPUT, "a footprint id is too long", NULL, NULL); return rep->status; }
+        memcpy(id, pcb + id0, id1 - id0); id[id1 - id0] = 0;
+        const char *prop = find_in(pcb, start, end, "(property \"Reference\" \"");
+        size_t pend = prop ? close_of(pcb, len, (size_t)(prop - pcb)) : SIZE_MAX;
+        const char *at = prop && pend != SIZE_MAX ? find_in(pcb, (size_t)(prop - pcb), pend, "(at ") : NULL;
+        if (at) {
+            size_t r0 = (size_t)(prop - pcb) + 23, r1 = r0;
+            while (r1 < pend && pcb[r1] != '"') r1++;
+            char ref[64];
+            size_t rl = r1 - r0 < sizeof ref - 1 ? r1 - r0 : sizeof ref - 1;
+            memcpy(ref, pcb + r0, rl); ref[rl] = 0;
+            int64_t x = 0, y = 0;
+            size_t xs = (size_t)(at - pcb) + 4, xe = 0, ys = 0, ye = 0;
+            bool ok = dec_nm(pcb, pend, xs, &x, &xe) && xe < pend && pcb[xe] == ' ' && dec_nm(pcb, pend, ys = xe + 1, &y, &ye);
+            Fp fp;
+            memset(&fp, 0, sizeof fp);
+            if (!load_fp(a, footprints_root, id, &fp)) { fail(rep, PLACE_INVALID_INPUT, "footprint %s is missing from the library%s", id, ""); return rep->status; }
+            Rect lb;
+            int64_t dx = 0, dy = 0;
+            if (ok && fp.label && x == fp.lx && y == fp.ly && label_box(&fp, ref, char_w, text_h, gap, &lb, &dx, &dy) && (dx || dy)) {
+                put_raw(&o, pcb + copied, xs - copied);
+                put_mm(&o, x + dx); put_raw(&o, " ", 1); put_mm(&o, y + dy);
+                copied = ye;
+                rep->labels_moved++;
+            }
+        }
+        f = find_in(pcb, end + 1, len, FP);
+    }
+    put_raw(&o, pcb + copied, len - copied);
+    if (o.oom) return rep->status = PLACE_ERR_MEMORY;
+    *out = o.s;
+    *out_len = o.len;
+    return rep->status = PLACE_OK;
 }

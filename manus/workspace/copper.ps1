@@ -196,6 +196,13 @@ switch ($Command) {
         if ($src -eq 0) {   # ERC again on the final schematic, as the compiler ran it (its erc.json predates the flags and tables)
             & $cfg.kicad_cli @('sch', 'erc', '--format', 'json', '--output', (Join-Path $proj 'validation\erc.json'), (Join-Path $proj "$projName.kicad_sch")) 2>&1 | Out-Null
         }
+        # Step 3e: composed designs were placed with their Reference labels in the silkscreen envelope; move the labels
+        # the placement assumed moved (off their own part's silkscreen). Template boards keep their library labels.
+        $labels = 'NOT_RUN'
+        if ((Test-Path -LiteralPath $hintsPath) -and $cfg.placement_rules) {
+            $lc = Run $cfg.copper @('design', 'place-labels', $pcbPath, '--rules', $cfg.placement_rules, '--footprint-root', $cfg.footprints_root)
+            $labels = switch ($lc) { 0 { 'DONE' } 2 { 'INVALID_INPUT' } default { 'ERROR' } }
+        }
         $rules = if ($cfg.routing_rules) { $cfg.routing_rules } else { Join-Path $cfg.repo 'routing_profiles\copper_2layer_default.json' }
         $routingData = Join-Path (Split-Path -Parent (Full $Intent)) 'routing.json'
         $validation = Join-Path $proj 'validation'
@@ -214,7 +221,7 @@ switch ($Command) {
             [IO.File]::WriteAllText((Join-Path $proj 'copper_import.stdout.log'), ($imp -join "`n") + "`n", (New-Object Text.UTF8Encoding($false)))
         }
         $meaning = switch ($rc) { 0 { 'GENERATED_ROUTED' } 6 { 'GENERATED_PARTIALLY_ROUTED' } default { 'GENERATED_NOT_ROUTED' } }
-        Result 'compile' 0 $meaning @{ out = $outDir; routing = (Join-Path $validation 'routing.json'); routing_exit = $rc; schematic_rules = $schematicRules; project_rules = $projectRules; project_rules_report = $prReport; next = 'run: .\copper.ps1 report -Project <out>\<project.name>  (exit 0 here does NOT mean ERC/DRC are clean)' }
+        Result 'compile' 0 $meaning @{ out = $outDir; routing = (Join-Path $validation 'routing.json'); routing_exit = $rc; schematic_rules = $schematicRules; labels = $labels; project_rules = $projectRules; project_rules_report = $prReport; next = 'run: .\copper.ps1 report -Project <out>\<project.name>  (exit 0 here does NOT mean ERC/DRC are clean)' }
     }
     'inspect' {
         Need 'Board' $Board

@@ -715,3 +715,44 @@ pads of a SOT-563 (0.15 mm apart) had no free grid cell. The TMP102 board routed
 | T6 | `sch_rules.c` on the no-float lint list; no `malloc`, `printf` or `exit` |
 
 **Not committed** (the owner's instruction).
+
+## Lab branch: Step 3e, silkscreen (2026-11-26, owner approved)
+
+**Problem:** all 32 silkscreen warnings on the sensor board involved a Reference label: on another part's pads (20),
+on another part's silkscreen or label (11), or on its own pin-1 marker (1). The placer kept silkscreen apart, but its
+envelope held only the drawn lines, not the labels.
+
+**Changes (`src/v2_src/place_intent.c`, data in `routing_profiles/copper_placement_default.json`):**
+- **Label in the envelope.** Each part's silkscreen envelope holds its Reference label. The box is sized from the real
+  text and the library's label position, angle and font: width at most 1.15 × characters × font size, height at
+  most 1.3 × font size, plus the stroke. Glyphs were measured with kicad-cli 10.0.5's SVG plot (W 1.114, # 0.981,
+  8 0.914 mm per character for 1 mm text).
+- **Pad clearance.** The envelope grows by 0.15 mm (JLCPCB pad to silkscreen).
+- **Label moves.** A label within 0.15 mm of its own part's silkscreen takes the smallest move that clears it. The
+  same move is applied to the board by the new `place_labels`, `copper design place-labels`, which
+  `copper.ps1 compile` runs for composed designs. Labels not at their library position are kept.
+- **P5 (text size).** Already met: 1.0 mm labels with a 0.15 mm stroke, checked by KiCad since Step 3b.
+
+**Results (KiCad 10.0.5, development check), DRC errors/warnings:**
+
+| Golden board | Before | After |
+|---|---|---|
+| esp32s3_leds | 0/20 | **0/1** (G-085 only) |
+| esp32s3_sensor | 0/33 | **0/1** (G-085 only) |
+| led, mosfet, esp32 | — | byte-identical |
+
+Both composed boards: ERC 0 findings, ROUTED, 0 unconnected.
+
+**Testing loop:**
+
+| Check | Result |
+|---|---|
+| T1 | 3 build trees, 0 warnings |
+| T2 | 88 passed, 6 skipped (KiCad 9.x ×5, GPU ×1), 0 failed, of 94 |
+| T3 | `test_place_intent`: envelopes worked out by hand for U3, R6 and U2 (the 90° label); the label moves (up 0.415, up 0.0275, left 0.135); all-or-none keys; `place_labels` on a board text: two labels moved (only their numbers change), a hand-moved label kept, idempotent, an unknown footprint refused. Mutants "no label in the envelope" and "no 0.15 mm growth" both compile and are caught. |
+| T4 | self-test 28/28 |
+| T5 | golden boards 5/5 PASS after the owner approved the two composed boards' new hashes (H9) |
+| T6 | `place_intent.c` on the no-float lint list; no `malloc`, `printf` or `exit` |
+
+**Open:** G-087 (label size bound from one measurement), G-088 (template boards keep their library labels).
+**Not committed.**
